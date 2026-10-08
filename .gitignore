@@ -1,0 +1,12 @@
+.ccgui/
+.codex/
+dist/
+node_modules/
+*.zip
+.env
+.env.*
+*.pem
+*.key
+*.log
+.DS_Store
+Thumbs.db

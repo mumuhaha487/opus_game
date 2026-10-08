@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>游戏汇总 · GAME.INC.RE</title>
+<meta name="description" content="打开就能玩的独立小游戏合集。不用下载、不用注册，电脑键盘、手柄、手机触屏都能玩。">
+<meta name="theme-color" content="#0f0b16">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="游戏汇总 · GAME.INC.RE">
+<meta property="og:title" content="游戏汇总 · GAME.INC.RE">
+<meta property="og:description" content="打开就能玩的独立小游戏合集。首发：像素横版动作肉鸽《熵刃 · ENTROPY BLADE》。">
+<meta property="og:url" content="https://game.inc.re/">
+<meta property="og:image" content="https://game.inc.re/hub/entropy-blade-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="hub/favicon.svg">
+<link rel="apple-touch-icon" href="hub/icon-180.png">
+<link rel="preload" href="hub/fusion-pixel-12.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face { font-family: 'FusionPixel'; src: url('hub/fusion-pixel-12.woff2') format('woff2'); font-display: swap; }
+  :root {
+    --bg: #0f0b16; --ink: #efe6ff; --muted: #a99cc4; --dim: #6f6390;
+    --card: #1a1424; --card2: #221a30; --line: #3a2d52; --line-hi: #5a4680;
+    --gold: #f2c66d; --gold-d: #b8862f; --red: #e0485e; --red-d: #8f2338;
+    --px: 'FusionPixel', 'Microsoft YaHei', 'PingFang SC', monospace;
+    --sans: system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--ink); font: 15px/1.75 var(--sans);
+    background:
+      radial-gradient(ellipse 90% 60% at 50% -12%, #3b1c3c 0%, rgba(59, 28, 60, 0) 70%),
+      radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1.5px) 0 0 / 16px 16px,
+      var(--bg);
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow-x: hidden;
+  }
+  a { color: inherit; }
+  img { display: block; max-width: 100%; height: auto; }
+  .px { font-family: var(--px); -webkit-font-smoothing: none; font-smooth: never; letter-spacing: 0; }
+  .wrap { width: min(1080px, 100% - 40px); margin: 0 auto; position: relative; z-index: 1; }
+
+  /* pixel frame: notched corners via four offset shadows */
+  .frame {
+    background: var(--card);
+    box-shadow: 0 -4px 0 0 var(--line), 0 4px 0 0 var(--line), -4px 0 0 0 var(--line), 4px 0 0 0 var(--line),
+                0 12px 0 0 rgba(0, 0, 0, 0.35);
+  }
+
+  /* sky */
+  #sky { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  #sky i { position: absolute; width: 2px; height: 2px; background: #fff; opacity: 0; animation: tw 4s steps(4) infinite; }
+  #sky i.b { width: 4px; height: 4px; background: var(--gold); }
+  @keyframes tw { 0%, 100% { opacity: 0; } 50% { opacity: 0.8; } }
+  .hills { position: fixed; left: 0; right: 0; bottom: 0; height: 22vh; min-height: 120px; pointer-events: none; z-index: 0; opacity: 0.4; }
+  .hills svg { width: 100%; height: 100%; display: block; }
+
+  /* header */
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 8px; }
+  .brand { display: flex; align-items: center; gap: 14px; text-decoration: none; }
+  .brand img { width: 48px; height: 48px; image-rendering: pixelated; }
+  .brand b { display: block; font-size: 24px; line-height: 24px; font-weight: normal; color: #fff; }
+  .brand small { display: block; font-size: 12px; line-height: 12px; margin-top: 6px; color: var(--muted); letter-spacing: 2px; }
+  .count { font-size: 12px; color: var(--muted); }
+  .count b { color: var(--gold); font-weight: normal; }
+
+  .hero { padding: 40px 0 36px; }
+  .hero h1 { margin: 0; font-size: 36px; line-height: 48px; font-weight: normal; color: #fff; text-shadow: 3px 3px 0 var(--red-d); }
+  .hero p { margin: 16px 0 0; max-width: 48em; color: var(--muted); }
+
+  .sec { display: flex; align-items: center; gap: 12px; margin: 0 0 24px; font-size: 12px; line-height: 12px; font-weight: normal; color: var(--gold); letter-spacing: 2px; }
+  .sec::before { content: ''; width: 8px; height: 8px; background: var(--gold); box-shadow: 4px 4px 0 var(--gold-d); }
+  .sec::after { content: ''; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 10px); }
+
+  /* game card */
+  .game { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); margin: 4px; transition: transform 0.12s steps(2), box-shadow 0.12s steps(2); }
+  .game:hover { transform: translateY(-4px); box-shadow: 0 -4px 0 0 var(--line-hi), 0 4px 0 0 var(--line-hi), -4px 0 0 0 var(--line-hi), 4px 0 0 0 var(--line-hi), 0 16px 0 0 rgba(0, 0, 0, 0.35); }
+  .media { display: flex; flex-direction: column; background: #0c0912; }
+  .cover { position: relative; display: block; overflow: hidden; background: #000; }
+  /* cast: slanted portrait panels, dimmed until pointed at */
+  .cast { flex: 1; display: flex; align-items: center; margin: 0; padding: 20px 26px 18px; list-style: none; }
+  .cast li { flex: 1; min-width: 0; margin: 0 -6px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .cast .pan { position: relative; display: block; width: 100%; aspect-ratio: 3 / 2; background: var(--line); clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%); transition: background 0.15s, transform 0.15s; }
+  .cast .pan img { position: absolute; left: 2px; top: 2px; width: calc(100% - 4px); height: calc(100% - 4px); object-fit: cover; object-position: 52% 30%;
+                   clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%); filter: saturate(0.6) brightness(0.72); transition: filter 0.15s; }
+  .cast li:hover .pan { background: var(--c); transform: translateY(-4px); }
+  .cast li:hover .pan img { filter: none; }
+  .cast b { margin-top: 12px; font-size: 12px; line-height: 12px; font-weight: normal; color: var(--c); }
+  .cast .sub { margin-top: 6px; font-size: 12px; line-height: 12px; color: var(--muted); white-space: nowrap; }
+  .cover img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; image-rendering: pixelated; transition: transform 0.3s steps(3); }
+  .game:hover .cover img { transform: scale(1.04); }
+  .cover .play {
+    position: absolute; left: 50%; top: 50%; width: 72px; height: 72px; margin: -36px 0 0 -36px;
+    background: rgba(15, 11, 22, 0.72); opacity: 0; transition: opacity 0.12s steps(2);
+    box-shadow: 0 -4px 0 0 var(--gold), 0 4px 0 0 var(--gold), -4px 0 0 0 var(--gold), 4px 0 0 0 var(--gold);
+  }
+  .cover .play svg { width: 100%; height: 100%; }
+  .game:hover .cover .play, .cover:focus-visible .play { opacity: 1; }
+
+  .info { padding: 26px 28px 28px; display: flex; flex-direction: column; gap: 16px; background: linear-gradient(180deg, var(--card2), var(--card)); }
+  .kicker { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 12px; color: var(--dim); }
+  .badge { background: var(--red); color: #fff; padding: 4px 6px; box-shadow: 0 -2px 0 0 var(--red), 0 2px 0 0 var(--red-d); }
+  .info h2 { margin: 0; font-size: 36px; line-height: 36px; font-weight: normal; color: #fff; }
+  .info h2 small { display: block; margin-top: 10px; font-size: 12px; line-height: 12px; color: var(--red); letter-spacing: 3px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .tags li { font-size: 12px; line-height: 12px; padding: 6px 8px; color: var(--ink); background: #2c2240; box-shadow: 0 -2px 0 0 #2c2240, 0 2px 0 0 #160f22; }
+  .desc { margin: 0; color: #cfc4e6; font-size: 14px; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0; }
+  .facts div { display: flex; flex-direction: column-reverse; background: #140f1d; padding: 10px 6px 8px; text-align: center; }
+  .facts dd { margin: 0; font-size: 24px; line-height: 24px; color: var(--gold); }
+  .facts dt { margin-top: 6px; font-size: 12px; line-height: 12px; color: var(--muted); }
+  .plat { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; line-height: 16px; color: var(--muted); }
+  .plat span { display: inline-flex; align-items: center; gap: 6px; }
+  .plat svg { width: 24px; height: 16px; }
+  .actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: auto; padding-top: 4px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px 14px; margin: 4px;
+    font-size: 24px; line-height: 24px; color: #2a1608; text-decoration: none; background: var(--gold);
+    box-shadow: inset 0 -4px 0 0 var(--gold-d), inset 0 4px 0 0 #ffe3a3,
+                0 -4px 0 0 #2a1608, 0 4px 0 0 #2a1608, -4px 0 0 0 #2a1608, 4px 0 0 0 #2a1608;
+  }
+  .btn:hover { background: #ffd684; }
+  .btn:active { transform: translateY(2px); box-shadow: inset 0 4px 0 0 var(--gold-d), 0 -4px 0 0 #2a1608, 0 4px 0 0 #2a1608, -4px 0 0 0 #2a1608, 4px 0 0 0 #2a1608; }
+  .btn svg { width: 16px; height: 16px; }
+  .hint { font-size: 12px; line-height: 16px; color: var(--dim); }
+
+  details.keys { font-size: 12px; line-height: 12px; color: var(--muted); }
+  details.keys summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
+  details.keys summary::-webkit-details-marker { display: none; }
+  details.keys summary::before { content: ''; width: 0; height: 0; border: 5px solid transparent; border-left-color: var(--gold); border-right-width: 0; transition: transform 0.1s steps(2); }
+  details.keys[open] summary::before { transform: rotate(90deg); }
+  .keylist { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; margin-top: 14px; align-items: center; }
+  .keylist span { color: var(--muted); }
+  kbd { display: inline-block; min-width: 20px; padding: 4px 5px 5px; margin-right: 4px; font: inherit; text-align: center; color: var(--ink); background: #2c2240; box-shadow: inset 0 -3px 0 0 #160f22; }
+
+  .slot { margin: 36px 4px 0; padding: 22px; display: flex; align-items: center; justify-content: center; gap: 14px; color: var(--dim); font-size: 12px; line-height: 12px;
+          background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 8px, transparent 8px 16px);
+          outline: 2px dashed var(--line); outline-offset: -2px; }
+  .slot i { width: 12px; height: 12px; background: var(--line-hi); animation: blink 1.2s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  footer { padding: 64px 0 40px; font-size: 12px; line-height: 20px; color: var(--dim); text-align: center; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 860px) {
+    .game { grid-template-columns: 1fr; }
+    .info { padding: 22px 20px 24px; }
+  }
+  @media (max-width: 520px) {
+    .wrap { width: calc(100% - 28px); }
+    .top { padding-top: 20px; }
+    .count { display: none; }
+    .hero { padding: 28px 0 28px; }
+    .hero h1 { font-size: 24px; line-height: 36px; }
+    .info h2 { font-size: 24px; line-height: 24px; }
+    .cast { padding: 16px 16px 14px; }
+    .cast li { margin: 0 -4px; }
+    .cast .sub { font-size: 12px; transform: scale(0.85); }
+    .actions { gap: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #sky i, .slot i { animation: none; opacity: 0.4; }
+    .game, .cover img, .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="sky" aria-hidden="true"></div>
+<div class="hills" aria-hidden="true">
+  <svg viewBox="0 0 160 40" preserveAspectRatio="none" shape-rendering="crispEdges">
+    <path fill="#1c1428" d="M0 40V26h6v-2h6v-2h8v-2h6v2h6v2h4v-4h6v-2h6v-2h4v2h6v4h6v2h8v-2h6v-4h6v-2h4v-2h6v2h4v4h6v2h6v2h6v-2h8v-4h6v2h4v4h6v2h4v14z"/>
+    <path fill="#140e1e" d="M0 40V32h8v-2h10v2h8v-2h6v-2h8v2h6v2h10v-2h8v-2h6v2h8v2h6v-2h10v-2h8v2h6v2h8v-2h8v2h10v-2h6v2h6v10z"/>
+  </svg>
+</div>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand px" href="index.html">
+      <img src="hub/favicon.svg" alt="" width="48" height="48">
+      <span><b>游戏汇总</b><small>GAME.INC.RE</small></span>
+    </a>
+    <div class="count px">已收录 <b>1</b> 款 · 持续更新</div>
+  </header>
+
+  <section class="hero">
+    <h1 class="px">打开就能玩的独立小游戏</h1>
+    <p>不用下载，不用注册。电脑键盘、手柄、手机触屏都能玩，进度自动保存在你自己的浏览器里。</p>
+  </section>
+
+  <main>
+    <h2 class="sec px">全部游戏</h2>
+
+    <article class="game frame">
+      <div class="media">
+        <a class="cover" href="entropy-blade/index.html" aria-label="开始游戏：熵刃">
+          <img src="hub/entropy-blade-cover.png" width="960" height="540" alt="熵刃标题画面：落樱古道中的三名角色">
+          <span class="play" aria-hidden="true"><svg viewBox="0 0 18 18" shape-rendering="crispEdges"><path fill="#f2c66d" d="M6 4h2v1h2v1h2v1h2v1h1v2h-1v1h-2v1h-2v1h-2v1H6z"/></svg></span>
+        </a>
+        <ul class="cast px">
+          <li style="--c:#ff3b5c"><span class="pan"><img src="hub/entropy-blade-rin.webp" width="480" height="480" alt="凛的立绘" loading="lazy"></span><b>凛</b><span class="sub">刀 · 均衡近战</span></li>
+          <li style="--c:#ffd23f"><span class="pan"><img src="hub/entropy-blade-eve.webp" width="480" height="480" alt="伊芙的立绘" loading="lazy"></span><b>伊芙</b><span class="sub">魔弹枪 · 远程爆发</span></li>
+          <li style="--c:#ff9a3a"><span class="pan"><img src="hub/entropy-blade-gao.webp" width="480" height="480" alt="罡的立绘" loading="lazy"></span><b>罡</b><span class="sub">拳法 · 重装近战</span></li>
+        </ul>
+      </div>
+      <div class="info">
+        <div class="kicker px"><span class="badge">NEW</span><span>No.001</span><span>单人 · 免费</span></div>
+        <h2 class="px">熵刃<small>ENTROPY BLADE</small></h2>
+        <ul class="tags px"><li>横版动作</li><li>肉鸽</li><li>像素</li><li>东方奇幻</li></ul>
+        <p class="desc">在落樱古道、苍雪寒山与晶渊回廊之间斩开熵潮。三名角色各有三把武器；武技越参悟越能派生出连段与终式，秘技消耗灵力释放。每个场景都有专属敌人和首领，劫难挑战让高手自选劫数，换取更厚的福缘。</p>
+        <dl class="facts px">
+          <div><dt>角色</dt><dd>3</dd></div>
+          <div><dt>招式</dt><dd>180+</dd></div>
+          <div><dt>场景</dt><dd>4</dd></div>
+          <div><dt>首领</dt><dd>4</dd></div>
+        </dl>
+        <div class="plat px">
+          <span><svg viewBox="0 0 12 8" shape-rendering="crispEdges"><path fill="#a99cc4" d="M0 0h12v8H0z"/><path fill="#1a1424" d="M1 1h1v1H1zm2 0h1v1H3zm2 0h1v1H5zm2 0h1v1H7zm2 0h2v1H9zM1 3h2v1H1zm3 0h1v1H4zm2 0h1v1H6zm2 0h1v1H8zm2 0h1v1h-1zM2 6h8v1H2z"/></svg>键盘</span>
+          <span><svg viewBox="0 0 12 8" shape-rendering="crispEdges"><path fill="#a99cc4" d="M2 0h8v1h1v1h1v5h-1v1H8V7H4v1H1V7H0V2h1V1h1z"/><path fill="#1a1424" d="M2 3h3v1H2zm1-1h1v3H3zm5 0h1v1H8zm1 1h1v1H9zM7 3h1v1H7zm1 1h1v1H8z"/></svg>手柄</span>
+          <span><svg viewBox="0 0 12 8" shape-rendering="crispEdges"><path fill="#a99cc4" d="M0 1h1V0h10v1h1v6h-1v1H1V7H0z"/><path fill="#1a1424" d="M2 1h8v6H2z"/><path fill="#a99cc4" d="M6 2h1v3h1v1H5V5h1zM4 4h1v1H4z"/></svg>触屏</span>
+        </div>
+        <details class="keys px">
+          <summary>键位速览</summary>
+          <div class="keylist">
+            <div><kbd>A</kbd><kbd>D</kbd></div><span>移动（也可用方向键）</span>
+            <div><kbd>J</kbd></div><span>攻击 · ↑ / ↓ + J 武技</span>
+            <div><kbd>K</kbd></div><span>跳跃 · 二段跳 · 蹬墙跳</span>
+            <div><kbd>L</kbd></div><span>冲刺（无敌）</span>
+            <div><kbd>I</kbd></div><span>秘技 · ↓ + I 奥义</span>
+            <div><kbd>E</kbd></div><span>互动 · 进门</span>
+            <div><kbd>Esc</kbd></div><span>暂停 · 构筑与招式表</span>
+          </div>
+        </details>
+        <div class="actions">
+          <a class="btn px" href="entropy-blade/index.html"><svg viewBox="0 0 8 8" shape-rendering="crispEdges"><path fill="#2a1608" d="M1 0h2v1h2v1h2v1h1v2H7v1H5v1H3v1H1z"/></svg>开始游戏</a>
+          <span class="hint px">手机请横屏 · 支持全屏</span>
+        </div>
+      </div>
+    </article>
+
+    <div class="slot px"><i></i>下一款游戏制作中……</div>
+  </main>
+
+  <footer class="px">
+    <div>GAME.INC.RE · 独立小游戏汇总</div>
+    <div>像素字体：<a href="https://github.com/TakWolf/fusion-pixel-font" rel="noopener">Fusion Pixel Font</a>（SIL OFL 1.1）</div>
+  </footer>
+</div>
+
+<script>
+  // a few twinkling pixel stars in the upper sky
+  (function () {
+    var sky = document.getElementById('sky'), n = window.innerWidth < 600 ? 18 : 36;
+    for (var i = 0; i < n; i++) {
+      var s = document.createElement('i');
+      if (Math.random() < 0.15) s.className = 'b';
+      s.style.left = (Math.random() * 100).toFixed(2) + '%';
+      s.style.top = (Math.random() * 55).toFixed(2) + '%';
+      s.style.animationDelay = (Math.random() * 4).toFixed(2) + 's';
+      s.style.animationDuration = (3 + Math.random() * 4).toFixed(2) + 's';
+      sky.appendChild(s);
+    }
+  })();
+</script>
+</body>
+</html>
