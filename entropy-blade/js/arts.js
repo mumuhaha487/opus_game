@@ -560,7 +560,7 @@ function heroMoveList(h, p) {
     const s = p.uskills[sl.id];
     if (!s) continue;
     const U = USKILLS[s.id];
-    rows.push([sl.long, `${U.name} Lv${s.lv}/${wxMax(U)}：${U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}（无冷却）`]);
+    rows.push([sl.long, `${U.name} Lv${s.lv}/${wxMax(U)}：${U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}（再按 U 接段）`]);
   }
   if (p) for (const sl of SECRET_SLOTS) {
     const s = p.secrets[sl.id];
@@ -649,7 +649,7 @@ function artView(a, p) {
   if (a.kind === 'uUp') {
     const U = USKILLS[a.id], sl = slotInfo(U_SLOTS, U.slot), col = WX_FAM.u.col;
     const lv = p.uskills[U.slot].lv + 1;
-    return { tag: `武学 · 技能 · ${sl.long}`, name: U.name, icon: U.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, U), desc: wxText('u', U, lv, h).join('；'), sub: `不耗灵力 · 无冷却 · ${U.moves.slice(0, wxAt(U, lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}` };
+    return { tag: `武学 · 技能 · ${sl.long}`, name: U.name, icon: U.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, U), desc: wxText('u', U, lv, h).join('；'), sub: `再按 U 接段 · ${U.moves.slice(0, wxAt(U, lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}` };
   }
   const S = SKILLS[a.id], sl = slotInfo(SECRET_SLOTS, S.slot), col = WX_FAM.sk.col, tag = `武学 · 秘技 · ${sl.long}`;
   const cur = p.secrets[S.slot];
