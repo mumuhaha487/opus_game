@@ -42,7 +42,7 @@ function keyCap(x, y, label, col = '#ffffff') {
   return w;
 }
 // a control hint: key cap on keyboard / pad, the matching button glyph on touch
-const CTRL_ICON = { jump: 'jump', dash: 'dash', ult: 'star', interact: 'hand', pause: 'pause' };
+const CTRL_ICON = { jump: 'jump', dash: 'dash', skill: 'wave', ult: 'star', interact: 'hand', pause: 'pause' };
 function ctrlCap(x, y, action, col = '#ffffff') {
   if (!TouchUI.enabled) return keyCap(x, y, Input.keyName(action), col);
   let ic = CTRL_ICON[action];
@@ -138,22 +138,31 @@ UI.update = function (dt) {
 UI.go = function (screen) { this.screen = screen; this.sel = 0; Sound.play('confirm'); };
 UI.titleAction = function (i) {
   if (i === 0 || i === 1) {
-    this.screen = 'select'; this.hardMode = i === 1; this.heroSel = Save.data.lastChar || 0; this.showcase = { i: 0, t: 0 }; Sound.play('confirm');
+    this.screen = 'select'; this.hardMode = i === 1; this.modeId = Save.data.lastMode; this.modeSel = this.modeId === 'hard' ? 1 : 0;
+    this.heroSel = Save.data.lastChar || 0; this.showcase = { i: 0, t: 0 }; Sound.play('confirm');
     for (const id of HERO_ORDER) { const w = this.selWeapon(id).id; if (!SPR[id] || SPR[id].weapon !== w) bakeHero(id, w); }
   }
   else if (i === 2) this.go('talents');
   else if (i === 3) { this.go('howto'); this.howPage = 0; }
   else if (i === 4) { this.go('settings'); this.setSel = 0; }
 };
+UI.selectMode = function (i) {
+  this.modeSel = i; this.modeId = i === 1 ? 'hard' : 'normal'; this.hardMode = false;
+  this.startGame();
+};
 UI.startGame = function () {
-  // 劫难挑战: pick the curses first
-  if (this.hardMode && this.screen === 'select') { this.screen = 'trial'; this.trialSel = this.trialSel || 0; Sound.play('confirm'); return; }
+  if (this.screen === 'select') {
+    this.screen = this.hardMode ? 'trial' : 'mode';
+    if (this.hardMode) this.trialSel = this.trialSel || 0;
+    Sound.play('confirm'); return;
+  }
   Sound.play('confirm'); Sound.play('door');
   const id = HERO_ORDER[this.heroSel];
   const wid = this.selWeapon(id).id;
   const trial = this.hardMode ? Object.assign({}, Save.data.trialSel) : null;
   if (trial) Save.write();
-  transition(() => startRun(id, wid, trial));
+  const mode = this.hardMode ? 'trial' : this.modeId;
+  transition(() => startRun(id, wid, trial, mode));
 };
 UI.trialAdjust = function (i, dir) {
   const c = CURSES[i], sel = Save.data.trialSel;
@@ -207,6 +216,11 @@ UI.updTitle = function (dt) {
     case 'title':
       this.sel = navV(TITLE_ITEMS.length, this.sel);
       if (Input.hit('ok')) this.titleAction(this.sel);
+      break;
+    case 'mode':
+      this.modeSel = navH(2, this.modeSel);
+      if (Input.hit('ok')) this.selectMode(this.modeSel);
+      if (Input.hit('cancel')) { this.screen = 'select'; Sound.play('cancel'); }
       break;
     case 'select':
       this.heroSel = navH(3, this.heroSel);
@@ -330,7 +344,21 @@ UI.updEnd = function (dt) {
 };
 UI.endAction = function (i) {
   Sound.play('confirm');
-  if (i === 0) { const id = G.run.heroId; transition(() => startRun(id)); }
+  if (i === 0) {
+    const r = G.run, trial = r.hard ? Object.assign({}, r.hard.sel) : null;
+    const id = r.heroId, weapon = r.weaponId, mode = r.mode;
+    if (!trial) {
+      this.heroSel = HERO_ORDER.indexOf(id); this.selWeapon(id);
+      this.weaponSel[id] = Math.max(0, heroWeapons(id).findIndex(w => w.id === weapon));
+      this.hardMode = false; this.modeId = mode; this.modeSel = mode === 'hard' ? 1 : 0;
+      this.showcase = { i: 0, t: 0 };
+      transition(() => {
+        G.state = 'title'; G.overlay = null; this.screen = 'mode'; clearWorld(); G.player = null; Sound.music('title');
+      });
+      return;
+    }
+    transition(() => startRun(id, weapon, trial, mode));
+  }
   else this.toTitle();
 };
 
@@ -345,6 +373,7 @@ UI.draw = function () {
   if (G.state === 'boot') this.drawBoot();
   else if (G.state === 'title') {
     if (this.screen === 'press' || this.screen === 'title') this.drawTitle();
+    else if (this.screen === 'mode') this.drawMode();
     else if (this.screen === 'select') this.drawSelect();
     else if (this.screen === 'trial') this.drawTrial();
     else if (this.screen === 'talents') this.drawTalents();
@@ -357,7 +386,7 @@ UI.draw = function () {
   if (this.confirm) this.drawConfirm();
   // touch: an on-screen back button for menus that otherwise need ESC
   if (TouchUI.enabled && G.state === 'title' && !['press', 'title'].includes(this.screen) && !this.confirm) {
-    region(6, 4, 52, 40, { onClick: () => { Input.virt('Escape', true); setTimeout(() => Input.virt('Escape', false), 60); } });
+    region(6, 4, 52, 40, { onClick: () => { Input.virt('Escape', true); this.updTitle(0); Input.virt('Escape', false); } });
     panel(10, 8, 44, 32, { border: '#ff8a9a', corner: '#ffffff' });
     uctx.drawImage(iconOf('back', '#ffd0d8'), 16, 8, 32, 32);
   }
@@ -422,7 +451,25 @@ UI.drawTitle = function () {
   T(`熵晶 ${Save.data.crystals}`, 38, UH - 22, { color: '#d8c0ff' });
   const st = Save.data.stats;
   T(`挑战 ${st.runs} 次 · 通关 ${st.wins} 次`, 160, UH - 22, { color: '#7a6a98' });
+  if (Save.data.titles.includes('劫主')) T('称号「劫主」', 416, UH - 22, { color: '#ffd23f' });
   T('↑↓ 选择   ENTER / J 确认   ESC 返回', UW - 16, UH - 22, { color: '#7a6a98', align: 'right' });
+};
+
+UI.drawMode = function () {
+  uctx.fillStyle = 'rgba(5,2,12,0.82)'; uctx.fillRect(0, 0, UW, UH);
+  T('开始游戏', UW / 2, 24, { scale: 2, color: '#ffffff', align: 'center', outline: '#12081c' });
+  ['normal', 'hard'].forEach((id, i) => {
+    const x = 54 + i * 442, y = 82, w = 410, h = 412, selected = this.modeSel === i;
+    const col = i === 0 ? '#7fe8c8' : '#ff8a9a';
+    region(x, y, w, h, { onHover: () => { if (this.modeSel !== i) { this.modeSel = i; Sound.play('select'); } }, onClick: () => this.selectMode(i) });
+    panel(x, y, w, h, { border: selected ? col : '#3a2f5c', bg: selected ? '#161322' : '#0b0716' });
+    T(DIFFICULTIES[id].name, x + w / 2, y + 24, { scale: 2, color: selected ? '#ffffff' : '#9a8aac', align: 'center' });
+    difficultyBuffs(id).forEach((desc, j) => {
+      const ry = y + 80 + j * 38;
+      if (j % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(x + 12, ry - 6, w - 24, 36); }
+      Text.wrap(desc, w - 48).forEach((line, k) => T(line, x + 24, ry + k * 14, { color: selected ? '#e8e0ff' : '#9a8aac' }));
+    });
+  });
 };
 
 // ---------- HERO SELECT ----------
@@ -605,15 +652,18 @@ UI.drawSelect = function () {
   const nMoves = Object.keys(h.moves).filter(k => k !== 'plungeLand').length;
   const nArt = Object.values(ARTS).filter(a => a.hero === id).length;
   const nSk = Object.values(SKILLS).filter(s => s.hero === id).length;
-  T(fitText(h.desc, tw), mx, by + 6, { color: '#ffffff' });
-  uctx.drawImage(iconOf(W0.icon, W0.col), mx - 2, by + 23);
-  T(`${W0.name} · ${W0.type}`, mx + 18, by + 24, { color: W0.col });
+  const nU = Object.values(USKILLS).filter(s => s.hero === id).length;
+  T(fitText(h.desc, tw), mx, by + 4, { color: '#ffffff' });
+  uctx.drawImage(iconOf(W0.icon, W0.col), mx - 2, by + 18);
+  T(`${W0.name} · ${W0.type}`, mx + 18, by + 19, { color: W0.col });
   const wx = mx + 18 + Text.measure(`${W0.name} · ${W0.type}`, 12) + 10;
-  T(fitText(W0.desc, mx + tw - wx), wx, by + 24, { color: '#c8c0e0' });
+  T(fitText(W0.desc, mx + tw - wx), wx, by + 19, { color: '#c8c0e0' });
+  const us = U_SLOTS.map(sl => { const U = Object.values(USKILLS).find(s => s.hero === id && s.slot === sl.id); return U ? `${sl.input} ${U.name}` : ''; });
+  T(fitText('技能  ' + us.join('  '), tw), mx, by + 34, { color: WX_FAM.u.col });
   const secs = SECRET_SLOTS.map(sl => { const S = Object.values(SKILLS).find(s => s.hero === id && s.slot === sl.id && s.def); return S ? `${sl.input} ${S.name}` : ''; });
-  T(fitText('秘技  ' + secs.join('  '), tw), mx, by + 42, { color: '#7fd8ff' });
-  T(`招式 ${nMoves} · 武技 ${nArt} · 秘技 ${nSk} · 武器 ${heroWeapons(id).length}     武技 ↑/↓/冲刺+攻击：派生→连段→终式 · 秘技 Lv2 再按 I 派生 · ↓+I 奥义`, mx, by + 62, { size: 8, color: '#ffb08a' });
-  T(TouchUI.enabled ? `点按两侧角色切换 · 点按中间角色${this.hardMode ? '进入劫难契约' : '出发'} · 点按 ◀ ▶ 切换武器` : `←→ 角色   ↑↓ 武器   ENTER / J ${this.hardMode ? '下一步：劫难契约' : '出发'}   ESC 返回`, UW / 2, UH - 13, { color: '#7a6a98', align: 'center' });
+  T(fitText('秘技  ' + secs.join('  '), tw), mx, by + 49, { color: '#7fd8ff' });
+  T(fitText(`招式 ${nMoves} · 武技 ${nArt} · 技能 ${nU} · 秘技 ${nSk} · 武器 ${heroWeapons(id).length}     每门武学的等级上限与进阶效果各不相同`, tw, 8), mx, by + 66, { size: 8, color: '#ffb08a' });
+  T(TouchUI.enabled ? `点按两侧角色切换 · 点按中间角色${this.hardMode ? '进入劫难契约' : '选择难度'} · 点按 ◀ ▶ 切换武器` : `←→ 角色   ↑↓ 武器   ENTER / J ${this.hardMode ? '下一步：劫难契约' : '下一步：选择难度'}   ESC 返回`, UW / 2, UH - 13, { color: '#7a6a98', align: 'center' });
 };
 
 // ---------- 劫难契约 ----------
@@ -654,12 +704,17 @@ UI.drawTrial = function () {
   T(`熵晶倍率 ×${cfg.crystalMul.toFixed(2)}`, rx + 18, 164, { color: '#d8c0ff' });
   if (Save.data.stats.bestTrial) T(`最高通关劫难值 ${Save.data.stats.bestTrial}`, rx + rwid - 18, 164, { color: '#8a7aa8', align: 'right' });
   T('福缘（劫难值达到即生效）', rx + 18, 188, { color: '#ffffff' });
-  BOONS.forEach((b, i) => {
-    const y = 210 + i * 32, got = pts >= b.pts;
-    uctx.fillStyle = got ? rgba(rk.col, 0.15) : 'rgba(0,0,0,0)'; uctx.fillRect(rx + 10, y - 4, rwid - 20, 28);
+  const boonRows = BOONS.map(b => ({ boon: b, lines: Text.wrap(b.name, rwid - 98) }));
+  const heights = boonRows.map(b => Math.max(26, b.lines.length * 14 + 4));
+  const gap = Math.max(0, Math.min(6, (288 - heights.reduce((sum, h) => sum + h, 0)) / boonRows.length));
+  let by = 210;
+  boonRows.forEach(({ boon: b, lines }, i) => {
+    const y = by, got = pts >= b.pts;
+    by += heights[i] + gap;
+    uctx.fillStyle = got ? rgba(rk.col, 0.15) : 'rgba(0,0,0,0)'; uctx.fillRect(rx + 10, y - 4, rwid - 20, heights[i] + gap - 2);
     uctx.drawImage(iconOf(b.icon, got ? '#ffd23f' : '#4a3f5a'), rx + 16, y);
     T(String(b.pts), rx + 46, y + 1, { color: got ? '#ffd23f' : '#5a4f6a' });
-    T(b.name, rx + 72, y + 1, { color: got ? '#ffffff' : '#6a5a78' });
+    lines.forEach((line, j) => T(line, rx + 72, y + 1 + j * 14, { color: got ? '#ffffff' : '#6a5a78' }));
   });
   T('↑↓ 选择   ←→ / ENTER 调整劫数   选「出发」或按 R 开始   ESC 返回', UW / 2, UH - 14, { color: '#7a6a98', align: 'center' });
 };
@@ -702,6 +757,8 @@ UI.drawHowto = function () {
       ['蓄力攻击', '长按 J', '长按 X'],
       ['武技：上段 / 下段', '↑ + J   /   ↓ + J', '↑ / ↓ + X'],
       ['冲刺（无敌）· 突进武技', 'L / Shift，冲刺中按 J', 'B / RB，冲刺中 X'],
+      ['技能（远程，不耗灵力）', 'U', 'LB'],
+      ['技能：上 / 下 / 冲刺', '↑ + U   /   ↓ + U   /   冲刺中 U', '↑ / ↓ + LB，冲刺中 LB'],
       ['秘技：静止 / 移动 / 空中', 'I   /   ← → + I   /   空中 I', 'Y（同左）'],
       ['秘技：上 / 下（奥义）', '↑ + I   /   ↓ + I', '↑ / ↓ + Y'],
       ['互动 / 进门 / 拾取', 'E   或   F', '十字键↑ / R3'],
@@ -711,27 +768,28 @@ UI.drawHowto = function () {
     panel(110, 66, 740, 400, { border: '#3a2f5c' });
     T('动作', 140, 80, { color: '#ff3b5c' }); T('键盘', 400, 80, { color: '#ff3b5c' }); T('手柄', 680, 80, { color: '#ff3b5c' });
     rows.forEach((r, i) => {
-      const y = 108 + i * 32;
-      if (i % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(120, y - 6, 720, 30); }
+      const y = 104 + i * 28;
+      if (i % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(120, y - 5, 720, 26); }
       T(r[0], 140, y, { color: '#e8e0ff' }); T(r[1], 400, y, { color: '#ffd36a' }); T(r[2], 680, y, { color: '#7ff7ff' });
     });
   } else {
     const tips = [
       ['见切', '在敌人攻击即将命中的瞬间冲刺，触发子弹时间；随后按攻击发动必暴击的反击。'],
-      ['武技（方向 + 攻击）', '↑ / ↓ / 冲刺中 + 攻击各有一门武技。重复参悟升级：Lv2 派生 → Lv3 连段 → Lv4 终式。'],
-      ['秘技（I + 方向）', '静止、移动、↑、↓、空中各对应一招秘技，消耗灵力；↓ + I 是奥义，消耗最多威力最大。'],
-      ['秘技派生', '秘技 Lv2 后，施放中或刚结束时再按 I 发动派生招式；Lv3 进化。也可转修为另一招。'],
-      ['灵力', '蓝条会自然恢复，命中敌人、极限闪避也会回复。灵力不足时秘技无法施放。'],
+      ['武学', '武技 / 技能 / 秘技同属武学。每门有自己的等级上限（1–3 级）和独有的进阶效果，卡牌上写明每一级给什么。'],
+      ['武技（方向 + 攻击）', '↑ / ↓ / 冲刺中 + 攻击各有一门武技，升级逐步解锁派生、连段、终式，前一招后继续按攻击接出。'],
+      ['技能（U + 方向）', 'U 是不耗灵力的远程技能，↑ / ↓ / 冲刺 + U 各是另一招，各自冷却；解锁后施放中再按 U 出下一段。'],
+      ['秘技（I + 方向）', '静止、移动、↑、↓、空中各一招，消耗灵力；↓ + I 是奥义。解锁派生后，施放中再按 I 接出派生招式。'],
+      ['灵力', '蓝条会自然恢复，命中敌人（包括技能命中）、极限闪避也会回复。灵力不足时秘技无法施放。'],
       ['武器', '出发前用 ↑↓ 选择武器，每把武器改变属性与战斗特性（如散射、落雷、燃烧）。'],
       ['刻印 · 共鸣', '七大印系各有玩法，同一印系拥有 3 种刻印时触发共鸣。'],
       ['熵晶', '用于天赋强化，失败也会保留——每一次挑战都会让你更强。'],
     ];
     panel(90, 66, 780, 400, { border: '#3a2f5c' });
     tips.forEach((tp, i) => {
-      const y = 86 + i * 46;
-      uctx.drawImage(iconOf(['eye', 'fist', 'star', 'chain', 'orb', 'sword', 'ring', 'shard'][i], ['#9ab8ff', '#ff8a5a', '#5ad8ff', '#7fd8ff', '#3a8cff', '#ffd23f', '#c46aff', '#b46cff'][i]), 112, y);
+      const y = 80 + i * 43;
+      uctx.drawImage(iconOf(['eye', 'scroll', 'fist', 'wave', 'star', 'orb', 'sword', 'ring', 'shard'][i], ['#9ab8ff', '#ff8a5a', '#ff8a5a', '#7fe8a8', '#5ad8ff', '#3a8cff', '#ffd23f', '#c46aff', '#b46cff'][i]), 112, y);
       T(tp[0], 140, y, { color: '#ffffff' });
-      T(tp[1], 140, y + 18, { color: '#9a8acb' });
+      Text.wrap(tp[1], 710).slice(0, 2).forEach((l, k) => T(l, 140, y + 15 + k * 14, { color: '#9a8acb' }));
     });
   }
   region(UW / 2 - 120, UH - 36, 240, 30, { onClick: () => { this.howPage ^= 1; Sound.play('select'); } });
@@ -875,12 +933,37 @@ UI.drawHUD = function () {
         uctx.drawImage(iconOf(S.icon, S.ult ? h.color : '#7fd8ff'), x + 3, y + 3, 28, 28);
         uctx.globalAlpha = 1;
         if (!ok) { const f = clamp(p.mana / cost, 0, 1); uctx.fillStyle = 'rgba(0,0,0,0.55)'; uctx.fillRect(x, y, sz, Math.round(sz * (1 - f))); }
-        for (let k = 0; k < 3; k++) { uctx.fillStyle = k < s.lv ? '#ffd23f' : '#2a2244'; uctx.fillRect(x + 3 + k * 5, y + sz - 5, 3, 3); }
+        for (let k = 0; k < wxMax(S); k++) { uctx.fillStyle = k < s.lv ? '#ffd23f' : '#2a2244'; uctx.fillRect(x + 3 + k * 5, y + sz - 5, 3, 3); }
         T(String(cost), x + sz - 2, y + sz - 10, { size: 8, color: ok ? '#bfe8ff' : '#6a7a9a', align: 'right', outline: '#05030a' });
       }
       T(sl.input, x + sz / 2, y - 12, { size: 8, color: cur ? '#ffffff' : '#7a8ab8', align: 'center' });
       if (S) T(S.name, x + sz / 2, y + sz + 4, { size: 8, color: cur ? '#e8f4ff' : '#8a8ab0', align: 'center' });
       ax += sz + gap;
+    }
+    // 技能 slots (U + direction, free, cooldown), left of the 秘技 bar
+    {
+      const usz = 30, ugap = 8, ucur = p.uSlot();
+      let ux = UW - 14 - order.length * (sz + gap) + gap - 20 - U_SLOTS.length * (usz + ugap) + ugap;
+      const uy = ay + (sz - usz);
+      for (const sl of U_SLOTS) {
+        const x = ux, y = uy, s = p.uskills[sl.id], U = s && USKILLS[s.id], cur = sl.id === ucur;
+        const cd = U ? uCooldown(U) : 1, left = Math.max(0, p.ucd[sl.id] || 0);
+        uctx.fillStyle = cur ? WX_FAM.u.col : '#05030a'; uctx.fillRect(x - 2, y - 2, usz + 4, usz + 4);
+        uctx.fillStyle = '#0e1e1a'; uctx.fillRect(x, y, usz, usz);
+        if (U) {
+          uctx.globalAlpha = left > 0 ? 0.45 : 1;
+          uctx.drawImage(iconOf(U.icon, WX_FAM.u.col), x + 3, y + 3, 24, 24);
+          uctx.globalAlpha = 1;
+          if (left > 0) {
+            uctx.fillStyle = 'rgba(0,0,0,0.55)'; uctx.fillRect(x, y, usz, Math.round(usz * clamp(left / cd, 0, 1)));
+            T(left.toFixed(1), x + usz / 2, y + 10, { size: 8, color: '#ffffff', align: 'center', outline: '#05030a' });
+          }
+          for (let k = 0; k < wxMax(U); k++) { uctx.fillStyle = k < s.lv ? WX_FAM.u.col : '#2a2244'; uctx.fillRect(x + 3 + k * 5, y + usz - 5, 3, 3); }
+        }
+        T(sl.input, x + usz / 2, y - 12, { size: 8, color: cur ? '#ffffff' : '#7ab8a0', align: 'center' });
+        if (U) T(U.name, x + usz / 2, y + usz + 4, { size: 8, color: cur ? '#e8fff4' : '#8ab0a0', align: 'center' });
+        ux += usz + ugap;
+      }
     }
     // 武技 slots (direction + attack), one row above
     let bx = UW - 14 - 3 * 64;
@@ -890,7 +973,7 @@ UI.drawHUD = function () {
       uctx.fillStyle = '#05030a'; uctx.fillRect(bx - 1, byy - 1, 20, 20);
       if (A) {
         uctx.drawImage(iconOf(A.icon, '#ff8a5a'), bx + 1, byy + 1);
-        for (let k = 0; k < 4; k++) { uctx.fillStyle = k < a.lv ? '#ff8a5a' : '#2a2244'; uctx.fillRect(bx + 22 + k * 5, byy + 13, 3, 3); }
+        for (let k = 0; k < wxMax(A); k++) { uctx.fillStyle = k < a.lv ? '#ff8a5a' : '#2a2244'; uctx.fillRect(bx + 22 + k * 5, byy + 13, 3, 3); }
         T(A.name, bx + 22, byy + 1, { size: 8, color: '#ffc8a8' });
       } else T('—', bx + 9, byy + 3, { size: 8, color: '#4a3f6a', align: 'center' });
       T(sl.input, bx + 9, byy - 11, { size: 8, color: '#8a7a98', align: 'center' });
@@ -1062,16 +1145,16 @@ UI.drawHUD = function () {
   // ---- control hints ----
   if (G.showHints > 0 && !G.overlay && !G.boss) {
     const a = clamp(G.showHints, 0, 1);
-    const hints = [['attack', '攻击'], ['jump', '跳跃'], ['dash', '冲刺'], ['ult', '秘技（静止 / → / ↑ / ↓ / 空中）'], ['interact', '互动']];
+    const hints = [['attack', '攻击'], ['jump', '跳跃'], ['dash', '冲刺'], ['skill', '技能'], ['ult', '秘技'], ['interact', '互动']];
     let total = 0;
     for (const [k, n] of hints) total += Text.measure(n, 12) + 40;
     const cxh = UW / 2 - 70;
     let x = cxh - total / 2;
-    const y = UH - 100;
+    const y = UH - 150;
     uctx.globalAlpha = a * 0.75; uctx.fillStyle = '#05000a'; uctx.fillRect(cxh - 310, y - 8, 620, 74); uctx.globalAlpha = a;
     for (const [k, n] of hints) { const w = ctrlCap(x, y, k); T(n, x + w + 4, y - 1, { color: '#e8e0ff' }); x += Text.measure(n, 12) + 40; }
-    T('↑ / ↓ / 冲刺 + 攻击：武技（升级后继续按攻击：派生 → 连段 → 终式）', cxh, y + 20, { color: '#c8c0e0', align: 'center' });
-    T('秘技耗灵力，↓ + I 为奥义 · 施放后再按 I：派生 · 命中瞬间冲刺：见切', cxh, y + 40, { color: '#9a8acb', align: 'center' });
+    T('↑ / ↓ / 冲刺 + 攻击：武技 · U / ↑U / ↓U / 冲刺U：技能（不耗灵力，有冷却）', cxh, y + 20, { color: '#c8c0e0', align: 'center' });
+    T('I + 方向：秘技（耗灵力，↓ + I 为奥义）· 施放后再按一次：下一段 · 命中瞬间冲刺：见切', cxh, y + 40, { color: '#9a8acb', align: 'center' });
     uctx.globalAlpha = 1;
   }
 };
@@ -1144,6 +1227,8 @@ UI.drawPick = function (o) {
   if (p.wpn) { uctx.drawImage(iconOf(p.wpn.icon, p.wpn.col), x, UH - 26); x += 26; }
   for (const sl of ART_SLOTS) { const a = p.arts[sl.id]; if (!a) continue; uctx.drawImage(iconOf(ARTS[a.id].icon, '#ff8a5a'), x, UH - 26); T(String(a.lv), x + 18, UH - 25, { size: 8, color: '#ffc8a8' }); x += 30; }
   x += 6;
+  for (const sl of U_SLOTS) { const s = p.uskills[sl.id]; if (!s) continue; uctx.drawImage(iconOf(USKILLS[s.id].icon, WX_FAM.u.col), x, UH - 26); T(String(s.lv), x + 18, UH - 25, { size: 8, color: '#c8ffe0' }); x += 30; }
+  x += 6;
   for (const sl of SECRET_SLOTS) { const s = p.secrets[sl.id]; if (!s) continue; uctx.drawImage(iconOf(SKILLS[s.id].icon, '#7fd8ff'), x, UH - 26); T(String(s.lv), x + 18, UH - 25, { size: 8, color: '#bfe8ff' }); x += 30; }
   x += 10;
   for (const id of Object.keys(p.mods)) if (UPG[id]) { const u = UPG[id]; uctx.drawImage(iconOf(u.icon, SCHOOLS[u.school].col), x, UH - 26); x += 20; }
@@ -1193,35 +1278,41 @@ UI.drawPause = function (o) {
     // weapon
     const Wp = p.wpn;
     head('武器', 114, Wp.col);
-    uctx.drawImage(iconOf(Wp.icon, Wp.col), 388, 132);
-    T(`${Wp.name} · ${Wp.type}`, 412, 132, { color: Wp.col });
-    T(clip(Wp.desc, 510), 412, 148, { color: '#c8c0e0' });
-    // arts
-    head('武技 · 方向 + 攻击', 170, '#ff8a5a');
-    let y = 190;
+    uctx.drawImage(iconOf(Wp.icon, Wp.col), 388, 131);
+    T(`${Wp.name} · ${Wp.type}`, 410, 132, { color: Wp.col });
+    T(clip(Wp.desc, 400), 520, 132, { color: '#c8c0e0' });
+    // 武学: one compact row per input — name & level, what it does now, what the next pick brings
+    const nextTxt = (fam, E, lv) => (lv >= wxMax(E) ? (wxMax(E) === 1 ? '只有一级' : '已满级') : `Lv${lv + 1}：${wxText(fam, E, lv + 1, p.hero)[0].split('（')[0]}`);
+    const perkTxt = (E, lv) => wxPerksAt(E, lv).map(pk => ` ·「${pk.name}」`).join('');
+    const row = (y, icon, col, label, now, next) => {
+      uctx.drawImage(iconOf(icon, col), 388, y - 2);
+      T(label, 410, y, { color: col });
+      T(clip(now + (next ? '  · ' + next : ''), 924 - 560), 560, y, { color: '#b9b0d8' });
+    };
+    let y = 156;
+    head('武技 · ↑ / ↓ / 冲刺 + 攻击', y, WX_FAM.art.col); y += 19;
     for (const sl of ART_SLOTS) {
       const a = p.arts[sl.id];
-      if (!a) { T(`[${sl.input}] 未习得 — 默认「${p.hero.moves[{ up: 'rise', down: 'low', dash: 'dashAtk' }[sl.id]].label}」，参悟「武学」习得`, 388, y + 6, { color: '#5a4f7a' }); y += 31; continue; }
-      const A = ARTS[a.id];
-      uctx.drawImage(iconOf(A.icon, '#ff8a5a'), 388, y);
-      T(`[${sl.input}] ${A.name} Lv${a.lv}`, 412, y - 1, { color: '#ffc8a8' });
-      const names = A.moves.map(mn => p.hero.moves[mn].label);
-      T(clip(names.slice(0, a.lv).join(' → ') + (a.lv < 4 ? `   （Lv${a.lv + 1}：${ART_LV_TAG[a.lv]}「${names[a.lv]}」）` : '   · 已大成'), 510), 412, y + 14, { color: '#c8c0e0' });
-      y += 31;
+      if (!a) { T(`[${sl.input}] 未习得 — 默认「${p.hero.moves[{ up: 'rise', down: 'low', dash: 'dashAtk' }[sl.id]].label}」，参悟武学习得`, 410, y, { color: '#5a4f7a' }); y += 21; continue; }
+      const A = ARTS[a.id], names = A.moves.map(mn => p.hero.moves[mn].label);
+      row(y, A.icon, '#ffc8a8', `[${sl.input}] ${A.name} ${a.lv}/${wxMax(A)}`, names.slice(0, wxAt(A, a.lv).n).join('→') + perkTxt(A, a.lv), nextTxt('art', A, a.lv));
+      y += 21;
     }
-    // secrets
-    head('秘技 · I + 方向（消耗灵力）', y + 2, '#5ad8ff');
-    y += 22;
+    head('技能 · U + 方向（不耗灵力）', y + 2, WX_FAM.u.col); y += 21;
+    for (const sl of U_SLOTS) {
+      const s = p.uskills[sl.id];
+      if (!s) continue;
+      const U = USKILLS[s.id];
+      row(y, U.icon, '#c8ffe0', `[${sl.input}] ${U.name} ${s.lv}/${wxMax(U)}`, U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join('→') + ` · ${uCooldown(U).toFixed(1)}秒` + perkTxt(U, s.lv), nextTxt('u', U, s.lv));
+      y += 21;
+    }
+    head('秘技 · I + 方向（消耗灵力）', y + 2, WX_FAM.sk.col); y += 21;
     for (const sl of SECRET_SLOTS) {
       const sk = p.secrets[sl.id];
       if (!sk) continue;
       const S = SKILLS[sk.id];
-      uctx.drawImage(iconOf(S.icon, S.ult ? p.hero.color : '#7fd8ff'), 388, y);
-      T(`[${sl.input}] ${S.name} Lv${sk.lv}`, 412, y - 1, { color: S.ult ? p.hero.color : '#bfe8ff' });
-      T(`灵力 ${skillCost(p, S)}`, 926, y - 1, { color: '#7fa8ff', align: 'right' });
-      const extra = S.follow ? (sk.lv >= 2 ? `  · 派生「${S.fname}」再按 I` : `  · Lv2 派生「${S.fname}」`) : '';
-      T(clip(S.desc(sk.lv) + extra, 510), 412, y + 14, { color: '#b9b0d8' });
-      y += 31;
+      row(y, S.icon, S.ult ? p.hero.color : '#bfe8ff', `[${sl.input}] ${S.name} ${sk.lv}/${wxMax(S)}`, `灵力 ${skillCost(p, S)}${p.skFollow(S.id) ? ' · 派生「' + S.fname + '」' : ''}` + perkTxt(S, sk.lv), nextTxt('sk', S, sk.lv));
+      y += 21;
     }
     const techs = Object.keys(p.tech).filter(t => p.tech[t]);
     T(techs.length ? '已解锁招式：' + techs.map(t => TECHS[t].name).join('  ') : '已解锁招式：无', 386, Math.min(y + 4, 488), { color: '#ffd23f' });
@@ -1243,10 +1334,11 @@ UI.drawPause = function (o) {
     (p.resonance || []).forEach((sc, i) => T(clip(SCHOOLS[sc].reso, 540), 386, 486 - i * 16, { size: 8, color: SCHOOLS[sc].col }));
   } else {
     const list = heroMoveList(p.hero, p);
+    const step = list.length > 15 ? 23 : 28, nU = Object.keys(p.uskills).length;
     list.forEach(([inp, name], i) => {
-      const y = 82 + i * 28;
-      if (i % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(380, y - 6, 550, 26); }
-      T(inp, 392, y, { color: i >= 9 ? '#7fd8ff' : '#ffd36a' });
+      const y = 82 + i * step;
+      if (i % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(380, y - 5, 550, step - 2); }
+      T(inp, 392, y, { color: i >= 9 + nU ? '#7fd8ff' : i >= 9 ? WX_FAM.u.col : '#ffd36a' });
       T(clip(name || '—', 384), 540, y, { color: '#e8e0ff' });
     });
   }
@@ -1294,6 +1386,7 @@ UI.drawEnd = function () {
       scoreDigits(e.score, qx + 14, 170 + qs - 40, 3, '#ffffff', sh);
       if (e.best && e.score > 0) T('新纪录', qx + qs - 10, 170 + qs - 56, { color: '#ffd23f', outline: '#0a0612', align: 'right', alpha: sh * (0.7 + 0.3 * Math.sin(e.t * 6)) });
     }
+    if (e.titleAwarded) T(`获得称号「${e.titleAwarded}」`, qx + qs / 2, 426, { color: col, align: 'center', alpha: k });
   }
   panel(px, 150, 460, 300, { border: col, alpha: 0.85 * k });
   rows.forEach(([a, b], i) => {
@@ -1308,6 +1401,7 @@ UI.drawEnd = function () {
     uctx.globalAlpha = show;
     const icons = [[Wp.icon, Wp.col]];
     for (const sl of ART_SLOTS) if (P.arts[sl.id]) icons.push([ARTS[P.arts[sl.id].id].icon, '#ff8a5a']);
+    for (const sl of U_SLOTS) if (P.uskills[sl.id]) icons.push([USKILLS[P.uskills[sl.id].id].icon, WX_FAM.u.col]);
     for (const sl of SECRET_SLOTS) if (P.secrets[sl.id]) icons.push([SKILLS[P.secrets[sl.id].id].icon, '#7fd8ff']);
     for (const id of Object.keys(P.mods)) if (UPG[id]) icons.push([UPG[id].icon, SCHOOLS[UPG[id].school].col]);
     const n = Math.min(icons.length, 26), w = n * 18;

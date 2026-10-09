@@ -338,7 +338,7 @@ HEROES.gao = {
         const ball = (vy, size, dmgMul, split) => G.projs.push(new Proj({
           team: 'p', x: p.x + p.face * 22, y: p.y - 22, vx: p.face * 300, vy, kind: 'orb', r: size, c: GAO_C, c2: '#fff6d0', life: 1.4, hit: Object.assign({}, hit, { dmg: hit.dmg * dmgMul }), pierce: lv >= 2 ? 4 : 2, light: 90, trail: 0.7,
           onDie: q => {
-            explodeP(q.x, q.y, 40, 1.2 * skMul(p, 'gao_ki') * dmgMul, { c: GAO_C, src: 'skill', shake: 0.25 });
+            explodeP(q.x, q.y, 40, 1.2 * skMul(p, 'gao_ki') * dmgMul, { c: GAO_C, src: 'skill', shake: 0.25, wx: q.hit.wx });
             if (split) for (const a of [-0.5, 0, 0.5]) G.projs.push(new Proj({ team: 'p', x: q.x, y: q.y, vx: p.face * Math.cos(a) * 280, vy: Math.sin(a) * 280, kind: 'orb', r: 4, c: GAO_C, life: 0.6, hit: Object.assign({}, hit, { dmg: hit.dmg * 0.35 }), light: 40 }));
           },
         }));
@@ -398,7 +398,7 @@ HEROES.gao = {
         [0.4, p => {
           for (const e of enemiesInRect(p.x - 26, p.y - 80, 52, 90)) hitEnemy(p, e, p.makeHit({ dmg: 2.0, kx: 160 * p.face, ky: -300, stun: 0.8, hs: 8, heavy: true, launch: true, dir: p.face }));
           FX.ring(p.x, p.y - 50, 4, 40, '#ff6a2a', 0.3, 3); Cam.shake(0.4);
-          if (p.skillLv('gao_dragon') >= 3) { p.vy = 700; p.onLandOnce = pp => gaoQuake(pp, 64, 2.2 * skMul(pp, 'gao_dragon'), 'skill'); }
+          if (p.skillLv('gao_dragon') >= 3) { p.vy = 700; p.onLandOnce = pp => gaoQuake(pp, 64, 2.2 * skMul(pp, 'gao_dragon'), 'skill', 'gao_dragon'); }
         }],
       ],
       update(p, mv) {

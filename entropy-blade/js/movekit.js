@@ -3,7 +3,8 @@
 //  MOVE KIT — shared building blocks for 武技 (attack arts), 秘技 派生
 //  follow-ups and the alternate ultimates (moves_rin / moves_eve / moves_gao)
 // =====================================================================
-function artMul(p, id) { const s = p.arts && Object.values(p.arts).find(a => a && a.id === id); return 1 + 0.12 * ((s ? s.lv : 1) - 1); }
+// an art's damage multiplier at its current level (set per art in WX_LEVELS)
+function artMul(p, id) { return p.artPow ? p.artPow(id) : 1; }
 // melee box that reports finishers like a regular move hit
 function pHit(p, rel, spec, dur = 0.08, o = {}) {
   const hit = p.makeHit(spec);
@@ -30,7 +31,7 @@ function groundColumn(p, x, mult, col, o = {}) {
     Sound.play(o.sound || 'slash', { x, pitch: 1.3 + rand(0, 0.3) });
   }
   Light.add(x, gy - h / 2, h * 1.4, col, 0.8);
-  for (const e of enemiesInRect(x - w / 2, gy - h, w, h)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 30, ky: o.ky || -340, launch: true, stun: 0.6, hs: 2, dir: p.face, src: o.src || 'light', art: o.art, skill: o.skill, fxc: col, status: o.status }));
+  for (const e of enemiesInRect(x - w / 2, gy - h, w, h)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 30, ky: o.ky || -340, launch: true, stun: 0.6, hs: 2, dir: p.face, src: o.src || 'light', art: o.art, skill: o.skill, uskill: o.uskill, fxc: col, status: o.status }));
   return true;
 }
 // lightning bolt from the sky onto an enemy (or a point)
@@ -40,13 +41,14 @@ function skyBolt(p, x, y, mult, col, o = {}) {
   FX.flash(x, y, 14, '#ffffff', 0.12);
   Light.add(x, y, 90, col, 1);
   Sound.play('zap', { x, pitch: rand(0.9, 1.2) });
-  for (const e of enemiesNear(x, y, o.r || 18)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 20, ky: -160, stun: o.stun || 0.5, hs: 2, dir: sign(e.x - p.x) || 1, src: o.src || 'light', art: o.art, skill: o.skill, fxc: col, sfx: false }));
+  for (const e of enemiesNear(x, y, o.r || 18)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 20, ky: -160, stun: o.stun || 0.5, hs: 2, dir: sign(e.x - p.x) || 1, src: o.src || 'light', art: o.art, skill: o.skill, uskill: o.uskill, fxc: col, sfx: false }));
 }
 // whirlwind zone that pulls enemies in and keeps cutting
 function windZone(p, x, y, life, r, mult, col, o = {}) {
+  const wx = p.moveWx(p.move && p.move.m, o);
   return addZone({
     x, y, life, tick: o.tick || 0.2, wind: true,
-    onTick(z) { for (const e of enemiesNear(z.x, z.y, r)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 0, ky: -60, stun: 0.25, hs: 0, dir: sign(e.x - z.x) || 1, src: o.src || 'light', art: o.art, skill: o.skill, sfx: false, energy: 0.3, fxc: col })); },
+    onTick(z) { for (const e of enemiesNear(z.x, z.y, r)) hitEnemy(p, e, p.makeHit({ dmg: mult, kx: 0, ky: -60, stun: 0.25, hs: 0, dir: sign(e.x - z.x) || 1, src: o.src || 'light', wx, sfx: false, energy: 0.3, fxc: col })); },
     upd(z, dt) {
       if (o.follow) { z.x = lerp(z.x, p.x, dt * 5); z.y = lerp(z.y, p.cy, dt * 5); }
       for (const e of enemiesNear(z.x, z.y, r * 1.8)) if (!e.boss) { e.vx += (z.x - e.x) * (o.pull || 4) * dt; if (e.flying) e.vy += (z.y - e.cy) * 3 * dt; }
@@ -103,10 +105,10 @@ function petalPuff(x, y, n = 14, cols = ['#ffb7d0', '#ffffff', '#ff7aa0']) {
 }
 // afterimage that detonates (影踏 / 幻影)
 function ghostBomb(p, x, y, delay, r, mult, col, o = {}) {
-  const fr = p.frame(), f = p.face;
+  const fr = p.frame(), f = p.face, wx = p.moveWx(p.move && p.move.m, o);
   addZone({
     x, y, life: delay,
     drawFn(ctx, gctx, x2, y2, z) { drawFrame(ctx, fr, p.spr.ox, p.spr.oy, x2, y2, f < 0, { tint: col, alpha: 0.45 + 0.35 * Math.sin(z.t * 30) }); },
-    onEnd() { explodeP(x, y - 16, r, mult, { c: col, src: o.src || 'light', shake: 0.3, sound: 'void', pitch: 1.4, noProc: false, status: o.status }); },
+    onEnd() { explodeP(x, y - 16, r, mult, { c: col, src: o.src || 'light', shake: 0.3, sound: 'void', pitch: 1.4, noProc: false, status: o.status, wx }); },
   });
 }

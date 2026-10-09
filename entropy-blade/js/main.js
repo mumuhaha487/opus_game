@@ -35,7 +35,7 @@ function autoStart(q) {
   // hard=fierce:2,edge:1  → 劫难挑战 with those curses
   let trial = null;
   if (q.get('hard')) { trial = {}; for (const t of q.get('hard').split(',')) { const [id, lv] = t.split(':'); trial[id] = +(lv || 1); } }
-  startRun(hero, q.get('weapon'), trial);
+  startRun(hero, q.get('weapon'), trial, q.get('mode') || 'normal');
   // scene=N (0..3) or legacy biome=N
   let scene = q.has('scene') ? +q.get('scene') : SCENES.findIndex(s => s.bi === +(q.get('biome') || 0));
   scene = clamp(scene < 0 ? 0 : scene, 0, SCENES.length - 1);

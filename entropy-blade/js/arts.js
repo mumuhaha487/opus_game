@@ -1,14 +1,15 @@
 'use strict';
 // =====================================================================
-//  HEROES (4/4) — loadout registries:
-//   SKILLS  秘技  (I + direction, costs 灵力 mana; Lv2 派生 follow-up, Lv3 进化)
-//   ARTS    武技  (↑/↓/冲刺 + 攻击; Lv1 起手 → Lv2 派生 → Lv3 连段 → Lv4 终式)
+//  HEROES (4/4) — loadout registries. Arts, skills and secrets are all
+//  武学: one reward pool, one Lv1–4 ladder (see WX_* below).
+//   ARTS    武技  (↑/↓/冲刺 + 攻击; a 4-move chain 起手 → 派生 → 连段 → 终式)
+//   USKILLS 技能  (U / ↑U / ↓U / 冲刺U; free, cooldown; up to three stages)
+//   SKILLS  秘技  (I + direction, costs 灵力 mana; Lv2 派生, Lv3 进化)
 //   WEAPONS 武器  (chosen on the character screen)
 //   TECHS   招式解锁
 //  plus move list, reward offers and sprite baking
 // =====================================================================
 const pctL = (base, lv) => Math.round(base * 100 * (1 + 0.35 * (lv - 1))) + '%';
-const pctA = (base, lv) => Math.round(base * 100 * (1 + 0.12 * (lv - 1))) + '%';
 
 // ---------------- input slots ----------------
 const SECRET_SLOTS = [
@@ -23,7 +24,23 @@ const ART_SLOTS = [
   { id: 'down', name: '下段', input: '↓ 攻击', long: '↓ + 攻击' },
   { id: 'dash', name: '突进', input: '冲刺 攻击', long: '冲刺中按攻击' },
 ];
+const U_SLOTS = [
+  { id: 'shot', name: '远程', input: 'U', long: '按 U（远程）' },
+  { id: 'up', name: '上', input: '↑ U', long: '↑ + U' },
+  { id: 'down', name: '下', input: '↓ U', long: '↓ + U' },
+  { id: 'dash', name: '冲刺', input: '冲刺 U', long: '冲刺中按 U' },
+];
 const slotInfo = (list, id) => list.find(s => s.id === id);
+
+// ---------------- 武学 levels ----------------
+// Every 武学 (武技 / 技能 / 秘技) carries its own ladder (WX_LEVELS, below the registries):
+// its own number of levels (1–3), its own unlocks per level and, on some levels, a
+// signature effect (WX_PERKS) that no other 武学 shares.
+const WX_FAM = {
+  art: { name: '武技', col: '#ff8a5a' },
+  u: { name: '技能', col: '#7fe8a8' },
+  sk: { name: '秘技', col: '#5ad8ff' },
+};
 
 // =====================================================================
 //  秘技 SKILLS
@@ -126,7 +143,44 @@ SK({ id: 'gao_mountain', hero: 'gao', slot: 'down', ult: true, name: '镇岳', i
   evo: '落地后升起环形岩刺' });
 
 // =====================================================================
-//  武技 ARTS — direction + attack. moves[i] unlocks at Lv i+1
+//  技能 USKILLS — U + direction. Free (no 灵力), each slot on its own cooldown.
+//  moves[k] is stage k+1; which stages a level opens is set per skill in
+//  WX_LEVELS — press U again during or right after a stage for the next one.
+//  Moves live in moves_u.js.
+// =====================================================================
+const USKILLS = {};
+function USK(o) { USKILLS[o.id] = o; }
+// ----------------------------- RIN -----------------------------
+USK({ id: 'rin_u_shot', hero: 'rin', slot: 'shot', name: '飞刃', icon: 'wave', cd: 1.1, moves: ['u_rin_shot1', 'u_rin_shot2', 'u_rin_shot3'],
+  stages: ['甩出贯穿的月牙剑气（130%）', '交叉刃：X 形双剑气（各 110%）', '千刃：五道扇形剑气齐发（各 100%），借势后跃'] });
+USK({ id: 'rin_u_up', hero: 'rin', slot: 'up', name: '升月', icon: 'meteor', cd: 3.0, moves: ['u_rin_up1', 'u_rin_up2', 'u_rin_up3'],
+  stages: ['小跃并斜上斩出对空月牙（150%，挑飞）', '月轮：抛出悬停的刃轮，持续切割空中敌人', '坠月：巨大月刃自天而降砸向前方（320%）'] });
+USK({ id: 'rin_u_down', hero: 'rin', slot: 'down', name: '地走刃', icon: 'spike', cd: 3.4, moves: ['u_rin_down1', 'u_rin_down2', 'u_rin_down3'],
+  stages: ['刀尖划地，贴地疾走的刃波（150%，挑飞）', '刃林：沿路依次迸出四道刀刃（各 100%）', '断地：前后两侧同时迸出刀刃（各 110%）'] });
+USK({ id: 'rin_u_dash', hero: 'rin', slot: 'dash', name: '影刃', icon: 'feather', cd: 4.0, moves: ['u_rin_dash1', 'u_rin_dash2', 'u_rin_dash3'],
+  stages: ['冲刺中掷出三柄影刃（各 90%，贯穿）', '回刃：影刃折返飞回，沿途再斩', '影杀：瞬身穿过前方所有敌人并连斩'] });
+// ----------------------------- EVE -----------------------------
+USK({ id: 'eve_u_shot', hero: 'eve', slot: 'shot', name: '魔弹', icon: 'eye', cd: 1.0, moves: ['u_eve_shot1', 'u_eve_shot2', 'u_eve_shot3'],
+  stages: ['射出贯穿两名敌人的重魔弹（160%）', '三连魔弹：瞬间补射三发（各 110%）', '星爆弹：爆炸并迸射 8 枚碎片（240%）'] });
+USK({ id: 'eve_u_up', hero: 'eve', slot: 'up', name: '照明星', icon: 'star', cd: 3.0, moves: ['u_eve_up1', 'u_eve_up2', 'u_eve_up3'],
+  stages: ['斜上射出照明弹，炸开后落下 7 颗星弹（各 60%）', '双星：再射两枚照明弹覆盖更远', '流星雨：前方倾泻 14 颗流星（各 70%）'] });
+USK({ id: 'eve_u_down', hero: 'eve', slot: 'down', name: '跳雷', icon: 'orb', cd: 3.2, moves: ['u_eve_down1', 'u_eve_down2', 'u_eve_down3'],
+  stages: ['贴地抛出弹跳雷，碰到敌人即爆（200%）', '连锁雷：再抛两枚不同弹道的跳雷', '雷阵：身周布下五枚地雷依次引爆（各 140%，眩晕）'] });
+USK({ id: 'eve_u_dash', hero: 'eve', slot: 'dash', name: '回旋射击', icon: 'ring', cd: 2.4, moves: ['u_eve_dash1', 'u_eve_dash2', 'u_eve_dash3'],
+  stages: ['冲刺中旋身，向四周射出 8 发子弹（各 60%）', '交叉火力：斜向两道贯穿速射', '幻影齐射：两道幻影各射 5 发魔弹'] });
+// ----------------------------- GAO -----------------------------
+USK({ id: 'gao_u_shot', hero: 'gao', slot: 'shot', name: '气弹', icon: 'orb', cd: 1.2, moves: ['u_gao_shot1', 'u_gao_shot2', 'u_gao_shot3'],
+  stages: ['推掌打出贯穿气弹（160%，击退）', '双掌气弹：上下两记更大的气弹', '气功炮：短距巨型气劲炮（300%）'] });
+USK({ id: 'gao_u_up', hero: 'gao', slot: 'up', name: '升龙气', icon: 'flame', cd: 3.0, moves: ['u_gao_up1', 'u_gao_up2', 'u_gao_up3'],
+  stages: ['上勾拳卷起吸人的气旋（挑飞，持续切割）', '双气旋：更远处再卷起两道', '炎龙：三道烈焰龙柱冲天（各 200%）'] });
+USK({ id: 'gao_u_down', hero: 'gao', slot: 'down', name: '震地', icon: 'spike', cd: 3.4, moves: ['u_gao_down1', 'u_gao_down2', 'u_gao_down3'],
+  stages: ['重踏地面，向两侧推出冲击波（各 140%）', '岩刺：两侧依次升起岩刺（各 110%）', '地震：周围地面敌人受 260% 伤害并眩晕'] });
+USK({ id: 'gao_u_dash', hero: 'gao', slot: 'dash', name: '猛虎掌', icon: 'fist', cd: 2.4, moves: ['u_gao_dash1', 'u_gao_dash2', 'u_gao_dash3'],
+  stages: ['冲刺中推出虎形掌劲（180%，贯穿）', '双虎掌：更大的第二记掌劲，重击破防', '虎啸：震天咆哮，冲击环眩晕周围（240%）'] });
+
+// =====================================================================
+//  武技 ARTS — direction + attack. A 4-move chain (起手 → 派生 → 连段 → 终式);
+//  how many links each level opens is set per art in WX_LEVELS
 // =====================================================================
 const ARTS = {};
 function ART(o) { ARTS[o.id] = o; }
@@ -170,6 +224,194 @@ ART({ id: 'gao_tiger', hero: 'gao', slot: 'dash', name: '猛虎', icon: 'fist', 
   lv: ['猛虎硬爬山：霸体双拳突进', '虎抱：抓住敌人摔向身后', '虎尾脚：转身后踢', '虎啸：震天咆哮，冲击环眩晕周围'] });
 ART({ id: 'gao_knee', hero: 'gao', slot: 'dash', name: '飞膝', icon: 'wing', moves: ['knee1', 'knee2', 'knee3', 'knee4'],
   lv: ['腾空飞膝，斜向冲上', '双峰贯耳：空中双锤', '落雷踵：俯冲踵落', '地动：落地后前方连环地震'] });
+
+// =====================================================================
+//  武学 signature effects — each one belongs to exactly one 武学.
+//  Hooks: pre (adjust the hit before damage), hit (after it lands), kill,
+//  during (every frame its move runs), cast (秘技 cast); mods are read by
+//  the systems they touch (reach: boxes / shots / blasts, homing, armor).
+//  Effects marked "moves" live in that 武学's own move code.
+// =====================================================================
+const WX_PERKS = {
+  // ---------------- 凛：刃、影、樱、血 ----------------
+  lingkong: { name: '凌空', desc: '空中命中时恢复一次空中跳跃并短暂滞空', hit(p) { if (!p.onGround) { p.jumpsLeft = Math.max(p.jumpsLeft, 1); p.vy = Math.min(p.vy, -40); } } },
+  yingyin: { name: '樱印', desc: '命中留下樱印，敌人 3 秒内受到的伤害提高', hit(p, e) { applyStatus(e, 'vuln', 3); } },
+  renchang: { name: '刃长', desc: '斩击判定与刃波射程 +40%', mods: { reach: 1.4 } },
+  zangjue: {
+    name: '影葬·绝', desc: '命中生命低于 25% 的影印敌人时直接将其斩杀（首领除外）',
+    hit(p, e, h) {
+      if (e.boss || e.dead || e.hp <= 0 || !(e.st.shade > 0) || e.hp >= e.maxHp * 0.25) return;
+      FX.text(e.x, e.y - e.h - 12, '斩', '#c08aff', { size: 12, life: 0.7 });
+      FX.slash(e.x, e.cy, { r: 26, a0: -70, a1: 70, th: 8, c: '#c08aff', f: h.dir || 1, dur: 0.2, rot: 30 });
+      hitEnemy(p, e, { dmg: e.hp, execute: true, kx: 0, ky: -220, dir: h.dir || 1, noCrit: true, noProc: true, noCombo: true, noEnergy: true, src: 'proc', fxc: '#c08aff', sfx: 'crit' }, e.x, e.cy);
+    },
+  },
+  leihen: { name: '雷痕', desc: '命中使敌人麻痹 0.4 秒', hit(p, e) { applyStatus(e, 'stun', 0.4); FX.bolt(e.x + rand(-6, 6), e.y - e.h - 16, e.x, e.cy, '#c08aff', 0.12, 1, 4); } },
+  canxin: { name: '残心', desc: '剑气暴击率 +25%', pre(p, e, h) { h.critBonus = (h.critBonus || 0) + 0.25; } },
+  renji: { name: '刃迹', desc: '刃波在地面留下 1.5 秒的刀痕，持续切割踏入的敌人' },            // moves: u_rin_down1
+  zhantie: { name: '斩铁', desc: '斩击破防，对首领伤害 +35%', pre(p, e, h) { h.breakGuard = true; if (e.boss) h.dmg *= 1.35; } },
+  yinxue: { name: '饮血', desc: '命中回复造成伤害 6% 的生命', hit(p, e, h, dmg) { if (!h.dot) p.heal(dmg * 0.06, true); } },
+  juanren: {
+    name: '卷刃', desc: '旋风绞碎靠近的敌方飞行道具',
+    during(p) {
+      for (const pr of G.projs) {
+        if (pr.team !== 'e' || pr.dead || dist(pr.x, pr.y, p.x, p.cy) > 46) continue;
+        pr.dead = true;
+        FX.sparks(pr.x, pr.y, rand(0, TAU), '#ffffff', 4, [60, 140], 0.4);
+      }
+    },
+  },
+  // ---------------- 伊芙：弹道、机关、星辰 ----------------
+  xinggui: { name: '星轨', desc: '子弹会追踪敌人', mods: { homing: 2.5 } },
+  zhongpao: { name: '重炮', desc: '命中把敌人高高轰飞，击退 +60%', pre(p, e, h) { h.kx = (h.kx || 0) * 1.6; h.ky = Math.min(h.ky || 0, -280); h.launch = true; } },
+  cilei: { name: '磁雷', desc: '爆炸把敌人吸向爆心', hit(p, e, h) { if (!e.boss) e.vx = -(h.dir || 1) * 150; } },
+  huitang: { name: '回膛', desc: '命中加快冲刺次数的恢复', hit(p) { if (p.dashes < p.stats.dashes) p.dashRegen += 0.12; } },
+  dijin: { name: '抵近', desc: '对 70 像素内的敌人伤害 +40%', pre(p, e, h) { if (Math.abs(e.x - p.x) < 70) h.dmg *= 1.4; } },
+  tiaodan: {
+    name: '跳弹', desc: '魔弹命中后弹向附近另一名敌人（70%）',
+    hit(p, e, h) {
+      if (!h.proj || h._bounce) return;
+      const t = nearestEnemy(e.x, e.cy, 170, x => x !== e);
+      if (!t) return;
+      const a = Math.atan2(t.cy - e.cy, t.x - e.x);
+      G.projs.push(new Proj({ team: 'p', x: e.x + Math.cos(a) * 8, y: e.cy + Math.sin(a) * 8, vx: Math.cos(a) * 700, vy: Math.sin(a) * 700, kind: 'bullet', r: 2.4, len: 16, c: '#5ad8ff', c2: '#ffffff', life: 0.4, light: 30, hits: new Set([e.id]), hit: Object.assign({}, h, { dmg: h.dmg * 0.7, _bounce: true }) }));
+      Sound.play('clank', { x: e.x, pitch: 2.2 });
+    },
+  },
+  bingjing: { name: '冰晶星', desc: '星弹命中使敌人减速 40%（1.5 秒）', hit(p, e) { applyStatus(e, 'slow', 0.4, 1.5); } },
+  retang: { name: '热膛', desc: '每次命中让这一招的冷却减少 0.25 秒', hit(p) { p.ucd.dash = Math.max(0, (p.ucd.dash || 0) - 0.25); } },
+  chuanxin: { name: '穿心', desc: '暴击伤害 +60%', pre(p, e, h) { h.critDmgBonus = (h.critDmgBonus || 0) + 0.6; } },
+  cibao: {
+    name: '磁暴', desc: '命中时放出电弧，跳向附近一名敌人（40%）',
+    hit(p, e, h) {
+      if (h._arc || h.dot) return;
+      const t = nearestEnemy(e.x, e.cy, 130, x => x !== e);
+      if (!t) return;
+      FX.bolt(e.x, e.cy, t.x, t.cy, '#7ff7ff', 0.16, 1.5, 6);
+      Sound.play('zap', { x: t.x, pitch: 1.4 });
+      hitEnemy(p, t, Object.assign({}, h, { dmg: h.dmg * 0.4, _arc: true, sfx: false, noProc: true, hs: 0 }), t.x, t.cy);
+    },
+  },
+  liuhuo: { name: '流火', desc: '星陨使命中的敌人燃烧 2 秒', hit(p, e) { applyStatus(e, 'burn', 2, 0.2); } },
+  // ---------------- 罡：气、岩、火、金刚 ----------------
+  yanbao: { name: '炎爆', desc: '被这门武技击倒的敌人会爆炸（80%）', kill(p, e) { explodeP(e.x, e.cy, 40, 0.8, { c: '#ff6a2a', c2: '#ffd36a', src: 'proc', shake: 0.2, pitch: 1.4, wx: null }); } },
+  yanjia: { name: '岩甲', desc: '命中获得 3 点护盾（最多为最大生命的 25%）', hit(p) { const cap = Math.round(p.maxHp * 0.25); if (p.shield < cap) p.shield = Math.min(cap, p.shield + 3); } },
+  yuzhen: {
+    name: '余震', desc: '震劲波及目标 40 像素内的其他敌人（50%）',
+    hit(p, e, h) {
+      if (h._splash || h.dot) return;
+      for (const o of enemiesNear(e.x, e.cy, 40)) if (o !== e) hitEnemy(p, o, Object.assign({}, h, { dmg: h.dmg * 0.5, _splash: true, sfx: false, noProc: true, hs: 0 }), o.x, o.cy);
+    },
+  },
+  budong: { name: '不动', desc: '出招全程霸体，不会被打断', mods: { armor: true } },
+  huiqi: { name: '回气', desc: '被这门武技击倒的敌人为你回复 6 点生命', kill(p) { p.heal(6); } },
+  qixuan: { name: '气旋不散', desc: '气旋持续时间 +60%、范围 +25%' },                                 // moves: twister
+  liedi: { name: '裂地', desc: '冲击波划过的地面 0.5 秒后迸裂，再造成一次伤害' },                     // moves: u_gao_down1
+  huju: { name: '虎踞', desc: '掌劲命中后 1.5 秒内移动速度 +25%', hit(p) { p.counters.wxSpdT = G.time + 1.5; } },
+  jinshen: { name: '金身', desc: '金刚身期间每次受击回复 4 点灵力' },                                 // hurtPlayer
+  longwei: { name: '龙威', desc: '施放后 4 秒内攻击力 +20%', cast(p) { p.counters.wxAtkT = G.time + 4; } },
+  lianhuan: {
+    name: '连环气爆', desc: '每第 5 次命中引爆一团气劲（120%）',
+    hit(p, e, h) {
+      if (h._boom) return;
+      p.counters.fistsN = (p.counters.fistsN || 0) + 1;
+      if (p.counters.fistsN % 5) return;
+      explodeP(e.x, e.cy, 34, 1.2, { c: '#ffb347', src: 'skill', shake: 0.15, pitch: 1.6, wx: null });
+    },
+  },
+  bawang: { name: '霸王余威', desc: '施放奥义后 5 秒内受到的伤害 -40%', cast(p) { p.counters.wxGuardT = G.time + 5 + (p.move ? p.move.m.dur : 0); } },
+};
+
+// =====================================================================
+//  武学 ladders. One row per 武学; one object per level (its length is the
+//  level cap — 1, 2 or 3 picks). Fields:
+//   武技 n: chain links open, pow: damage      技能 n: stages open, pow: damage
+//   秘技 t: content tier the moves read (2 强化 / 3 进化), f: 派生 open
+//   perk: the signature effect gained at that level (kept from then on)
+// =====================================================================
+const WX_LEVELS = {
+  // ---------------- 凛 ----------------
+  rin_swallow: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 4, pow: 1.35, perk: 'lingkong' }],
+  rin_blossom: [{ n: 2, pow: 1 }, { n: 4, pow: 1.3, perk: 'yingyin' }],
+  rin_sweep: [{ n: 1, pow: 1 }, { n: 3, pow: 1.2 }, { n: 4, pow: 1.4, perk: 'renchang' }],
+  rin_shade: [{ n: 2, pow: 1 }, { n: 3, pow: 1.1 }, { n: 4, pow: 1.25, perk: 'zangjue' }],
+  rin_raiden: [{ n: 3, pow: 1 }, { n: 4, pow: 1.3, perk: 'leihen' }],
+  rin_gale: [{ n: 4, pow: 1 }],
+  rin_u_shot: [{ n: 1, pow: 1 }, { n: 2, pow: 1.2 }, { n: 3, pow: 1.3, perk: 'canxin' }],
+  rin_u_up: [{ n: 1, pow: 1 }, { n: 3, pow: 1.25 }],
+  rin_u_down: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3, perk: 'renji' }],
+  rin_u_dash: [{ n: 3, pow: 1 }],
+  rin_parry: [{ t: 1 }, { t: 3, f: 1 }],
+  rin_iai: [{ t: 1 }, { t: 3 }, { t: 3, f: 1, perk: 'zhantie' }],
+  rin_shadow: [{ t: 1, f: 1 }],
+  rin_flurry: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'yinxue' }],
+  rin_meteor: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1 }],
+  rin_whirl: [{ t: 1 }, { t: 3, f: 1, perk: 'juanren' }],
+  rin_wave: [{ t: 1 }, { t: 2, f: 1 }],
+  rin_petal: [{ t: 1, f: 1 }, { t: 3, f: 1 }],
+  rin_ult: [{ t: 1 }, { t: 3 }],
+  rin_sakura: [{ t: 3 }],
+  // ---------------- 伊芙 ----------------
+  eve_sky: [{ n: 2, pow: 1 }, { n: 4, pow: 1.25, perk: 'xinggui' }],
+  eve_cannon: [{ n: 1, pow: 1 }, { n: 3, pow: 1.15 }, { n: 4, pow: 1.35, perk: 'zhongpao' }],
+  eve_slide: [{ n: 4, pow: 1 }],
+  eve_trap: [{ n: 3, pow: 1 }, { n: 4, pow: 1.3, perk: 'cilei' }],
+  eve_phantom: [{ n: 1, pow: 1 }, { n: 2, pow: 1.2 }, { n: 4, pow: 1.35, perk: 'huitang' }],
+  eve_buck: [{ n: 1, pow: 1 }, { n: 4, pow: 1.3, perk: 'dijin' }],
+  eve_u_shot: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3, perk: 'tiaodan' }],
+  eve_u_up: [{ n: 1, pow: 1 }, { n: 2, pow: 1.2 }, { n: 3, pow: 1.35, perk: 'bingjing' }],
+  eve_u_down: [{ n: 1, pow: 1 }, { n: 3, pow: 1.25 }],
+  eve_u_dash: [{ n: 1, pow: 1 }, { n: 2, pow: 1.1, perk: 'retang' }, { n: 3, pow: 1.3 }],
+  eve_snipe: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'chuanxin' }],
+  eve_turret: [{ t: 1 }, { t: 3, f: 1 }],
+  eve_backflip: [{ t: 2, f: 1 }],
+  eve_grenade: [{ t: 1 }, { t: 2 }, { t: 3, f: 1 }],
+  eve_rain: [{ t: 2 }, { t: 3, f: 1 }],
+  eve_missile: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'cibao' }],
+  eve_kata: [{ t: 2 }, { t: 3, f: 1 }],
+  eve_mine: [{ t: 1, f: 1 }, { t: 2, f: 1 }, { t: 3, f: 1 }],
+  eve_ult: [{ t: 3 }],
+  eve_meteor: [{ t: 1 }, { t: 3, perk: 'liuhuo' }],
+  // ---------------- 罡 ----------------
+  gao_flame: [{ n: 2, pow: 1 }, { n: 3, pow: 1.2 }, { n: 4, pow: 1.4, perk: 'yanbao' }],
+  gao_pillar: [{ n: 1, pow: 1 }, { n: 4, pow: 1.3, perk: 'yanjia' }],
+  gao_whirl: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 4, pow: 1.3, perk: 'yuzhen' }],
+  gao_bridge: [{ n: 4, pow: 1, perk: 'budong' }],
+  gao_tiger: [{ n: 4, pow: 1 }],
+  gao_knee: [{ n: 1, pow: 1 }, { n: 3, pow: 1.2 }, { n: 4, pow: 1.35, perk: 'huiqi' }],
+  gao_u_shot: [{ n: 1, pow: 1 }, { n: 3, pow: 1.3 }],
+  gao_u_up: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3, perk: 'qixuan' }],
+  gao_u_down: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15, perk: 'liedi' }, { n: 3, pow: 1.3 }],
+  gao_u_dash: [{ n: 1, pow: 1 }, { n: 3, pow: 1.25, perk: 'huju' }],
+  gao_iron: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'jinshen' }],
+  gao_ki: [{ t: 1 }, { t: 3 }, { t: 3, f: 1 }],
+  gao_charge: [{ t: 1 }, { t: 3, f: 1 }],
+  gao_grab: [{ t: 1, f: 1 }],
+  gao_dragon: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'longwei' }],
+  gao_split: [{ t: 2, f: 1 }, { t: 3, f: 1 }],
+  gao_kick: [{ t: 1, f: 1 }, { t: 2, f: 1 }],
+  gao_fists: [{ t: 1 }, { t: 3 }, { t: 3, f: 1, perk: 'lianhuan' }],
+  gao_ult: [{ t: 1 }, { t: 3 }, { t: 3, perk: 'bawang' }],
+  gao_mountain: [{ t: 1 }, { t: 3 }],
+};
+// what each 秘技's 强化 tier (2) adds, for the cards
+const SK_BOOST = {
+  rin_wave: '追加第二道剑气', rin_petal: '刃风持续 3.4 秒',
+  eve_turret: '炮台每次双发', eve_backflip: '弹数增加', eve_grenade: '额外投出两枚子母弹', eve_rain: '弹幕更密', eve_missile: '导弹增至 10 枚', eve_kata: '射速提升', eve_mine: '最多可布 3 枚',
+  gao_iron: '持续 4.5 秒', gao_ki: '气弹更大、贯穿更多', gao_charge: '爆炸范围扩大', gao_split: '岩刺增至 9 根', gao_kick: '推进更快', gao_fists: '最后一拳打出拳风',
+};
+for (const reg of [ARTS, USKILLS, SKILLS]) for (const id in reg) {
+  reg[id].lvs = WX_LEVELS[id];
+  if (!reg[id].lvs) console.warn('武学缺少等级表：' + id);
+}
+const wxMax = E => E.lvs.length;
+const wxAt = (E, lv) => E.lvs[clamp(lv, 1, E.lvs.length) - 1];
+// signature effects active at level lv (they stay once gained)
+function wxPerksAt(E, lv) {
+  const out = [];
+  for (let i = 0; i < Math.min(lv, E.lvs.length); i++) if (E.lvs[i].perk) out.push(WX_PERKS[E.lvs[i].perk]);
+  return out;
+}
 
 // =====================================================================
 //  武器 WEAPONS
@@ -258,9 +500,33 @@ const TECHS = {
 
 // ---------------- helpers ----------------
 function artChainNames(h, a, lv) {
-  return a.moves.slice(0, lv).map(mn => h.moves[mn].label).join(' → ');
+  return a.moves.slice(0, wxAt(a, lv).n).map(mn => h.moves[mn].label).join(' → ');
 }
 function skillCost(p, S) { return Math.max(1, Math.round(S.cost * p.stats.costMul)); }
+// 技能 helpers
+const uLabel = (U, k) => (k === 0 ? U.name : U.stages[k].split('：')[0]);
+const uCooldown = U => U.cd;
+const skTierMul = t => 1 + 0.35 * (t - 1);
+// what level lv of a 武学 adds over the level below it (its own unlocks, its signature effect, damage)
+function wxText(fam, E, lv, h) {
+  const cur = wxAt(E, lv), prev = lv > 1 ? wxAt(E, lv - 1) : null, out = [];
+  if (fam === 'art') {
+    const names = E.moves.map(mn => `「${(h.moves[mn] || {}).label || mn}」`), from = prev ? prev.n : 0;
+    if (cur.n > from) out.push((from ? '解锁 ' : '习得 ') + names.slice(from, cur.n).join(' → '));
+  } else if (fam === 'u') {
+    const from = prev ? prev.n : 0;
+    if (cur.n > from) out.push(from ? E.stages.slice(from, cur.n).map((s, k) => `开启第${['', '二', '三'][from + k]}段 ${s}`).join('；') + '（施放后再按 U）' : E.stages.slice(0, cur.n).join('，再按 U：'));
+  } else {
+    const pt = prev ? prev.t : 0;
+    if (cur.t >= 2 && pt < 2 && SK_BOOST[E.id]) out.push('强化：' + SK_BOOST[E.id]);
+    if (cur.t >= 3 && pt < 3 && E.evo) out.push('进化：' + E.evo);
+    if (cur.f && !(prev && prev.f) && E.follow) out.push(`派生「${E.fname}」：${E.fdesc}`);
+  }
+  if (cur.perk) { const pk = WX_PERKS[cur.perk]; out.push(`「${pk.name}」${pk.desc}`); }
+  const was = !prev ? 1 : fam === 'sk' ? skTierMul(prev.t) : prev.pow, now = fam === 'sk' ? skTierMul(cur.t) : cur.pow;
+  if (prev && now > was) out.push(`伤害 +${Math.round((now / was - 1) * 100)}%`);
+  return out;
+}
 
 // ---------------- move list (招式表) ----------------
 function heroMoveList(h, p) {
@@ -277,7 +543,7 @@ function heroMoveList(h, p) {
     const s = p && p.arts[slot];
     if (!s) return M[def].label + '（未习得武技）';
     const a = ARTS[s.id];
-    return `${a.name} Lv${s.lv}：${artChainNames(h, a, s.lv)}`;
+    return `${a.name} Lv${s.lv}/${wxMax(a)}：${artChainNames(h, a, s.lv)}`;
   };
   const rows = [
     ['攻击 连按', chain.join(' → ')],
@@ -290,16 +556,23 @@ function heroMoveList(h, p) {
     ['空中 ↑ / ↓ + 攻击', M.airRise.label + ' / ' + M.plunge.label],
     ['极限闪避 → 攻击', M.counter.label],
   ];
+  if (p) for (const sl of U_SLOTS) {
+    const s = p.uskills[sl.id];
+    if (!s) continue;
+    const U = USKILLS[s.id];
+    rows.push([sl.long, `${U.name} Lv${s.lv}/${wxMax(U)}：${U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}（冷却 ${uCooldown(U).toFixed(1)} 秒）`]);
+  }
   if (p) for (const sl of SECRET_SLOTS) {
     const s = p.secrets[sl.id];
     if (!s) continue;
     const S = SKILLS[s.id];
-    rows.push([sl.long, `${S.name} Lv${s.lv}（灵力 ${skillCost(p, S)}）${s.lv >= 2 && S.follow ? ' → 再按 I：' + S.fname : ''}`]);
+    rows.push([sl.long, `${S.name} Lv${s.lv}/${wxMax(S)}（灵力 ${skillCost(p, S)}）${wxAt(S, s.lv).f && S.follow ? ' → 再按 I：' + S.fname : ''}`]);
   }
   return rows;
 }
 
-// ---------------- 武学 offers: arts / secrets / techniques ----------------
+// ---------------- 武学 offers: one pool for 武技 / 技能 / 秘技 / 招式 ----------------
+// level-ups are weighted up (each 武学 stops appearing once it hits its own cap)
 function rollArts(p, n = 3) {
   const h = p.hero;
   const cands = [];
@@ -307,18 +580,24 @@ function rollArts(p, n = 3) {
     const A = ARTS[id];
     if (A.hero !== h.id) continue;
     const cur = p.arts[A.slot];
-    if (!cur) cands.push({ w: 3.2, v: { kind: 'art', id } });
-    else if (cur.id === id && cur.lv < 4) cands.push({ w: 3.4, v: { kind: 'artUp', id } });
-    else if (cur.id !== id) cands.push({ w: 0.7, v: { kind: 'artSwap', id } });
+    if (!cur) cands.push({ w: 3.0, v: { kind: 'art', id } });
+    else if (cur.id === id && cur.lv < wxMax(A)) cands.push({ w: 3.4, v: { kind: 'artUp', id } });
+    else if (cur.id !== id) cands.push({ w: 0.6, v: { kind: 'artSwap', id } });
+  }
+  for (const id in USKILLS) {
+    const U = USKILLS[id];
+    if (U.hero !== h.id) continue;
+    const cur = p.uskills[U.slot];
+    if (cur && cur.id === id && cur.lv < wxMax(U)) cands.push({ w: 2.8, v: { kind: 'uUp', id } });
   }
   for (const id in SKILLS) {
     const S = SKILLS[id];
     if (S.hero !== h.id) continue;
     const cur = p.secrets[S.slot];
-    if (cur && cur.id === id && cur.lv < 3) cands.push({ w: 1.9, v: { kind: 'skillUp', id } });
-    else if (!cur || cur.id !== id) cands.push({ w: 0.9, v: { kind: 'skillSwap', id } });
+    if (cur && cur.id === id && cur.lv < wxMax(S)) cands.push({ w: 2.2, v: { kind: 'skillUp', id } });
+    else if (!cur || cur.id !== id) cands.push({ w: 0.7, v: { kind: 'skillSwap', id } });
   }
-  for (const id in TECHS) if (!p.tech[id]) cands.push({ w: 1.1, v: { kind: 'tech', id } });
+  for (const id in TECHS) if (!p.tech[id]) cands.push({ w: 0.9, v: { kind: 'tech', id } });
   const out = [];
   let guard = 0;
   while (out.length < n && cands.length && guard++ < 60) {
@@ -327,7 +606,7 @@ function rollArts(p, n = 3) {
     for (let i = 0; i < cands.length; i++) { r -= cands[i].w; if (r <= 0) { idx = i; break; } }
     const v = cands.splice(idx, 1)[0].v;
     // never offer two cards for the same input slot
-    const slotKey = v.kind.startsWith('art') ? 'a' + ARTS[v.id].slot : v.kind.startsWith('skill') ? 's' + SKILLS[v.id].slot : 't' + v.id;
+    const slotKey = v.kind.startsWith('art') ? 'a' + ARTS[v.id].slot : v.kind === 'uUp' ? 'u' + USKILLS[v.id].slot : v.kind.startsWith('skill') ? 's' + SKILLS[v.id].slot : 't' + v.id;
     if (out.some(o => o._slot === slotKey)) continue;
     v._slot = slotKey;
     out.push(v);
@@ -338,33 +617,49 @@ function artView(a, p) {
   const h = p.hero;
   if (a.kind === 'tech') {
     const T = TECHS[a.id];
-    return { tag: '招式解锁', name: T.name, icon: T.icon, col: '#ffd23f', frame: '#ffd23f', lvText: '新招式', desc: T.desc(h), sub: '永久改变你的出招方式' };
+    return { tag: '武学 · 招式解锁', name: T.name, icon: T.icon, col: '#ffd23f', frame: '#ffd23f', lvText: '新招式', desc: T.desc(h), sub: '永久改变你的出招方式' };
   }
+  // the rest of a ladder in one line: what each later level brings
+  const path = (fam, E, from) => {
+    const steps = [];
+    for (let l = from + 1; l <= wxMax(E); l++) {
+      const pk = wxAt(E, l).perk;
+      steps.push(`Lv${l} ${wxText(fam, E, l, h)[0].replace(/（.*?）/g, '').replace(/^(解锁|开启|强化|进化)\s*/, '')}${pk && !wxText(fam, E, l, h)[0].includes(WX_PERKS[pk].name) ? ' +「' + WX_PERKS[pk].name + '」' : ''}`);
+    }
+    return steps.length ? steps.join(' · ') : '';
+  };
+  const lvBadge = (lv, E) => `Lv${lv - 1} → ${lv} / ${wxMax(E)}`;
   if (a.kind.startsWith('art')) {
-    const A = ARTS[a.id], sl = slotInfo(ART_SLOTS, A.slot);
+    const A = ARTS[a.id], sl = slotInfo(ART_SLOTS, A.slot), col = WX_FAM.art.col, tag = `武学 · 武技 · ${sl.long}`;
     const cur = p.arts[A.slot];
-    const names = A.moves.map(mn => h.moves[mn].label);
+    const names = A.moves.map(mn => (h.moves[mn] || {}).label || mn);
     const lvDesc = i => A.lv[i].replace(/^[^：，]{1,6}：/, '');
     if (a.kind === 'art') {
-      return { tag: `新武技 · ${sl.long}`, name: A.name, icon: A.icon, col: '#ff8a5a', frame: '#ff8a5a', lvText: '新', desc: `「${names[0]}」${lvDesc(0)}`, sub: `升级路线：${names.slice(1).join(' → ')}` };
+      const n = wxAt(A, 1).n, pk = wxAt(A, 1).perk && WX_PERKS[wxAt(A, 1).perk];
+      const desc = (n >= A.moves.length ? `一次习得整套连段：${names.join(' → ')}` : `「${names[0]}」${lvDesc(0)}${n > 1 ? '；接「' + names[1] + '」' : ''}`) + (pk ? `；「${pk.name}」${pk.desc}` : '');
+      return { tag, name: A.name, icon: A.icon, col, frame: col, lvText: `新 · 共 ${wxMax(A)} 级`, desc, sub: path('art', A, 1) || '只有一级：习得即大成' };
     }
     if (a.kind === 'artUp') {
-      const lv = cur.lv;
-      return { tag: `武技精进 · ${ART_LV_TAG[lv]}`, name: A.name, icon: A.icon, col: '#ff8a5a', frame: '#7ff7ff', lvText: `Lv${lv} → ${lv + 1}`, desc: `${ART_LV_TAG[lv]}「${names[lv]}」${lvDesc(lv)}；全部招式伤害 +12%`, sub: `${sl.long}：${names.slice(0, lv + 1).join(' → ')}` };
+      const lv = cur.lv + 1;
+      return { tag, name: A.name, icon: A.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, A), desc: wxText('art', A, lv, h).join('；'), sub: `${sl.long}：${names.slice(0, wxAt(A, lv).n).join(' → ')}` };
     }
-    const lv = cur.lv;
-    return { tag: `转修武技 · ${sl.long}`, name: A.name, icon: A.icon, col: '#ff8a5a', frame: '#c46aff', lvText: `转修 Lv${lv}`, desc: `以「${A.name}」取代「${ARTS[cur.id].name}」，保留等级 Lv${lv}：${names.slice(0, lv).join(' → ')}`, sub: `「${names[0]}」${lvDesc(0)}` };
+    const lv = Math.min(cur.lv, wxMax(A));
+    return { tag, name: A.name, icon: A.icon, col, frame: '#c46aff', lvText: `转修 Lv${lv} / ${wxMax(A)}`, desc: `以「${A.name}」取代「${ARTS[cur.id].name}」，等级 Lv${lv}：${names.slice(0, wxAt(A, lv).n).join(' → ')}`, sub: `「${names[0]}」${lvDesc(0)}` };
   }
-  const S = SKILLS[a.id], sl = slotInfo(SECRET_SLOTS, S.slot);
+  if (a.kind === 'uUp') {
+    const U = USKILLS[a.id], sl = slotInfo(U_SLOTS, U.slot), col = WX_FAM.u.col;
+    const lv = p.uskills[U.slot].lv + 1;
+    return { tag: `武学 · 技能 · ${sl.long}`, name: U.name, icon: U.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, U), desc: wxText('u', U, lv, h).join('；'), sub: `不耗灵力 · 冷却 ${uCooldown(U).toFixed(1)} 秒 · ${U.moves.slice(0, wxAt(U, lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}` };
+  }
+  const S = SKILLS[a.id], sl = slotInfo(SECRET_SLOTS, S.slot), col = WX_FAM.sk.col, tag = `武学 · 秘技 · ${sl.long}`;
   const cur = p.secrets[S.slot];
   const cost = skillCost(p, S);
   if (a.kind === 'skillUp') {
-    const lv = cur.lv;
-    const extra = lv + 1 === 2 && S.follow ? `；派生「${S.fname}」：${S.fdesc}` : lv + 1 === 3 ? `；进化：${S.evo}` : '';
-    return { tag: `秘技精进 · ${sl.long}`, name: S.name, icon: S.icon, col: '#5ad8ff', frame: '#7ff7ff', lvText: `Lv${lv} → ${lv + 1}`, desc: S.desc(lv + 1) + extra, sub: `灵力消耗 ${cost}` };
+    const lv = cur.lv + 1;
+    return { tag, name: S.name, icon: S.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, S), desc: wxText('sk', S, lv, h).join('；') + '。' + S.desc(wxAt(S, lv).t), sub: `灵力消耗 ${cost}${lv < wxMax(S) ? ' · 之后：' + path('sk', S, lv) : ' · 已是最高级'}` };
   }
-  const lv = cur ? cur.lv : 1;
-  return { tag: `转修秘技 · ${sl.long}`, name: S.name, icon: S.icon, col: '#5ad8ff', frame: '#c46aff', lvText: `转修 Lv${lv}`, desc: S.desc(lv), sub: `取代「${cur ? SKILLS[cur.id].name : '—'}」，保留等级 · 灵力 ${cost}${S.follow ? ' · Lv2 派生「' + S.fname + '」' : ''}` };
+  const lv = cur ? Math.min(cur.lv, wxMax(S)) : 1;
+  return { tag, name: S.name, icon: S.icon, col, frame: '#c46aff', lvText: `转修 Lv${lv} / ${wxMax(S)}`, desc: S.desc(wxAt(S, lv).t), sub: `取代「${cur ? SKILLS[cur.id].name : '—'}」· 灵力 ${cost}${path('sk', S, lv) ? ' · ' + path('sk', S, lv) : ''}` };
 }
 function takeArt(p, a, done) {
   const h = p.hero;
@@ -374,20 +669,24 @@ function takeArt(p, a, done) {
     G.toast(`招式解锁：${TECHS[a.id].name}`, '#ffd23f', TECHS[a.id].desc(h));
   } else if (a.kind === 'art' || a.kind === 'artSwap') {
     const A = ARTS[a.id], sl = slotInfo(ART_SLOTS, A.slot);
-    const lv = a.kind === 'artSwap' && p.arts[A.slot] ? p.arts[A.slot].lv : 1;
+    const lv = a.kind === 'artSwap' && p.arts[A.slot] ? Math.min(p.arts[A.slot].lv, wxMax(A)) : 1;
     p.arts[A.slot] = { id: a.id, lv };
-    G.toast(`习得武技：${A.name}`, '#ff8a5a', `${sl.long} 发动「${h.moves[A.moves[0]].label}」`);
+    G.toast(`习得武技：${A.name}`, WX_FAM.art.col, `${sl.long} 发动「${h.moves[A.moves[0]].label}」`);
   } else if (a.kind === 'artUp') {
     const A = ARTS[a.id], cur = p.arts[A.slot];
-    cur.lv = Math.min(4, cur.lv + 1);
-    G.toast(`武技精进：${A.name} Lv${cur.lv}`, '#ff8a5a', `${ART_LV_TAG[cur.lv - 1]}「${h.moves[A.moves[cur.lv - 1]].label}」——前一招后继续按攻击`);
+    cur.lv = Math.min(wxMax(A), cur.lv + 1);
+    G.toast(`武技精进：${A.name} Lv${cur.lv}/${wxMax(A)}`, WX_FAM.art.col, wxText('art', A, cur.lv, h).slice(0, 2).join(' · '));
+  } else if (a.kind === 'uUp') {
+    const U = USKILLS[a.id], cur = p.uskills[U.slot];
+    cur.lv = Math.min(wxMax(U), cur.lv + 1);
+    G.toast(`技能精进：${U.name} Lv${cur.lv}/${wxMax(U)}`, WX_FAM.u.col, wxText('u', U, cur.lv, h)[0].split('（')[0]);
   } else if (a.kind === 'skillUp') {
     const S = SKILLS[a.id], cur = p.secrets[S.slot];
-    cur.lv = Math.min(3, cur.lv + 1);
-    G.toast(`秘技精进：${S.name} Lv${cur.lv}`, '#5ad8ff', cur.lv === 2 && S.follow ? `派生「${S.fname}」：施放后再按 ${Input.keyName('ult')}` : cur.lv === 3 ? `进化：${S.evo}` : '');
+    cur.lv = Math.min(wxMax(S), cur.lv + 1);
+    G.toast(`秘技精进：${S.name} Lv${cur.lv}/${wxMax(S)}`, WX_FAM.sk.col, wxText('sk', S, cur.lv, h)[0]);
   } else if (a.kind === 'skillSwap') {
     const S = SKILLS[a.id], sl = slotInfo(SECRET_SLOTS, S.slot);
-    const lv = p.secrets[S.slot] ? p.secrets[S.slot].lv : 1;
+    const lv = p.secrets[S.slot] ? Math.min(p.secrets[S.slot].lv, wxMax(S)) : 1;
     p.secrets[S.slot] = { id: a.id, lv };
     G.toast(`转修秘技：${S.name}`, '#5ad8ff', `${sl.long} · 灵力 ${skillCost(p, S)}`);
   }
@@ -420,8 +719,10 @@ function bakeHero(id, weaponId) {
     hold: { n: 4, loop: true, fps: 16, gen: (Lk, t) => fullPose(Lk, Object.assign({ wave: t }, h.holdPose(Math.sin(t * TAU) * 1.5))) },
     wall: { n: 2, loop: true, fps: 6, gen: (Lk, t) => fullPose(Lk, Object.assign({ wave: t }, h.wallPose)) },
   };
-  for (const mn in h.moves) defs[mn] = { keys: h.moves[mn].keys, dur: h.moves[mn].dur };
+  // moves with `anim` reuse another move's frames instead of baking their own
+  for (const mn in h.moves) if (!h.moves[mn].anim) defs[mn] = { keys: h.moves[mn].keys, dur: h.moves[mn].dur };
   const spr = bakeRig(id, L, defs);
+  for (const mn in h.moves) { const al = h.moves[mn].anim; if (al && spr.anims[al]) spr.anims[mn] = spr.anims[al]; }
   spr.weapon = weaponId || null;
   return spr;
 }

@@ -127,7 +127,8 @@ const Input = (() => {
     jump: ['KeyK', 'Space', 'KeyZ'],
     attack: ['KeyJ', 'KeyX'],
     dash: ['KeyL', 'ShiftLeft', 'ShiftRight', 'KeyC'],
-    ult: ['KeyI', 'KeyU', 'KeyO', 'KeyB', 'KeyV'],
+    skill: ['KeyU'],
+    ult: ['KeyI', 'KeyO', 'KeyB', 'KeyV'],
     interact: ['KeyE', 'KeyF'],
     pause: ['Escape', 'KeyP'],
     ok: ['Enter', 'Space', 'KeyJ', 'KeyZ'],
@@ -138,7 +139,7 @@ const Input = (() => {
   };
   // standard gamepad mapping
   const padBinds = {
-    jump: [0], attack: [2], dash: [1, 5], ult: [3, 4, 6, 7], interact: [12, 11], pause: [9],
+    jump: [0], attack: [2], dash: [1, 5], skill: [4, 6], ult: [3, 7], interact: [12, 11], pause: [9],
     ok: [0], cancel: [1], up: [12], down: [13], left: [14], right: [15],
     mup: [12], mdown: [13], mleft: [14], mright: [15], tab: [8], alt: [3],
   };
@@ -233,14 +234,14 @@ const Input = (() => {
   }
   function keyName(action) {
     if (lastDevice === 'touch') {
-      const names = { jump: '跳跃键', attack: '攻击键', dash: '冲刺键', ult: '秘技键', interact: '互动键', pause: '暂停键', ok: '点按', cancel: '返回' };
+      const names = { jump: '跳跃键', attack: '攻击键', dash: '冲刺键', skill: '技能键', ult: '秘技键', interact: '互动键', pause: '暂停键', ok: '点按', cancel: '返回' };
       return names[action] || action;
     }
     if (lastDevice === 'pad') {
-      const names = { jump: 'A', attack: 'X', dash: 'B', ult: 'Y', interact: '十字↑', pause: 'START', ok: 'A', cancel: 'B' };
+      const names = { jump: 'A', attack: 'X', dash: 'B', skill: 'LB', ult: 'Y', interact: '十字↑', pause: 'START', ok: 'A', cancel: 'B' };
       return names[action] || action;
     }
-    const names = { jump: 'K', attack: 'J', dash: 'L', ult: 'I', interact: 'E', pause: 'ESC', ok: 'ENTER', cancel: 'ESC' };
+    const names = { jump: 'K', attack: 'J', dash: 'L', skill: 'U', ult: 'I', interact: 'E', pause: 'ESC', ok: 'ENTER', cancel: 'ESC' };
     return names[action] || action;
   }
   return {
@@ -265,9 +266,11 @@ const Save = {
       settings: { music: 0.55, sfx: 0.8, shake: 1, glow: 1, numbers: true, pixelPerfect: false, lighting: true },
       stats: { runs: 0, wins: 0, bestTime: 0, kills: 0, crystalsTotal: 0, bossKills: 0, deepest: 0, bestTrial: 0 },
       lastChar: 0,
+      lastMode: 'normal',
       lastWeapon: {},
       heroBest: {},
       trialSel: {},
+      titles: [],
       seenTutorial: false,
     };
   },
@@ -283,6 +286,9 @@ const Save = {
         d.talents = s.talents || {};
       }
     } catch (e) { /* ignore corrupt saves */ }
+    d.lastMode = d.lastMode === 'hard' ? 'hard' : 'normal';
+    d.titles = Array.isArray(d.titles) ? [...new Set(d.titles.filter(t => typeof t === 'string'))] : [];
+    if (d.stats.bestTrial >= 40 && !d.titles.includes('劫主')) d.titles.push('劫主');
     this.data = d;
   },
   write() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) { /* storage unavailable */ } },

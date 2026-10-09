@@ -24,7 +24,7 @@ function hSound(name, o) { return p => Sound.play(name, Object.assign({ x: p.x }
 function skMul(p, id) { return id ? 1 + 0.35 * (p.skillLv(id) - 1) : 1; }
 function hShoot(p, o) {
   // weapon traits only touch basic shots (combo / air / dash shots), never skills or arts
-  const basic = !o.src && !o.skill && !(p.move && (p.move.m.skill || p.move.m.art || p.move.m.ult));
+  const basic = !o.src && !o.skill && !o.uskill && !(p.move && (p.move.m.skill || p.move.m.uskill || p.move.m.art || p.move.m.ult));
   if (basic && p.flags.buck && !o.pellet) {
     let mid = null;
     for (const d of [-8, 0, 8]) {
@@ -37,7 +37,7 @@ function hShoot(p, o) {
   const a = (o.ang || 0) * DEG;
   const sp = (o.sp || 560) * (basic && p.flags.frost ? 1.4 : 1);
   const x = p.x + p.face * (o.ox || 14), y = p.y + (o.oy || -21);
-  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: o.hs || 0, src: o.src, energy: 0.55, proj: true, fxc: o.c || '#ffd84a', sfx: 'hit', critBonus: o.critBonus, skill: o.skill });
+  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: o.hs || 0, src: o.src, energy: 0.55, proj: true, fxc: o.c || '#ffd84a', sfx: 'hit', critBonus: o.critBonus, skill: o.skill, uskill: o.uskill });
   const pr = new Proj({ team: 'p', x, y, vx: Math.cos(a) * sp * p.face, vy: Math.sin(a) * sp, r: o.r || 1.6, kind: 'bullet', c: o.c || '#ffd84a', c2: '#ffffff', life: o.life || 0.55, hit, len: o.len || 11, pierce: (o.pierce || 0) + (p.stats.pierce || 0), light: 26, ghost: !!o.ghost, onDie: o.onDie });
   if (basic && p.flags.frost) { pr.c = '#bff8ff'; pr.onHit = (q, e) => applyStatus(e, 'slow', 0.35, 1.2); }
   G.projs.push(pr);
@@ -97,11 +97,13 @@ function pathCuts(p, x0, x1, n, mult, col, src, gap = 0.08, skill) {
 }
 function waveProj(p, o) {
   const a = (o.ang || 0) * DEG, sp = o.sp || 400;
-  const hit = p.makeHit({ dmg: o.dmg, kx: o.kx || 120, ky: o.ky || -60, stun: 0.45, hs: 1, src: o.src || 'skill', fxc: o.c, skill: o.skill });
-  G.projs.push(new Proj({
-    team: 'p', x: p.x + p.face * 14, y: p.y + (o.oy || -20), vx: Math.cos(a) * sp * p.face, vy: Math.sin(a) * sp, kind: 'wave', r: 6, hh: o.hh || 14,
+  const hit = p.makeHit({ dmg: o.dmg, kx: o.kx || 120, ky: o.ky || -60, stun: 0.45, hs: 1, src: o.src || 'skill', fxc: o.c, skill: o.skill, uskill: o.uskill });
+  const pr = new Proj({
+    team: 'p', x: (o.x !== undefined ? o.x : p.x + p.face * 14), y: (o.y !== undefined ? o.y : p.y + (o.oy || -20)), vx: Math.cos(a) * sp * (o.dir || p.face), vy: Math.sin(a) * sp, kind: 'wave', r: o.r || 6, hh: o.hh || 14,
     c: o.c || p.hero.color, c2: o.c2 || '#ffffff', life: o.life || 0.8, pierce: 99, ghost: true, hit, light: 60,
-  }));
+  });
+  G.projs.push(pr);
+  return pr;
 }
 // ground shockwave (player team)
 function pShockwave(p, x, y, dir, dmgMult, col, src, skill) {

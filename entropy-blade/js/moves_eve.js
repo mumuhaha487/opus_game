@@ -12,7 +12,7 @@ const RECOIL = (o = {}) => Object.assign({ aF: [-22, -30], aB: [-18, -26], w: -3
 // bullet from an arbitrary point with a world-space angle (degrees)
 function shotFrom(p, x, y, ang, o = {}) {
   const a = ang * DEG, sp = o.sp || 560;
-  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: 0, src: o.src, energy: 0.5, proj: true, fxc: o.c || Y, art: o.art, skill: o.skill, status: o.status });
+  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: 0, src: o.src, energy: 0.5, proj: true, fxc: o.c || Y, art: o.art, skill: o.skill, wx: o.wx, status: o.status });
   const pr = new Proj({ team: 'p', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: o.r || 1.6, kind: 'bullet', c: o.c || Y, c2: '#ffffff', life: o.life || 0.6, hit, len: o.len || 11, pierce: (o.pierce || 0) + (p.stats.pierce || 0), light: 26, ghost: !!o.ghost, onDie: o.onDie });
   G.projs.push(pr);
   FX.flash(x, y, 4, '#ffe9a0', 0.06);
@@ -45,12 +45,12 @@ function sparkMine(p, vx, vy, o = {}) {
 function sparkBoom(p, z, k, o = {}) {
   if (z.done) return;
   z.done = true; z.life = Math.min(z.life, 0.01);
-  explodeP(z.x, z.y - 6, z.r * (o.rMul || 1), z.mult * k * artMul(p, 'eve_trap') * (o.dMul || 1), { c: FIRE, ky: -260, kx: 120, shake: 0.25, src: 'light', noProc: false, status: o.stun ? ['stun', o.stun] : null });
+  explodeP(z.x, z.y - 6, z.r * (o.rMul || 1), z.mult * k * artMul(p, 'eve_trap') * (o.dMul || 1), { c: FIRE, ky: -260, kx: 120, shake: 0.25, src: 'light', noProc: false, status: o.stun ? ['stun', o.stun] : null, wx: { fam: 'art', id: 'eve_trap' } });
   if (o.burn) addZone({ x: z.x, y: z.y, life: 2.2, tick: 0.3, onTick(zz) { for (const e of enemiesNear(zz.x, zz.y - 6, 36)) { hitEnemy(p, e, p.makeHit({ dmg: 0.3, kx: 0, ky: 0, stun: 0.1, dot: true, numc: '#ff9a3a', art: 'eve_trap' })); applyStatus(e, 'burn', 2, 0.15); } }, upd(zz) { if (Math.random() < 0.8) FX.fire(zz.x + rand(-26, 26), zz.y + rand(-3, 3), 1); Light.add(zz.x, zz.y, 70, '#ff7a2a', 0.6); } });
 }
 // gun-wielding afterimage that shoots on its own
 function phantom(p, x, y, face, shots, o = {}) {
-  const fr = p.frame();
+  const fr = p.frame(), wx = p.moveWx(p.move && p.move.m, o);
   return addZone({
     x, y, life: o.life || 0.7, tick: o.tick || 0.12, phantom: true, n: 0,
     onTick(z) {
@@ -58,10 +58,10 @@ function phantom(p, x, y, face, shots, o = {}) {
       z.n++;
       const e = nearestEnemy(z.x, z.y - 21, 260);
       const ang = e ? aimAt(z.x + face * 12, z.y - 21, e) : (face > 0 ? 0 : 180);
-      shotFrom(p, z.x + face * 12, z.y - 21, ang + rand(-3, 3), { dmg: o.dmg || 0.6, c: PH, art: o.art, silent: z.n % 2 === 0, pitch: 1.3 });
+      shotFrom(p, z.x + face * 12, z.y - 21, ang + rand(-3, 3), { dmg: o.dmg || 0.6, c: PH, wx, silent: z.n % 2 === 0, pitch: 1.3 });
     },
     drawFn(ctx, gctx, x2, y2, z) { drawFrame(ctx, fr, p.spr.ox, p.spr.oy, x2, y2, face < 0, { tint: PH, alpha: 0.6 * Math.min(1, z.life * 4) }); },
-    onEnd(z) { FX.burst(z.x, z.y - 16, { n: 10, c: [PH, '#ffffff'], sp: [30, 100], glow: true }); if (o.boom) explodeP(z.x, z.y - 16, 34, o.boom, { c: PH, src: 'light', shake: 0.15, sound: 'void', pitch: 1.6 }); },
+    onEnd(z) { FX.burst(z.x, z.y - 16, { n: 10, c: [PH, '#ffffff'], sp: [30, 100], glow: true }); if (o.boom) explodeP(z.x, z.y - 16, 34, o.boom, { c: PH, src: 'light', shake: 0.15, sound: 'void', pitch: 1.6, wx }); },
   });
 }
 
@@ -200,7 +200,7 @@ Object.assign(M, {
       Sound.play('shotgun', { x: p.x, pitch: 1.4 });
       const ms = G.zones.filter(z => z.spark && !z.done);
       ms.forEach((z, i) => later(0.05 + i * 0.05, () => sparkBoom(p, z, 1, { rMul: 1.35, dMul: 1.5, stun: 1.0 })));
-      if (!ms.length) later(0.06, () => explodeP(p.x + p.face * 46, p.y - 10, 36, 1.4 * artMul(p, 'eve_trap'), { c: FIRE, src: 'light', shake: 0.2, noProc: false }));
+      if (!ms.length) later(0.06, () => explodeP(p.x + p.face * 46, p.y - 10, 36, 1.4 * artMul(p, 'eve_trap'), { c: FIRE, src: 'light', shake: 0.2, noProc: false, wx: { fam: 'art', id: 'eve_trap' } }));
     }]],
     next: 'trap4', nextLv: 4,
   },
@@ -351,7 +351,7 @@ Object.assign(M, {
       const x = tz ? tz.x : p.x, y = tz ? tz.y : p.y - 30;
       for (let i = 0; i < 8; i++) later(i * 0.04, () => {
         const a = (-90 + rand(-50, 50)) * DEG;
-        G.projs.push(new Proj({ team: 'p', x, y, vx: Math.cos(a) * 220, vy: Math.sin(a) * 220, r: 3, kind: 'missile', c: B, homing: 7, homeDelay: 0.15, accel: 0.8, life: 2, hit: p.makeHit({ dmg: 0.8, kx: 60, ky: -60, stun: 0.3, skill: 'eve_turret' }), light: 30, onDie: pr => explodeP(pr.x, pr.y, 24, 0.5 * skMul(p, 'eve_turret'), { c: B, sound: 'explode', pitch: 1.7, shake: 0.05, src: 'skill' }) }));
+        G.projs.push(new Proj({ team: 'p', x, y, vx: Math.cos(a) * 220, vy: Math.sin(a) * 220, r: 3, kind: 'missile', c: B, homing: 7, homeDelay: 0.15, accel: 0.8, life: 2, hit: p.makeHit({ dmg: 0.8, kx: 60, ky: -60, stun: 0.3, skill: 'eve_turret' }), light: 30, onDie: pr => explodeP(pr.x, pr.y, 24, 0.5 * skMul(p, 'eve_turret'), { c: B, sound: 'explode', pitch: 1.7, shake: 0.05, src: 'skill', wx: pr.hit.wx }) }));
         Sound.play('shoot', { x, pitch: 0.7 });
       });
       Sound.play('clank', { x: p.x, pitch: 1.5 });
@@ -368,7 +368,7 @@ Object.assign(M, {
     ev: [[0.05, p => {
       const gs = G.projs.filter(q => q.grenade && !q.dead);
       for (const q of gs) { FX.bolt(p.x + p.face * 16, p.y - 24, q.x, q.y, Y, 0.1, 1, 4); q.boost = 1.5; q.kill(true); }
-      if (!gs.length) { const q = new Proj({ team: 'p', x: p.x + p.face * 14, y: p.y - 26, vx: p.face * 260, vy: -260, grav: 700, kind: 'orb', r: 4, c: '#ff8a3a', life: 2, light: 40, hit: p.makeHit({ dmg: 0.6, skill: 'eve_grenade' }), onDie: q2 => explodeP(q2.x, q2.y, 60, 2.4 * skMul(p, 'eve_grenade'), { c: '#ff8a3a', ky: -300, kx: 180, shake: 0.45, src: 'skill', noProc: false }) }); G.projs.push(q); }
+      if (!gs.length) { const q = new Proj({ team: 'p', x: p.x + p.face * 14, y: p.y - 26, vx: p.face * 260, vy: -260, grav: 700, kind: 'orb', r: 4, c: '#ff8a3a', life: 2, light: 40, hit: p.makeHit({ dmg: 0.6, skill: 'eve_grenade' }), onDie: q2 => explodeP(q2.x, q2.y, 60, 2.4 * skMul(p, 'eve_grenade'), { c: '#ff8a3a', ky: -300, kx: 180, shake: 0.45, src: 'skill', noProc: false, wx: q2.hit.wx }) }); G.projs.push(q); }
       hShoot(p, { ox: 16, oy: -24, ang: -50, dmg: 0.3, silent: false });
     }]],
   },
@@ -382,7 +382,7 @@ Object.assign(M, {
     keys: M.sk_missile.keys,
     ev: Array.from({ length: 8 }, (_, i) => [0.04 + i * 0.03, p => {
       const a = (-70 + rand(-30, 30)) * DEG;
-      G.projs.push(new Proj({ team: 'p', x: p.x + p.face * 4, y: p.y - 28, vx: Math.cos(a) * 240 * p.face, vy: Math.sin(a) * 240, r: 3, kind: 'missile', c: Y, homing: 7, homeDelay: 0.15, accel: 0.8, life: 2.2, hit: p.makeHit({ dmg: 1.0, kx: 80, ky: -80, stun: 0.35, hs: 1, fxc: Y, skill: 'eve_missile' }), light: 30, onDie: pr => explodeP(pr.x, pr.y, 26, 0.6 * skMul(p, 'eve_missile'), { c: Y, sound: 'explode', pitch: 1.6, shake: 0.06, src: 'skill' }) }));
+      G.projs.push(new Proj({ team: 'p', x: p.x + p.face * 4, y: p.y - 28, vx: Math.cos(a) * 240 * p.face, vy: Math.sin(a) * 240, r: 3, kind: 'missile', c: Y, homing: 7, homeDelay: 0.15, accel: 0.8, life: 2.2, hit: p.makeHit({ dmg: 1.0, kx: 80, ky: -80, stun: 0.35, hs: 1, fxc: Y, skill: 'eve_missile' }), light: 30, onDie: pr => explodeP(pr.x, pr.y, 26, 0.6 * skMul(p, 'eve_missile'), { c: Y, sound: 'explode', pitch: 1.6, shake: 0.06, src: 'skill', wx: pr.hit.wx }) }));
       Sound.play('shoot', { x: p.x, pitch: 0.8 });
     }]),
   },
@@ -390,7 +390,7 @@ Object.assign(M, {
     label: '终幕', dur: 0.5, cancel: 0.36, skill: 'eve_kata', isFollow: true, grav: 0.1, armor: true, noAtkSpeed: true,
     keys: [[0, { lean: 0, aF: [-90, -90], aB: [90, 90], w: -90, w2: 90 }], [0.08, { lean: 0, aF: [0, 0], aB: [180, 180], w: 0, w2: 180, big: true }, 'outCubic'], [0.5, { lean: 2 }]],
     ev: [[0.08, p => {
-      for (let i = 0; i < 16; i++) { const pr = hShoot(p, { ox: 0, oy: -20, ang: i * 22.5, dmg: 0.7, r: 3, len: 14, sp: 420, silent: i > 0, skill: 'eve_kata', src: 'skill', c: i % 2 ? Y : B }); pr.onDie = q => explodeP(q.x, q.y, 20, 0.5 * skMul(p, 'eve_kata'), { c: Y, sound: false, shake: 0.03, src: 'skill' }); }
+      for (let i = 0; i < 16; i++) { const pr = hShoot(p, { ox: 0, oy: -20, ang: i * 22.5, dmg: 0.7, r: 3, len: 14, sp: 420, silent: i > 0, skill: 'eve_kata', src: 'skill', c: i % 2 ? Y : B }); pr.onDie = q => explodeP(q.x, q.y, 20, 0.5 * skMul(p, 'eve_kata'), { c: Y, sound: false, shake: 0.03, src: 'skill', wx: q.hit.wx }); }
       FX.ring(p.x, p.cy, 6, 56, Y, 0.35, 3); Sound.play('shotgun', { x: p.x, pitch: 1.2 }); Cam.shake(0.3);
     }]],
   },
@@ -402,7 +402,7 @@ Object.assign(M, {
       const r = p.skillLv('eve_mine') >= 3 ? 60 : 46;
       ms.forEach((z, i) => later(i * 0.06, () => {
         z.done = true; z.life = 0.01;
-        explodeP(z.x, z.y - 6, r, 2.4 * skMul(p, 'eve_mine'), { c: B, ky: -260, kx: 100, shake: 0.35, src: 'skill', noProc: false, status: ['stun', 1.5] });
+        explodeP(z.x, z.y - 6, r, 2.4 * skMul(p, 'eve_mine'), { c: B, ky: -260, kx: 100, shake: 0.35, src: 'skill', noProc: false, status: ['stun', 1.5], wx: { fam: 'sk', id: 'eve_mine' } });
         FX.ring(z.x, z.y - 6, 4, r, '#bff8ff', 0.4, 3);
       }));
       Sound.play('blip', { x: p.x, pitch: 1.4 });
@@ -431,7 +431,7 @@ Object.assign(M, {
         G.projs.push(new Proj({
           team: 'p', x: sx, y: Cam.y - 20, vx: (tx - sx) * 1.4, vy: 520, r: 5, kind: 'orb', c: i % 2 ? Y : B, c2: '#ffffff', life: 2, hit, light: 90, trail: 0.9, tc: '#ffe0a0', ghost: true,
           upd: q => { if (q.t > 0.12 && G.room.solidPx(q.x, q.y)) { q.kill(true); q.life = 0; } },
-          onDie: q => { explodeP(q.x, q.y, 46, 1.4 * skMul(p, 'eve_meteor'), { c: i % 2 ? Y : B, c2: '#ffffff', src: 'ult', shake: 0.25, ky: -260, kx: 140, pitch: 1.0 + rand(0, 0.4) }); FX.shock(q.x, q.y + 4, Y, 40); },
+          onDie: q => { explodeP(q.x, q.y, 46, 1.4 * skMul(p, 'eve_meteor'), { c: i % 2 ? Y : B, c2: '#ffffff', src: 'ult', shake: 0.25, ky: -260, kx: 140, pitch: 1.0 + rand(0, 0.4), wx: q.hit.wx }); FX.shock(q.x, q.y + 4, Y, 40); },
         }));
         Sound.play('swoosh', { x: tx, pitch: 0.5 });
       }]),
@@ -446,7 +446,7 @@ M.ult.skill = 'eve_ult';
 M.ult.ev.push([2.02, p => {
   if (p.skillLv('eve_ult') < 3) return;
   const f = p.face, y = p.y - 22;
-  for (let i = 0; i < 7; i++) later(i * 0.06, () => explodeP(p.x + f * (40 + i * 66), y + rand(-8, 8), 42, 1.6 * skMul(p, 'eve_ult'), { c: Y, c2: '#ff9a2e', src: 'ult', shake: 0.25, pitch: 1.2 + i * 0.05 }));
+  for (let i = 0; i < 7; i++) later(i * 0.06, () => explodeP(p.x + f * (40 + i * 66), y + rand(-8, 8), 42, 1.6 * skMul(p, 'eve_ult'), { c: Y, c2: '#ff9a2e', src: 'ult', shake: 0.25, pitch: 1.2 + i * 0.05, wx: { fam: 'sk', id: 'eve_ult' } }));
 }]);
 M.sk_kata.grav = 0.12;
 M.sk_mine.grav = 0.3;
@@ -459,7 +459,7 @@ M.sk_grenade.ev[0][1] = p => {
       team: 'p', x: p.x + p.face * 10, y: p.y - 26, vx: vx * p.face, vy, grav: 700, kind: 'orb', r: big ? 4 : 3, c: '#ff8a3a', c2: '#ffe0a0', life: 2.5, hit, light: 40, trail: 0.5, tc: '#8a8aa8', grenade: true,
       onDie: q => {
         const k = q.boost || 1;
-        explodeP(q.x, q.y, (big ? 56 : 34) * k, (big ? 2.6 : 1.2) * skMul(p, 'eve_grenade') * (k > 1 ? 1.25 : 1), { c: '#ff8a3a', ky: -300, kx: 180, shake: big ? 0.45 : 0.15, src: 'skill', noProc: false });
+        explodeP(q.x, q.y, (big ? 56 : 34) * k, (big ? 2.6 : 1.2) * skMul(p, 'eve_grenade') * (k > 1 ? 1.25 : 1), { c: '#ff8a3a', ky: -300, kx: 180, shake: big ? 0.45 : 0.15, src: 'skill', noProc: false, wx: q.hit.wx });
         if (lv >= 3 && big) addZone({ x: q.x, y: q.y, life: 2, tick: 0.3, onTick(z) { for (const e of enemiesNear(z.x, z.y, 40)) hitEnemy(p, e, p.makeHit({ dmg: 0.35, kx: 0, ky: 0, stun: 0.1, dot: true, src: 'skill', skill: 'eve_grenade', numc: '#ff9a3a' })); }, upd(z) { if (Math.random() < 0.8) FX.fire(z.x + rand(-30, 30), z.y + rand(-4, 4), 1); Light.add(z.x, z.y, 80, '#ff7a2a', 0.6); } });
       },
     }));

@@ -2,7 +2,10 @@
 // =====================================================================
 //  GAME — global state, run flow, rooms, waves, interactables, render
 // =====================================================================
-const BOSS_DEPTH = 5;
+// each scene: rooms 1–5, a rest / shop stop at 6, the boss at 7
+const BOSS_DEPTH = 7;
+// rooms grew from 6 to 8 per scene (incl. the entrance): scale per-room growth so a scene ramps as before
+const ROOM_PACE = 6 / (BOSS_DEPTH + 1);
 const G = {
   state: 'boot', time: 0, rtime: 0,
   room: null, player: null,
@@ -44,24 +47,26 @@ const ROOM_INFO = {
 //  RUN
 // =====================================================================
 function newStats() { return { kills: 0, dmgTaken: 0, gold: 0, maxCombo: 0, rooms: 0, blessings: 0, skills: 0, ults: 0, bosses: 0 }; }
-function startRun(heroId, weaponId, trialSel) {
+function startRun(heroId, weaponId, trialSel, mode = 'normal') {
   const T = Talents.values();
   if (!WEAPONS[weaponId] || WEAPONS[weaponId].hero !== heroId) weaponId = heroWeapons(heroId)[0].id;
   if (!SPR[heroId] || SPR[heroId].weapon !== weaponId) bakeHero(heroId, weaponId);
-  const hard = trialSel ? trialConfig(trialSel) : null;
+  const hard = trialSel || mode === 'trial' ? trialConfig(trialSel || {}) : null;
+  mode = hard ? 'trial' : mode === 'hard' ? 'hard' : 'normal';
   G.run = {
     heroId, weaponId, seed: (Math.random() * 1e9) | 0, scene: 0, biome: SCENES[0].bi, depth: 0, globalRoom: 0,
-    gold: T.start, crystals: 0, rerolls: T.reroll + (hard ? hard.rerolls : 0), diff: { hp: 1, dmg: 1 }, dmgTakenMult: 1, bossHpMul: 1,
-    shopSeen: {}, eventSeen: {}, time: 0, extraBless: T.bless, hard,
-    // 武学 pacing: at most one per scene from rooms, 2–3 across 第一大关 (the opening scroll counts), +1 per boss
-    ch1Art: (Math.random() < 0.5 ? 2 : 3) - 1, sceneArt: (hard ? hard.artBonus : 0), layouts: [],
+    gold: T.start + (hard ? hard.startGold : 0), crystals: 0, rerolls: T.reroll + (hard ? hard.rerolls : 0), diff: { hp: 1, dmg: 1 }, dmgTakenMult: 1, bossHpMul: 1,
+    shopSeen: {}, eventSeen: {}, time: 0, extraBless: T.bless, hard, mode,
+    layouts: [], artDepths: [],
   };
+  planArtDepths(G.run);
   G.stats = newStats();
   G.player = new Player(heroId, 80, 100, weaponId);
-  G.player.revives = hard && hard.noRevive ? 0 : T.revive;
+  G.player.revives = (hard && hard.noRevive ? 0 : T.revive) + (hard ? hard.revives : 0);
   Save.data.stats.runs++;
   Save.data.lastChar = HERO_ORDER.indexOf(heroId);
   Save.data.lastWeapon = Object.assign({}, Save.data.lastWeapon, { [heroId]: weaponId });
+  if (!hard) Save.data.lastMode = mode;
   Save.write();
   G.state = 'play';
   G.overlay = null;
@@ -81,10 +86,15 @@ function endRun(win) {
   const score = runScore(r, G.stats, win), hb = Save.data.heroBest || (Save.data.heroBest = {});
   const best = score > (hb[r.heroId] || 0);
   if (best) hb[r.heroId] = score;
+  let titleAwarded = null;
+  if (win && r.hard && r.hard.pts >= 40 && !Save.data.titles.includes('劫主')) {
+    Save.data.titles.push('劫主');
+    titleAwarded = '劫主';
+  }
   Save.write();
   G.state = win ? 'victory' : 'gameover';
   G.overlay = null;
-  UI.endScreen = { t: 0, win, sel: 0, score, best };
+  UI.endScreen = { t: 0, win, sel: 0, score, best, titleAwarded };
   Sound.music(win ? 'victory' : 'gameover');
 }
 
@@ -100,6 +110,14 @@ function clearWorld() {
   G.boss = null; G.bossIntro = null; G.cine = 0; G.dim = 0; G.slowT = 0; G.freeze = 0; G.witchT = 0;
 }
 
+// 武学 windows: two guaranteed per scene before the boss (one early, one late; +1 with the 劫难 boon),
+// and the boss always drops a third. They come on top of the door's own reward.
+function planArtDepths(r) {
+  const rng = RNG(r.seed + r.scene * 977 + 31);
+  const last = BOSS_DEPTH - 2;
+  r.artDepths = [rng.int(1, 2), rng.int(4, last)];
+  if (r.hard && r.hard.artBonus) r.artDepths.push(3);
+}
 // pick a room layout for this scene; the first three rooms of a scene never repeat a layout
 function pickLayout(r) {
   const S = SCENES[r.scene];
@@ -116,7 +134,7 @@ function enterRoom(door, first) {
   if (door.type === 'start') { r.depth = 0; r.layouts = []; } else r.depth++;
   if (!first) r.globalRoom++;
   const H = r.hard;
-  r.diff = { hp: (1 + r.globalRoom * 0.13 + r.scene * 0.4) * (H ? H.enemyHp : 1), dmg: (1 + r.globalRoom * 0.05 + r.scene * 0.2) * (H ? H.enemyDmg : 1) };
+  r.diff = { hp: (1 + r.globalRoom * 0.13 * ROOM_PACE + r.scene * 0.4) * (H ? H.enemyHp : 1), dmg: (1 + r.globalRoom * 0.05 * ROOM_PACE + r.scene * 0.2) * (H ? H.enemyDmg : 1) };
   const seed = r.seed + r.globalRoom * 7919 + r.scene * 104729;
   const type = door.type;
   clearWorld();
@@ -132,7 +150,6 @@ function enterRoom(door, first) {
   let music = B.music;
   if (type === 'combat' || type === 'elite') {
     G.rs.waves = planWaves(r.biome, r.depth, type === 'elite');
-    if (door.reward === 'art') { r.sceneArt--; if (SCENES[r.scene].chapter === 1) r.ch1Art--; }
   } else if (type === 'start') {
     setupStart(first);
   } else if (type === 'shop') {
@@ -145,6 +162,11 @@ function enterRoom(door, first) {
     setupBoss(); music = null;
   }
   if (music) Sound.music(music);
+  // a scheduled 武学 window: waiting at the entrance of shops / altars, dropped on clear in fights
+  if (type !== 'start' && type !== 'boss' && r.artDepths.includes(r.depth)) {
+    G.rs.bonusArt = true;
+    if (G.rs.cleared) { G.inters.push(new Orb(G.room.pw * 0.3, G.room.floorBelow(G.room.pw * 0.3, G.room.base * TILE - 30) - 20, 'art')); G.rs.bonusArt = false; }
+  }
   const info = ROOM_INFO[type];
   G.banner = {
     t: 0,
@@ -154,6 +176,10 @@ function enterRoom(door, first) {
     big: type === 'start',
   };
   p.fire('onRoomStart');
+  const difficulty = curDifficulty();
+  if (difficulty && ['combat', 'elite', 'boss'].includes(type)) {
+    p.shield = Math.max(p.shield, Math.round(p.maxHp * difficulty.roomShield));
+  }
   G.stats.rooms++;
 }
 
@@ -164,8 +190,10 @@ function planWaves(bi, depth, elite) {
   const costOf = t => ENEMY_DEFS[t].cost;
   const nW = (depth <= 1 ? 2 : 3) + (H ? H.extraWave : 0);
   const waves = [];
+  // depth runs 1–5 now; budget it on the old 1–3 scale so late rooms don't balloon
+  const dk = 1 + (depth - 1) * 2 / (BOSS_DEPTH - 3);
   for (let w = 0; w < nW; w++) {
-    let budget = 3.8 + depth * 1.1 + r.scene * 1.5 + Math.min(w, 2) * 0.8;
+    let budget = 3.8 + dk * 1.1 + r.scene * 1.5 + Math.min(w, 2) * 0.8;
     const list = [];
     let guard = 0;
     while (budget > 0.4 && guard++ < 30) {
@@ -238,15 +266,29 @@ G.onEnemyKilled = function (e) {
   }
 };
 
+function healClearedRoom() {
+  const difficulty = curDifficulty(), rs = G.rs, p = G.player;
+  if (!difficulty || !rs || rs.modeHealApplied || !['combat', 'elite', 'boss'].includes(rs.type)) return;
+  rs.modeHealApplied = true;
+  p.heal((p.maxHp - p.hp) * difficulty.clearHeal, false, 1);
+}
 function roomClear() {
   const rs = G.rs, r = G.run, p = G.player;
+  if (!rs || rs.cleared) return;
   rs.cleared = true;
+  healClearedRoom();
   Sound.play('clear');
   G.toast('区域净化完成', '#7ff7ff');
   r.crystals += rs.type === 'elite' ? 3 : 1;
   const pos = rs.lastPos || { x: p.x + p.face * 40, y: p.y };
   const gx = clamp(pos.x, 4 * TILE, G.room.pw - 4 * TILE);
   const gy = G.room.floorBelow(gx, pos.y - 30);
+  if (rs.bonusArt) {
+    rs.bonusArt = false;
+    const ax = clamp(gx + (gx > G.room.pw / 2 ? -40 : 40), 4 * TILE, G.room.pw - 4 * TILE);
+    spawnReward('art', ax, G.room.floorBelow(ax, pos.y - 30));
+    G.toast('武学现世', WX_FAM.art.col, '参悟一次武学：武技 / 技能 / 秘技');
+  }
   spawnReward(rs.reward, gx, gy);
   p.fire('onRoomClear');
   openDoors();
@@ -271,10 +313,8 @@ function genDoors(nextDepth) {
   if (nextDepth === BOSS_DEPTH - 1) return [{ type: 'rest' }, { type: 'shop' }];
   const opts = [];
   const add = (w, d) => opts.push({ w, v: d });
-  // 武学 is scarce: only while this scene still has budget, likelier on the scene's later rooms
-  const artOk = r.sceneArt > 0;
+  // 武学 never sits behind a door: it comes on the scheduled depths (planArtDepths) whichever door you take
   add(4.4, { type: 'combat', reward: 'sigil' });
-  if (artOk) add(nextDepth >= BOSS_DEPTH - 2 ? 9 : 3.4, { type: 'combat', reward: 'art' });
   add(2.4, { type: 'combat', reward: 'gold' });
   if (Object.keys(G.player.mods).length) add(1.8, { type: 'combat', reward: 'upgrade' });
   add(1.2, { type: 'combat', reward: 'heal' });
@@ -290,7 +330,8 @@ function genDoors(nextDepth) {
     const d = rng.weighted(opts);
     if (!out.some(o => o.type === d.type && o.reward === d.reward)) out.push(d);
   }
-  if (!out.some(o => ['sigil', 'sigil+', 'art'].includes(o.reward))) out[0] = { type: 'combat', reward: 'sigil' };
+  if (!out.some(o => ['sigil', 'sigil+'].includes(o.reward))) out[0] = { type: 'combat', reward: 'sigil' };
+  if (r.artDepths.includes(nextDepth)) for (const d of out) d.wx = true;
   return out;
 }
 function openDoors() {
@@ -321,7 +362,6 @@ function setupStart(first) {
     let ox = 0.58;
     if (r.extraBless) { G.inters.push(new Orb(R.pw * ox, R.base * TILE - 20, 'sigil')); ox += 0.1; }
     // 劫难 boons
-    if (r.hard && r.hard.startSigil) { G.inters.push(new Orb(R.pw * ox, R.base * TILE - 20, 'sigil+')); ox += 0.1; }
     if (r.hard && r.hard.startArt) { G.inters.push(new Orb(R.pw * ox, R.base * TILE - 20, 'art')); ox += 0.1; }
     G.showHints = 14;
   } else {
@@ -330,7 +370,7 @@ function setupStart(first) {
   G.rs.cleared = true;
   openDoors();
 }
-function priceMul() { const H = G.run.hard; return (1 + G.run.scene * 0.25) * (H ? H.price * H.discount : 1); }
+function priceMul() { const H = G.run.hard; return (1 + G.run.scene * 0.25) * (H ? H.price : 1); }
 function setupShop() {
   const R = G.room, p = G.player;
   G.rs.cleared = true;
@@ -342,7 +382,15 @@ function setupShop() {
   items.push({ kind: 'potion', price: Math.round(50 * priceMul()) });
   items.push({ kind: 'maxhp', price: Math.round(100 * priceMul()) });
   if (upgradeTargets(p).length) items.push({ kind: 'upgrade', price: Math.round(110 * priceMul()) });
-  items.forEach((it, i) => G.inters.push(new Pedestal(Math.round((10 + i * 3.5) * TILE), R.base * TILE, it)));
+  const H = G.run.hard;
+  const bargains = items.map(() => !!(H && H.shopBargainChance && Math.random() < H.shopBargainChance));
+  if (bargains.every(Boolean)) bargains[bargains.length - 1] = false;
+  items.forEach((it, i) => {
+    it.originalPrice = it.price;
+    it.discount = bargains[i] ? 0.1 : H ? H.discount : 1;
+    it.price = Math.max(1, Math.round(it.originalPrice * it.discount));
+    G.inters.push(new Pedestal(Math.round((10 + i * 3.5) * TILE), R.base * TILE, it));
+  });
   openDoors();
 }
 function setupRest() {
@@ -400,7 +448,11 @@ G.onBossKilled = function (b) {
   const gain = 12 + r.scene * 5;
   r.crystals += gain;
   if (SCENES[r.scene].final) {
-    later(2.6, () => { G.toast(`${b.D.name} 已陨落`, '#ff3048', '世界的熵归于平静……'); });
+    later(2.6, () => {
+      G.rs.cleared = true;
+      healClearedRoom();
+      G.toast(`${b.D.name} 已陨落`, '#ff3048', '世界的熵归于平静……');
+    });
     later(5.0, () => endRun(true));
     return;
   }
@@ -412,7 +464,7 @@ G.onBossKilled = function (b) {
     G.inters.push(new Orb(ox - 22, y - 20, 'sigil+'));
     G.inters.push(new Orb(ox + 22, y - 20, 'art'));
     if (r.hard && r.hard.bossSigil) G.inters.push(new Orb(ox + 66, y - 20, 'sigil+'));
-    G.player.heal(G.player.maxHp * 0.35);
+    healClearedRoom();
     dropCoins(x, y - 20, 60 + r.scene * 25);
     openDoors();
     Sound.music(BIOMES[r.biome].music);
@@ -440,9 +492,7 @@ function goThrough(door) {
       const r = G.run;
       r.scene = Math.min(SCENES.length - 1, r.scene + 1);
       r.biome = SCENES[r.scene].bi;
-      const bonus = r.hard ? r.hard.artBonus : 0;
-      r.sceneArt = 1 + bonus;
-      if (SCENES[r.scene].chapter === 1 && r.ch1Art <= 0) r.sceneArt = bonus;
+      planArtDepths(r);
       enterRoom({ type: 'start' });
     } else enterRoom(door);
   });
@@ -468,8 +518,9 @@ class Door extends Inter {
     if (d.next) { const nb = BIOMES[SCENES[Math.min(SCENES.length - 1, G.run.scene + 1)].bi]; return { name: '前往 · ' + nb.name, col: '#ffffff', icon: 'star', icol: nb.accent }; }
     const ri = ROOM_INFO[d.type];
     if (d.reward && G.run.hard && G.run.hard.fog) return { name: d.type === 'elite' ? '精英 · ？' : '？？？', col: d.type === 'elite' ? '#ffc83a' : '#9a8acb', icon: 'eye', icol: '#9a8acb' };
-    if (d.reward) { const rw = REWARD_INFO[d.reward]; return { name: (d.type === 'elite' ? '精英 · ' : '') + rw.name, col: d.type === 'elite' ? '#ffc83a' : rw.col, icon: rw.icon, icol: rw.col }; }
-    return { name: ri.name, col: ri.col, icon: ri.icon || 'star', icol: ri.col };
+    const wx = d.wx ? ' + 武学' : '';
+    if (d.reward) { const rw = REWARD_INFO[d.reward]; return { name: (d.type === 'elite' ? '精英 · ' : '') + rw.name + wx, col: d.type === 'elite' ? '#ffc83a' : rw.col, icon: rw.icon, icol: rw.col }; }
+    return { name: ri.name + wx, col: ri.col, icon: ri.icon || 'star', icol: ri.col };
   }
   use() { this.active = false; goThrough(this.d); }
   draw(ctx, gctx, cx, cy) {
@@ -505,6 +556,13 @@ class Door extends Inter {
     ctx.fillStyle = L.col; ctx.fillRect(x - 10, by - 2, 20, 1); ctx.fillRect(x - 10, by + 17, 20, 1);
     ctx.drawImage(ic, x - 8, by);
     gctx.drawImage(ic, x - 8, by);
+    // scheduled 武学 window behind this door (hidden under the 迷雾 curse)
+    if (this.d.wx && !(G.run.hard && G.run.hard.fog)) {
+      const sy = by - 20, sc = iconOf('scroll', WX_FAM.art.col);
+      ctx.fillStyle = '#0a0612'; ctx.fillRect(x - 8, sy - 1, 16, 16);
+      ctx.drawImage(sc, x - 8, sy - 1, 16, 16);
+      gctx.globalAlpha = 0.5 + 0.3 * Math.sin(this.t * 4); gctx.drawImage(sc, x - 8, sy - 1, 16, 16); gctx.globalAlpha = 1;
+    }
   }
 }
 class Orb extends Inter {
@@ -524,10 +582,13 @@ class Orb extends Inter {
     switch (this.kind) {
       case 'sigil': openSigils({ rarityBonus: G.run.scene * 2 }, '铭刻一枚刻印'); Sound.play('upgrade'); break;
       case 'sigil+': openSigils({ minRarity: 2, rarityBonus: 6 }, '稀有刻印'); Sound.play('upgrade'); break;
-      case 'art': openArts(this.first ? '初悟武技 · 选择第一门方向武技' : '参悟武学 · 武技 / 秘技 / 招式', this.first); Sound.play('upgrade'); break;
+      case 'art': openArts(this.first ? '初悟武技 · 选择第一门方向武技' : '参悟武学', this.first); Sound.play('upgrade'); break;
       case 'upgrade': openUpgrade(); Sound.play('upgrade'); break;
       case 'heal': p.heal(p.maxHp * 0.35); break;
-      case 'maxhp': p.counters.bonusHp = (p.counters.bonusHp || 0) + 15; p.recalc(); G.toast('生命上限 +15', '#ff7a9a'); Sound.play('pickup'); break;
+      case 'maxhp': {
+        const gain = p.maxHpGain(15);
+        p.counters.bonusHp = (p.counters.bonusHp || 0) + 15; p.recalc(); G.toast(`生命上限 +${gain}`, '#ff7a9a'); Sound.play('pickup'); break;
+      }
       case 'crystal': G.run.crystals += 6; G.toast('熵晶 +6', '#b46cff'); Sound.play('pickup'); break;
     }
   }
@@ -555,7 +616,8 @@ class Pedestal extends Inter {
   desc() {
     const it = this.item;
     if (it.kind === 'sigil') return `【${SCHOOLS[it.u.school].name}】` + it.u.desc((G.player.mods[it.u.id] || 0) + 1);
-    return { art: '参悟一次武学：习得或精进武技（↑/↓/冲刺 + 攻击）、精进或转修秘技、解锁招式', potion: '回复 40% 最大生命', maxhp: '最大生命 +20', upgrade: '将一枚刻印、一个武技或一个秘技提升一级' }[it.kind];
+    const p = G.player;
+    return { art: '参悟一次武学：习得或精进武技（↑/↓/冲刺 + 攻击）、精进或转修秘技、解锁招式', potion: `回复 ${Math.round(40 * p.stats.supplyHealMul * p.stats.healMul)}% 最大生命`, maxhp: `最大生命 +${p.maxHpGain(20)}`, upgrade: '将一枚刻印、一个武技或一个秘技提升一级' }[it.kind];
   }
   icon() { const it = this.item; return it.kind === 'sigil' ? iconOf(it.u.icon, SCHOOLS[it.u.school].col) : it.kind === 'art' ? iconOf('scroll', '#ff8a5a') : it.kind === 'potion' ? iconOf('drop', '#ff3b5c') : it.kind === 'maxhp' ? iconOf('heart', '#ff7a9a') : iconOf('burst', '#5aa8ff'); }
   prompt() { return this.sold ? null : `购买 ${this.item.price}金`; }
@@ -567,8 +629,8 @@ class Pedestal extends Inter {
     Sound.play('buy');
     if (it.kind === 'sigil') { takeSigil(p, it.u); G.toast(`铭刻：${it.u.name}`, SCHOOLS[it.u.school].col); }
     else if (it.kind === 'art') openArts('武学秘卷');
-    else if (it.kind === 'potion') p.heal(p.maxHp * 0.4);
-    else if (it.kind === 'maxhp') { p.counters.bonusHp = (p.counters.bonusHp || 0) + 20; p.recalc(); G.toast('生命上限 +20', '#ff7a9a'); }
+    else if (it.kind === 'potion') p.heal(p.maxHp * 0.4 * p.stats.supplyHealMul);
+    else if (it.kind === 'maxhp') { const gain = p.maxHpGain(20); p.counters.bonusHp = (p.counters.bonusHp || 0) + 20; p.recalc(); G.toast(`生命上限 +${gain}`, '#ff7a9a'); }
     else if (it.kind === 'upgrade') openUpgrade();
   }
   draw(ctx, gctx, cx, cy) {
@@ -587,11 +649,11 @@ class Pedestal extends Inter {
 }
 class Fountain extends Inter {
   constructor(x, y, amt) { super(x, y, 30, 30); this.amt = amt; this.used = false; }
-  prompt() { return this.used ? null : `休憩（回复 ${Math.round(this.amt * 100)}% 生命）`; }
+  prompt() { const p = G.player; return this.used ? null : `休憩（回复 ${Math.round(this.amt * p.stats.supplyHealMul * p.stats.healMul * 100)}% 生命）`; }
   use() {
     const p = G.player;
     this.used = true; this.active = false;
-    p.heal(p.maxHp * this.amt);
+    p.heal(p.maxHp * this.amt * p.stats.supplyHealMul);
     FX.ring(this.x, this.y - 10, 4, 50, '#6aff8a', 0.5, 3);
     if (this.pair) { this.pair.active = false; this.pair.used = true; }
   }
@@ -718,8 +780,9 @@ function openArts(title, first) {
 function upgradeTargets(p) {
   const out = [];
   for (const id in p.mods) if (UPG[id] && p.mods[id] < UPG[id].max) out.push({ kind: 'sigil', u: UPG[id] });
-  for (const k in p.arts) { const a = p.arts[k]; if (a && a.lv < 4) out.push({ kind: 'artUp', id: a.id }); }
-  for (const k in p.secrets) { const s = p.secrets[k]; if (s && s.lv < 3) out.push({ kind: 'skillUp', id: s.id }); }
+  for (const k in p.arts) { const a = p.arts[k]; if (a && a.lv < wxMax(ARTS[a.id])) out.push({ kind: 'artUp', id: a.id }); }
+  for (const k in p.uskills) { const s = p.uskills[k]; if (s && s.lv < wxMax(USKILLS[s.id])) out.push({ kind: 'uUp', id: s.id }); }
+  for (const k in p.secrets) { const s = p.secrets[k]; if (s && s.lv < wxMax(SKILLS[s.id])) out.push({ kind: 'skillUp', id: s.id }); }
   return out;
 }
 function openUpgrade() {

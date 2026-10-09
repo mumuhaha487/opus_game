@@ -21,6 +21,9 @@ const Combat = {
   clear() { this.boxes.length = 0; },
   // rel = [x0, y0, w, h] in facing-right local coords relative to owner feet
   box(owner, team, rel, hit, dur, o = {}) {
+    // 刃长 and other reach effects: the player's boxes grow forward (and a little in height)
+    const k = team === 'p' && owner && owner === G.player && owner.reach ? owner.reach(hit.wx === undefined ? null : hit.wx) : 1;
+    if (k > 1) { const [x0, y0, w, h] = rel, nh = h * (1 + (k - 1) * 0.5); rel = [x0 < 0 ? x0 * k : x0, y0 - (nh - h) / 2, w * k, nh]; }
     const b = { owner, team, rel, hit, life: dur, follow: o.follow !== false, hits: new Map(), multi: o.multi || 0, x: 0, y: 0, w: rel[2], h: rel[3], face: owner ? owner.face : 1, onHit: o.onHit };
     this.place(b);
     this.boxes.push(b);
@@ -82,22 +85,29 @@ const Combat = {
 // ---------- damage to enemies ----------
 function hitEnemy(p, e, h, hx, hy) {
   if (!e || e.dead || e.spawning) return 0;
+  // the 武学 this hit came from may carry its own signature effects
+  const perks = p && h.wx && p.wxPerksOf ? p.wxPerksOf(h.wx) : null;
+  if (perks) { h = Object.assign({}, h); for (const pk of perks) if (pk.pre) pk.pre(p, e, h); }
   let dmg = h.dmg;
   let crit = false;
-  if (p && !h.noCrit) {
-    let cc = p.stats.crit + (h.critBonus || 0);
-    if (p.counters.nextCrit) { cc = 1; if (!h.dot) p.counters.nextCrit = 0; }
-    if (Math.random() < cc) crit = true;
-  }
-  if (crit) dmg *= p.stats.critDmg;
-  if (p) dmg *= p.damageMult(e, h);
-  dmg *= e.takenMult(h);
   let blocked = false;
-  if (e.blocks && e.blocks(h, p ? p.x : hx)) { blocked = true; dmg *= 0.15; }
-  if (e.shield > 0 && !h.dot) {
-    const ab = Math.min(e.shield, dmg * 0.8);
-    e.shield -= ab; dmg -= ab;
-    if (e.shield <= 0) { FX.ring(e.x, e.cy, 6, 30, '#7fd8ff', 0.3, 3); Sound.play('shatter', { x: e.x }); }
+  if (h.execute && !e.boss) {
+    dmg = e.hp;
+  } else {
+    if (p && !h.noCrit) {
+      let cc = p.stats.crit + (h.critBonus || 0);
+      if (p.counters.nextCrit) { cc = 1; if (!h.dot) p.counters.nextCrit = 0; }
+      if (Math.random() < cc) crit = true;
+    }
+    if (crit) dmg *= p.stats.critDmg + (h.critDmgBonus || 0);
+    if (p) dmg *= p.damageMult(e, h);
+    dmg *= e.takenMult(h);
+    if (e.blocks && e.blocks(h, p ? p.x : hx)) { blocked = true; dmg *= 0.15; }
+    if (e.shield > 0 && !h.dot) {
+      const ab = Math.min(e.shield, dmg * 0.8);
+      e.shield -= ab; dmg -= ab;
+      if (e.shield <= 0) { FX.ring(e.x, e.cy, 6, 30, '#7fd8ff', 0.3, 3); Sound.play('shatter', { x: e.x }); }
+    }
   }
   dmg = Math.max(1, dmg);
   e.hp -= dmg;
@@ -131,10 +141,12 @@ function hitEnemy(p, e, h, hx, hy) {
       p.fire('onHit', e, h, dmg, crit);
       if (crit) p.fire('onCrit', e, h, dmg);
     }
+    if (perks) for (const pk of perks) if (pk.hit) pk.hit(p, e, h, dmg, crit);
   }
   if (e.hp <= 0 && !e.dead) {
     e.die(h);
     if (p) p.fire('onKill', e, h);
+    if (perks) for (const pk of perks) if (pk.kill) pk.kill(p, e, h);
   }
   return dmg;
 }
@@ -205,9 +217,12 @@ function hurtPlayer(dmg, srcX, o = {}) {
     dmg *= 0.6;
     if (G.time - (p.counters.ironT || 0) > 0.4) {
       p.counters.ironT = G.time;
-      explodeP(p.x, p.cy, 46, 1.5 * skMul(p, 'gao_iron'), { c: '#ffd36a', kx: 260, ky: -200, src: 'skill', shake: 0.3, noProc: false });
+      explodeP(p.x, p.cy, 46, 1.5 * skMul(p, 'gao_iron'), { c: '#ffd36a', kx: 260, ky: -200, src: 'skill', wx: { fam: 'sk', id: 'gao_iron' }, shake: 0.3, noProc: false });
     }
+    // 金身 (金刚身's signature): blows taken feed 灵力
+    if ((p.wxPerksOf({ fam: 'sk', id: 'gao_iron' }) || []).includes(WX_PERKS.jinshen)) { p.gainMana(4); FX.text(p.x, p.y - p.h - 6, '+4', '#7fd8ff', { size: 8 }); }
   }
+  if (p.counters.wxGuardT > G.time) dmg *= 0.6;                     // 霸王余威
   dmg = Math.max(1, Math.round(dmg));
   if (p.shield > 0) {
     const ab = Math.min(p.shield, dmg);
@@ -243,6 +258,13 @@ class Proj {
   constructor(o) {
     this.id = ++UID;
     Object.assign(this, { x: 0, y: 0, vx: 0, vy: 0, r: 3, team: 'e', dmg: 5, life: 3, max: 3, kind: 'orb', c: '#ff4fd8', c2: '#ffffff', pierce: 0, grav: 0, ghost: false, homing: 0, hit: null, hits: new Set(), spin: 0, t: 0, trail: 0, light: 40 }, o);
+    // signature effects of the 武学 being cast: 刃长 (reach), 星轨 (homing)
+    if (this.team === 'p' && G.player && G.player.wxMod) {
+      const wx = this.hit && this.hit.wx !== undefined ? this.hit.wx : null;
+      const k = G.player.reach(wx), hm = G.player.wxMod('homing', wx);
+      if (k > 1) { this.life *= k; this.r *= 1 + (k - 1) * 0.6; if (this.hh) this.hh *= 1 + (k - 1) * 0.6; }
+      if (hm) this.homing = Math.max(this.homing || 0, hm);
+    }
     this.max = this.life;
     // 劫难·箭雨: faster enemy volleys
     const H = this.team === 'e' && G.run && G.run.hard;
@@ -439,6 +461,8 @@ function enemiesInRect(x, y, w, h) {
 // circular player-team explosion
 function explodeP(x, y, r, dmgMult, o = {}) {
   const p = G.player;
+  const wx = o.wx !== undefined ? o.wx : p && p.moveWx ? p.moveWx(p.move && p.move.m, o) : null;
+  if (p && p.reach) r *= p.reach(wx);
   const col = o.c || '#ffb347';
   FX.flash(x, y, r * 0.42, col, 0.1);
   FX.ring(x, y, r * 0.2, r, col, 0.3, 3);
@@ -447,7 +471,7 @@ function explodeP(x, y, r, dmgMult, o = {}) {
   Cam.shake(o.shake || 0.15);
   Light.add(x, y, r * 3, col, 1);
   for (const e of enemiesNear(x, y, r)) {
-    hitEnemy(p, e, { dmg: p.atk * dmgMult, kx: o.kx || 120, ky: o.ky || -140, launch: !!o.launch || (o.ky || -140) < -250, stun: o.stun || 0.35, hs: o.hs || 0, dir: sign(e.x - x) || 1, noProc: o.noProc !== false, heavy: !!o.heavy, sfx: false, src: o.src || 'proc', fxc: col });
+    hitEnemy(p, e, { dmg: p.atk * dmgMult, kx: o.kx || 120, ky: o.ky || -140, launch: !!o.launch || (o.ky || -140) < -250, stun: o.stun || 0.35, hs: o.hs || 0, dir: sign(e.x - x) || 1, noProc: o.noProc !== false, heavy: !!o.heavy, sfx: false, src: o.src || 'proc', fxc: col, wx });
     if (o.status) applyStatus(e, o.status[0], o.status[1], o.status[2]);
   }
 }

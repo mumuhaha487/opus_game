@@ -428,7 +428,7 @@ Object.assign(M, {
           x: cx, y: p.y - 30, life: 2.0, tick: 0.12, sakura: true,
           onTick(z) {
             for (const e of enemiesNear(z.x, z.y, r)) {
-              hitEnemy(p, e, p.makeHit({ dmg: 0.5, kx: 0, ky: -40, stun: 0.5, hs: 0, dir: sign(e.x - z.x) || 1, src: 'ult', sfx: false, energy: 0, fxc: PET }));
+              hitEnemy(p, e, p.makeHit({ dmg: 0.5, kx: 0, ky: -40, stun: 0.5, hs: 0, dir: sign(e.x - z.x) || 1, src: 'ult', sfx: false, energy: 0, fxc: PET, skill: 'rin_sakura' }));
               if (Math.random() < 0.4) FX.slash(e.x, e.cy, { r: 16, a0: -70, a1: 70, th: 4, c: pick([PET, RC, '#ffffff']), f: 1, rot: rand(0, 180), dur: 0.12 });
             }
             Sound.play('swoosh', { x: z.x, pitch: rand(1.0, 1.5) });
@@ -468,7 +468,7 @@ M.ult.ev.push([1.9, p => {
     FX.screenFlash('#ff3b5c', 0.4, 0.25); Sound.play('ultBoom'); Cam.shake(0.5);
     for (const e of liveEnemies().filter(onScreen)) {
       FX.add({ k: 'beam', x: e.x - 40, y: e.cy, len: 80, w: 4, ang: rand(-0.6, 0.6), c: RC, life: 0.3 });
-      hitEnemy(p, e, p.makeHit({ dmg: 2.0, kx: 0, ky: -200, stun: 0.6, hs: 0, heavy: true, launch: true, dir: 1, src: 'ult', energy: 0 }));
+      hitEnemy(p, e, p.makeHit({ dmg: 2.0, kx: 0, ky: -200, stun: 0.6, hs: 0, heavy: true, launch: true, dir: 1, src: 'ult', energy: 0, skill: 'rin_ult' }));
     }
   });
 }]);

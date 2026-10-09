@@ -12,12 +12,13 @@ const TouchUI = (() => {
   const BTN_DEFS = [
     { id: 'attack', code: 'KeyJ', d: 34 },
     { id: 'jump', code: 'KeyK', d: 27 },
+    { id: 'skill', code: 'KeyU', d: 27 },
     { id: 'dash', code: 'KeyL', d: 27 },
     { id: 'ult', code: 'KeyI', d: 27 },
     { id: 'interact', code: 'KeyE', d: 23 },
     { id: 'pause', code: 'Escape', d: 21 },
   ];
-  const ACCENT = { jump: '#7fe8c8', dash: '#7ff0ff', ult: '#5ad8ff', interact: '#ffd36a', pause: '#c8c0e0' };
+  const ACCENT = { jump: '#7fe8c8', skill: '#7fe8a8', dash: '#7ff0ff', ult: '#5ad8ff', interact: '#ffd36a', pause: '#c8c0e0' };
   const dpr = () => Gfx.view.dpr || 1;
   const live = () => G.state === 'play' && !G.overlay && !G.trans && G.player && !G.player.dead;
 
@@ -81,24 +82,27 @@ const TouchUI = (() => {
     arcCache[key] = c;
     return c;
   }
-  // tiny 5x5 badge glyphs for the 秘技 direction
+  // tiny 5x5 badge glyphs for the 秘技 / 技能 direction
   const BADGE = {
     stand: ['.....', '.###.', '.###.', '.###.', '.....'],
     move: ['..#..', '...#.', '#####', '...#.', '..#..'],
     up: ['..#..', '.###.', '#.#.#', '..#..', '..#..'],
     down: ['..#..', '..#..', '#.#.#', '.###.', '..#..'],
     air: ['#...#', '##.##', '.###.', '..#..', '.....'],
+    shot: ['.###.', '#...#', '#.#.#', '#...#', '.###.'],
+    dash: ['#.#..', '.#.#.', '..#.#', '.#.#.', '#.#..'],
   };
   const badgeCache = {};
-  function badge(slot) {
-    if (badgeCache[slot]) return badgeCache[slot];
+  function badge(slot, col = '#5ad8ff') {
+    const key = slot + col;
+    if (badgeCache[key]) return badgeCache[key];
     const c = makeCanvas(9, 9), x = c.getContext('2d');
     x.fillStyle = '#0a0612'; x.fillRect(0, 0, 9, 9);
-    x.fillStyle = '#5ad8ff'; x.fillRect(1, 1, 7, 7);
+    x.fillStyle = col; x.fillRect(1, 1, 7, 7);
     x.fillStyle = '#0a0612'; x.fillRect(2, 2, 5, 5);
     x.fillStyle = '#ffffff';
     BADGE[slot].forEach((row, yy) => { for (let xx = 0; xx < 5; xx++) if (row[xx] === '#') x.fillRect(2 + xx, 2 + yy, 1, 1); });
-    badgeCache[slot] = c;
+    badgeCache[key] = c;
     return c;
   }
 
@@ -109,13 +113,17 @@ const TouchUI = (() => {
     const u = T.unit;
     const R = id => BTN_DEFS.find(b => b.id === id).d * u / 2;
     const right = w - I.r, bottom = h - I.b;
+    // attack in the corner; jump above it; 技能 (U) on the diagonal between them;
+    // dash to the left of attack and 秘技 (I) further left — one thumb rolls across the bottom row
     const ax = right - R('attack') - S * 0.05, ay = bottom - R('attack') - S * 0.06;
+    const dash = [ax - R('attack') - R('dash') - S * 0.045, ay + S * 0.02];
+    const ult = [dash[0] - R('dash') - R('ult') - S * 0.045, ay + S * 0.035];
     const pos = {
       attack: [ax, ay],
-      jump: [ax - R('attack') - R('jump') - S * 0.035, ay + S * 0.035],
-      dash: [ax + S * 0.01, ay - R('attack') - R('dash') - S * 0.035],
-      ult: [ax - R('attack') - R('ult') - S * 0.01, ay - R('attack') - R('ult') + S * 0.02],
-      interact: [ax - R('attack') * 2 - R('jump') * 2 - R('interact') * 0.2 - S * 0.04, ay - S * 0.11],
+      jump: [ax + S * 0.01, ay - R('attack') - R('jump') - S * 0.05],
+      skill: [ax - R('attack') - R('skill') - S * 0.02, ay - R('attack') - R('skill') - S * 0.03],
+      dash, ult,
+      interact: [ult[0] + S * 0.01, ay - R('attack') - R('skill') - S * 0.02],
       pause: [right - R('pause') - S * 0.035, I.t + R('pause') + S * 0.035],
     };
     T.btns = BTN_DEFS.map(b => ({ ...b, x: pos[b.id][0], y: pos[b.id][1], r: b.d * u / 2 }));
@@ -158,7 +166,7 @@ const TouchUI = (() => {
       const [px, py] = devPos(t);
       if (live()) {
         const b = hitBtn(px, py);
-        if (b) { T.touches.set(t.identifier, { kind: 'btn', b }); Input.virt(b.code, true); if (b.id === 'ult' || b.id === 'dash') buzz(8); continue; }
+        if (b) { T.touches.set(t.identifier, { kind: 'btn', b }); Input.virt(b.code, true); if (b.id === 'ult' || b.id === 'dash' || b.id === 'skill') buzz(b.id === 'skill' ? 6 : 8); continue; }
         if (px < T.joyZone && !T.joy) { T.joy = { id: t.identifier, x0: px, y0: py, x: px, y: py }; T.touches.set(t.identifier, { kind: 'joy' }); continue; }
       } else if (G.state === 'play' && !G.trans && !G.overlay) {
         const b = hitBtn(px, py);
@@ -257,17 +265,21 @@ const TouchUI = (() => {
     const near = G.near && G.near.prompt && G.near.prompt();
     const slot = p.secretSlot(), sec = p.secrets[slot], SK = sec && SKILLS[sec.id];
     const cost = SK ? skillCost(p, SK) : 0, manaOk = SK && p.mana >= cost;
+    // 技能: the button shows whichever U slot the stick currently selects
+    const uslot = p.uSlot(), us = p.uskills[uslot], US = us && USKILLS[us.id];
+    const uLeft = Math.max(0, p.ucd[uslot] || 0), uNext = p.uNext(), uOk = uLeft <= 0 || !!uNext;
     for (const b of T.btns) {
       const down = [...T.touches.values()].some(r => r.kind === 'btn' && r.b.id === b.id);
       const accent = b.id === 'attack' ? hc : ACCENT[b.id];
       let state = down ? 'down' : 'up';
-      if ((b.id === 'interact' && !near) || (b.id === 'dash' && p.dashes <= 0) || (b.id === 'ult' && !manaOk)) state = down ? 'down' : 'dim';
+      if ((b.id === 'interact' && !near) || (b.id === 'dash' && p.dashes <= 0) || (b.id === 'ult' && !manaOk) || (b.id === 'skill' && !uOk)) state = down ? 'down' : 'dim';
       const sink = down ? u : 0;
       blit(ctx, disc(b.d, accent, state), b.x, b.y + sink, u);
       // icon
       let icon, col;
       if (b.id === 'attack') { icon = attackIcon(p); col = hc; }
       else if (b.id === 'ult') { icon = SK ? SK.icon : 'star'; col = SK && SK.ult ? hc : '#7fd8ff'; }
+      else if (b.id === 'skill') { icon = US ? US.icon : 'wave'; col = accent; }
       else { icon = { jump: 'jump', dash: 'dash', interact: 'hand', pause: 'pause' }[b.id]; col = accent; }
       ctx.globalAlpha = state === 'dim' ? 0.45 : 1;
       blit(ctx, iconOf(icon, col), b.x, b.y + sink, b.id === 'attack' ? u * 1.25 : b.id === 'pause' ? Math.max(1, u * 0.75) : u);
@@ -277,6 +289,13 @@ const TouchUI = (() => {
         blit(ctx, arc(b.d, manaOk ? '#bfe8ff' : '#3a8cff', manaOk ? 1 : p.mana / cost), b.x, b.y + sink, u);
         blit(ctx, badge(slot), b.x + b.r * 0.72, b.y - b.r * 0.72 + sink, u);
         if (manaOk && SK.ult) { ctx.globalAlpha = 0.25 + 0.2 * Math.sin(performance.now() / 160); blit(ctx, disc(b.d, hc, 'down'), b.x, b.y + sink, u); ctx.globalAlpha = 1; }
+      }
+      if (b.id === 'skill' && US) {
+        const cd = uCooldown(US);
+        blit(ctx, arc(b.d, uLeft > 0 ? '#3a7a60' : '#c8ffe0', uLeft > 0 ? 1 - uLeft / cd : 1), b.x, b.y + sink, u);
+        blit(ctx, badge(uslot, ACCENT.skill), b.x + b.r * 0.72, b.y - b.r * 0.72 + sink, u);
+        // the next stage is open: pulse to invite the second press
+        if (uNext) { ctx.globalAlpha = 0.3 + 0.25 * Math.sin(performance.now() / 90); blit(ctx, disc(b.d, '#ffffff', 'down'), b.x, b.y + sink, u); ctx.globalAlpha = 1; }
       }
       if (b.id === 'attack' && p.state === 'charge') {
         const can2 = p.tech.charge2 || p.stats.charge2;

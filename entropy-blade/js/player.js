@@ -19,6 +19,9 @@ class Player extends Ent {
     this.mods = {}; this.flags = {}; this.counters = {};
     this.secrets = {};
     for (const id in SKILLS) { const S = SKILLS[id]; if (S.hero === heroId && S.def) this.secrets[S.slot] = { id, lv: 1 }; }
+    // 技能 (U + direction): every slot known from the start, each on its own cooldown
+    this.uskills = {}; this.ucd = {}; this.lastU = null;
+    for (const id in USKILLS) { const U = USKILLS[id]; if (U.hero === heroId) { this.uskills[U.slot] = { id, lv: 1 }; this.ucd[U.slot] = 0; } }
     this.arts = { up: null, down: null, dash: null };
     this.tech = {};
     this.recalc();
@@ -35,7 +38,7 @@ class Player extends Ent {
     this.lastMove = null; this.chainT = 0; this.dropT = 0; this.deadT = 0;
     this.revives = 0; this.ghostT = 0;
     this.holding = false; this.holdT = 0; this.chargeT = 0; this.chargeLv = 0;
-    this.counterT = 0; this.postDashT = 0; this.dashT0 = -9; this.pdDone = true;
+    this.counterT = 0; this.postDashT = 0; this.dashT0 = -9; this.pdDone = true; this.dashBrakePending = false;
     this.wallT = 0; this.wallDir = 0; this.wallLock = 0; this.airRefill = false;
     this.onLandOnce = null;
     this.dyn = { atk: 1, spd: 1 };
@@ -48,7 +51,7 @@ class Player extends Ent {
       maxHp: h.hp + T.hp, atkMul: 1 + T.atk, crit: h.crit + T.crit, critDmg: 1.6, armor: h.armor, speedMul: 1, atkSpeed: 1,
       dashes: 2 + T.dash, dashCD: 0.75, jumps: 2, costMul: 1, manaMul: 1, maxMana: 100, manaRegen: 2.2, skillDmg: 1, ultDmg: 1, chargeDmg: 1, chargeSpeed: 0,
       counterDmg: 1, pdWindow: 0.17, witch: 1.3, airDmg: 1, dmgMul: 1, goldMul: 1 + T.gold, pierce: 0, healMul: 1, comboTime: 2.4,
-      charge2: false, chargeArmor: false, echo: 0,
+      charge2: false, chargeArmor: false, echo: 0, chargeTimeMul: 1, supplyHealMul: 1,
     };
     s.maxHp += (this.counters && this.counters.bonusHp) || 0;
     this.hooks = {};
@@ -59,11 +62,19 @@ class Player extends Ent {
     applyResonance(this, s);
     if (this.tech && this.tech.counterPlus) { s.pdWindow *= 1.6; s.witch += 0.8; s.counterDmg += 0.5; }
     if (this.tech && this.tech.manaFlow) { s.maxMana += 30; s.manaRegen *= 1.5; }
+    const difficulty = curDifficulty();
+    if (difficulty) {
+      s.maxHp *= difficulty.maxHpMul;
+      s.armor = 1 - (1 - s.armor) * difficulty.damageTakenMul;
+      s.pdWindow *= difficulty.pdWindowMul;
+      s.supplyHealMul = difficulty.supplyHealMul;
+      s.chargeTimeMul = difficulty.chargeTimeMul;
+      this.on('onKill', p => p.heal(difficulty.killHeal, true, 1));
+    }
     const H = G.run && G.run.hard;
     if (H) {
       s.maxHp *= H.maxHpMul; s.healMul *= H.healMul; s.manaRegen *= H.manaRegen; s.manaMul *= H.manaGain;
       s.dmgMul *= H.dmgMul; s.goldMul += H.goldMul;
-      if (H.killHeal) this.on('onKill', p => p.heal(H.killHeal, true));
     }
     if (this.mana > s.maxMana) this.mana = s.maxMana;
     const old = this.maxHp || s.maxHp;
@@ -74,6 +85,11 @@ class Player extends Ent {
     s.crit = Math.min(0.95, s.crit);
   }
   on(ev, fn) { this.hooks[ev].push(fn); }
+  maxHpGain(amount) {
+    const difficulty = curDifficulty(), hard = G.run && G.run.hard;
+    const multiplier = (difficulty ? difficulty.maxHpMul : 1) * (hard ? hard.maxHpMul : 1);
+    return Math.max(1, Math.round(this.stats.maxHp + amount * multiplier)) - this.maxHp;
+  }
   fire(ev, a, b, c, d) { const l = this.hooks[ev]; if (l) for (let i = 0; i < l.length; i++) l[i](this, a, b, c, d); }
   damageMult(e, h) {
     const s = this.stats;
@@ -83,29 +99,66 @@ class Player extends Ent {
     else if (h.src === 'charge') m *= s.chargeDmg;
     else if (h.src === 'counter') m *= s.counterDmg;
     if (!this.onGround && !h.dot && h.src !== 'ult') m *= s.airDmg;
+    if (this.counters.wxAtkT > G.time) m *= 1.2;                     // 龙威
     for (const f of this.hooks.modDmg) m *= f(this, e, h);
     return m;
   }
   modHit(hit) { for (const f of this.hooks.modHit) f(this, hit); }
-  skillLv(id) { for (const k in this.secrets) { const s = this.secrets[k]; if (s && s.id === id) return s.lv; } return 1; }
+  // picks taken in a 秘技 (1..its own cap)
+  skillRaw(id) { for (const k in this.secrets) { const s = this.secrets[k]; if (s && s.id === id) return s.lv; } return 1; }
+  // the content tier its moves read (1 base, 2 强化, 3 进化) — each 秘技 maps its picks onto tiers its own way
+  skillLv(id) { const S = SKILLS[id]; return S && S.lvs ? wxAt(S, this.skillRaw(id)).t : this.skillRaw(id); }
+  skFollow(id) { const S = SKILLS[id]; return !!(S && S.follow && S.lvs && wxAt(S, this.skillRaw(id)).f); }
   artLv(id) { for (const k in this.arts) { const s = this.arts[k]; if (s && s.id === id) return s.lv; } return 0; }
+  uLv(id) { for (const k in this.uskills) { const s = this.uskills[k]; if (s && s.id === id) return s.lv; } return 1; }
+  artPow(id) { const lv = this.artLv(id); return lv ? wxAt(ARTS[id], lv).pow || 1 : 1; }
+  uPow(id) { return wxAt(USKILLS[id], this.uLv(id)).pow || 1; }
+  // which 武学 a move (or a hit spec) belongs to
+  moveWx(m, spec = {}) {
+    if (spec.wx !== undefined) return spec.wx;
+    const source = spec.uskill !== undefined || spec.skill !== undefined || spec.art !== undefined ? spec : m;
+    const us = source && source.uskill;
+    if (us) return { fam: 'u', id: us };
+    const sk = source && source.skill;
+    if (sk && SKILLS[sk]) return { fam: 'sk', id: sk };
+    const ar = source && source.art;
+    if (ar && ARTS[ar]) return { fam: 'art', id: ar };
+    return null;
+  }
+  // the signature effects a 武学 has earned so far
+  wxPerksOf(wx) {
+    if (!wx) return null;
+    const E = wx.fam === 'u' ? USKILLS[wx.id] : wx.fam === 'art' ? ARTS[wx.id] : SKILLS[wx.id];
+    const lv = wx.fam === 'u' ? this.uLv(wx.id) : wx.fam === 'art' ? this.artLv(wx.id) : this.skillRaw(wx.id);
+    if (!E || !E.lvs || !lv) return null;
+    const list = wxPerksAt(E, lv);
+    return list.length ? list : null;
+  }
+  // A supplied source keeps delayed attacks tied to their own signature effects.
+  wxMod(name, wx = this.move && this.moveWx(this.move.m)) {
+    const list = this.wxPerksOf(wx);
+    let v = name === 'reach' ? 1 : 0;
+    if (list) for (const pk of list) if (pk.mods && pk.mods[name] !== undefined) v = name === 'reach' ? v * pk.mods[name] : Math.max(v, +pk.mods[name]);
+    return v;
+  }
+  reach(wx) { return this.wxMod('reach', wx); }
   // build a hit description; damage = atk * dmg * (skill / art level scaling)
   makeHit(spec) {
     const m = this.move && this.move.m;
-    const skill = spec.skill !== undefined ? spec.skill : (m && m.skill);
-    const art = spec.art !== undefined ? spec.art : (m && m.art);
+    const wx = this.moveWx(m, spec);
     let mul = spec.dmg;
-    if (skill) mul *= skMul(this, skill);
-    else if (art) mul *= 1 + 0.12 * (Math.max(1, this.artLv(art)) - 1);
-    const hit = Object.assign({ kx: 0, ky: 0, stun: 0.3, hs: 2, src: skill ? 'skill' : 'light', fxc: this.hero.color, energy: 1 }, spec, { dmg: this.atk * mul });
-    if (skill && !spec.src) hit.src = 'skill';
+    if (wx && wx.fam === 'u') mul *= this.uPow(wx.id);
+    else if (wx && wx.fam === 'sk') mul *= skMul(this, wx.id);
+    else if (wx && wx.fam === 'art') mul *= this.artPow(wx.id);
+    const hit = Object.assign({ kx: 0, ky: 0, stun: 0.3, hs: 2, fxc: this.hero.color, energy: 1 }, spec, { dmg: this.atk * mul, wx });
+    if (!spec.src) hit.src = wx && (wx.fam === 'u' || wx.fam === 'sk') ? 'skill' : 'light';
     this.modHit(hit);
     return hit;
   }
   hitbox(rel, spec, dur, opts) { return Combat.box(this, 'p', rel, this.makeHit(spec), dur, opts); }
-  heal(v, silent) {
+  heal(v, silent, multiplier = this.stats.healMul) {
     if (this.dead) return;
-    const a = Math.min(this.maxHp - this.hp, Math.round(v * this.stats.healMul));
+    const a = Math.min(this.maxHp - this.hp, Math.round(v * multiplier));
     if (a <= 0) return;
     this.hp += a;
     if (!silent) {
@@ -130,7 +183,7 @@ class Player extends Ent {
   }
   addCombo() { this.combo++; this.comboT = this.stats.comboTime; if (this.combo > this.maxCombo) this.maxCombo = this.combo; G.stats.maxCombo = Math.max(G.stats.maxCombo, this.combo); }
   resetCombo() { if (this.flags.keepCombo) { this.combo = Math.floor(this.combo / 2); return; } this.combo = 0; this.comboT = 0; }
-  superArmor() { return (this.move && (this.move.m.armor || this.move.m.ult)) || this.armorT > 0 || this.ironT > 0 || (this.state === 'charge' && this.stats.chargeArmor); }
+  superArmor() { return (this.move && (this.move.m.armor || this.move.m.ult || this.wxMod('armor'))) || this.armorT > 0 || this.ironT > 0 || (this.state === 'charge' && this.stats.chargeArmor); }
 
   // ---------- update ----------
   update(dt) {
@@ -140,9 +193,10 @@ class Player extends Ent {
     if (this.ironT > 0) {
       this.ironT -= dt;
       if (Math.random() < 0.4) FX.add({ k: 'px', x: this.x + rand(-8, 8), y: this.y - rand(0, 30), vx: 0, vy: -30, life: 0.4, s: 1.5, c: '#ffd36a', glow: true, add: true });
-      if (this.ironT <= 0 && this.ironLv >= 3) explodeP(this.x, this.cy, 70, 2.5 * skMul(this, 'gao_iron'), { c: '#ffd36a', heavy: true, src: 'skill', shake: 0.5, noProc: false });
+      if (this.ironT <= 0 && this.ironLv >= 3) explodeP(this.x, this.cy, 70, 2.5 * skMul(this, 'gao_iron'), { c: '#ffd36a', heavy: true, src: 'skill', wx: { fam: 'sk', id: 'gao_iron' }, shake: 0.5, noProc: false });
     }
     this.manaFlash -= dt;
+    for (const k in this.ucd) if (this.ucd[k] > 0) this.ucd[k] -= dt;
     if (this.chillT > 0) { this.chillT -= dt; if (Math.random() < 0.25) FX.add({ k: 'px', x: this.x + rand(-6, 6), y: this.y - rand(4, 28), vx: 0, vy: -12, life: 0.4, s: 1.5, c: '#bfe6ff', glow: true }); }
     if (!this.dead && !(this.move && this.move.m.ult) && this.mana < this.stats.maxMana) this.mana = Math.min(this.stats.maxMana, this.mana + this.stats.manaRegen * dt);
     if (this.comboT > 0 && !(this.flags.comboFreeze && G.enemies.some(e => !e.dead))) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
@@ -206,6 +260,11 @@ class Player extends Ent {
     this.updAnim(dt);
   }
   onIce() { return this.onGround && this.groundT === 1 && G.room && G.room.ice && G.room.ice.has(Math.floor(this.x / TILE)); }
+  approachVelocity(target, acc, dt) {
+    this.vx = approach(this.vx, target, Math.max(acc, this.dashBrakePending ? 2200 : 0) * dt);
+    // Keep braking armed through windup and later authored velocity tracks.
+    if (this.state !== 'move' && this.vx === target) this.dashBrakePending = false;
+  }
   // 寒冷: frost attacks slow the player for a while
   chill(t) {
     if (this.dead || G.god) return;
@@ -213,15 +272,15 @@ class Player extends Ent {
     this.chillT = Math.max(this.chillT || 0, t);
   }
   updNormal(dt, ix) {
-    const sp = this.hero.speed * this.stats.speedMul * this.dyn.spd * (this.chillT > 0 ? 0.62 : 1);
+    const sp = this.hero.speed * this.stats.speedMul * this.dyn.spd * (this.chillT > 0 ? 0.62 : 1) * (this.counters.wxSpdT > G.time ? 1.25 : 1);   // 虎踞
     const ice = this.onIce();
     const acc = this.onGround ? (ice ? (ix ? 420 : 160) : 2400) : 1600;
     if (ice && Math.abs(this.vx) > 60 && Math.random() < 0.2) FX.add({ k: 'px', x: this.x - sign(this.vx) * 4, y: this.y - 1, vx: -this.vx * 0.2, vy: -rand(10, 30), life: 0.3, s: 1.5, c: '#dff4ff', glow: true });
-    this.vx = approach(this.vx, ix * sp, acc * dt);
+    this.approachVelocity(ix * sp, acc, dt);
     if (ix) this.face = ix;
     if (this.wallT > 0) this.face = -this.wallDir;
     if (this.tryActions()) return;
-    if (this.holding && this.holdT >= CHARGE_START && this.onGround) { this.enterCharge(); return; }
+    if (this.holding && this.holdT >= CHARGE_START * this.stats.chargeTimeMul && this.onGround) { this.enterCharge(); return; }
     if (this.wallT > 0 && this.jumpBuf > 0) { this.wallJump(); return; }
     this.tryJump();
     if (this.jumpHeld && !Input.down('jump')) { if (this.vy < -120) this.vy *= 0.5; this.jumpHeld = false; }
@@ -230,6 +289,7 @@ class Player extends Ent {
   tryActions() {
     if (Input.hit('dash') && this.doDash()) return true;
     if (Input.hit('ult') && this.trySecret()) return true;
+    if (Input.hit('skill') && this.trySkill()) return true;
     if (Input.hit('attack')) {
       const m = this.pickAttack(this.chainT > 0 ? this.lastMove : null, true);
       if (m) { this.startMove(m); return true; }
@@ -282,8 +342,11 @@ class Player extends Ent {
     const h = this.hero, M = h.moves, up = Input.down('up'), down = Input.down('down');
     if (this.counterT > 0) { this.counterT = 0; return 'counter'; }
     const cm = chainFrom ? M[chainFrom] : null;
-    // 武技 chain: 起手 → 派生 → 连段 → 终式, each link unlocked by the art's level
-    if (cm && cm.art && cm.next && M[cm.next] && this.artLv(cm.art) >= (cm.nextLv || 1)) return cm.next;
+    // 武技 chain: 起手 → 派生 → 连段 → 终式; how many links are open is set per art and level
+    if (cm && cm.art && cm.next && M[cm.next] && ARTS[cm.art]) {
+      const A = ARTS[cm.art], lv = this.artLv(cm.art);
+      if (lv && A.moves.indexOf(cm.next) >= 0 && A.moves.indexOf(cm.next) < wxAt(A, lv).n) return cm.next;
+    }
     const nextOf = m => {
       if (!m) return null;
       if (delayed && m.delay) return m.delay;
@@ -308,6 +371,7 @@ class Player extends Ent {
   startMove(name) {
     const m = this.hero.moves[name];
     if (!m) return;
+    if (this.postDashT > 0) this.dashBrakePending = true;
     if (this.move && this.move.m.onEnd) this.move.m.onEnd(this, this.move);
     const ix = Input.axisX();
     if (ix && !m.ult && name !== 'counter') this.face = ix;
@@ -323,6 +387,7 @@ class Player extends Ent {
   endMove() {
     if (this.move && this.move.m.onEnd) this.move.m.onEnd(this, this.move);
     if (this.move && this.move.m.skill && !this.move.m.isFollow) { this.lastSkill = this.move.m.skill; this.lastSkillT = G.time; }
+    if (this.move && this.move.m.uskill) this.lastU = { id: this.move.m.uskill, stage: this.move.m.ustage, t: G.time };
     this.lastMove = this.move ? this.move.name : null;
     this.chainT = 0.5;
     this.move = null; this.state = 'normal';
@@ -331,28 +396,35 @@ class Player extends Ent {
     const mv = this.move, m = mv.m;
     mv.t += dt * (m.noAtkSpeed ? 1 : this.stats.atkSpeed * this.dyn.atk);
     const dur = m.durFn ? m.durFn(this) : m.dur;
+    // signature effects that act while the move runs (e.g. 卷刃)
+    const perks = this.wxPerksOf(this.moveWx(m));
+    if (perks) for (const pk of perks) if (pk.during) pk.during(this, mv, dt);
+    if (this.move !== mv) return;
     if (m.ev) while (mv.ei < m.ev.length && m.ev[mv.ei][0] <= mv.t) { m.ev[mv.ei][1](this, mv); mv.ei++; if (this.move !== mv) return; }
     if (m.hits) while (mv.hi < m.hits.length && m.hits[mv.hi].t <= mv.t) { this.spawnHit(m.hits[mv.hi]); mv.hi++; }
     let velSet = false;
     if (m.vel) for (const v of m.vel) if (mv.t >= v[0] && mv.t < v[1]) { this.vx = v[2] * this.face; if (v[3] !== undefined && v[3] !== null) this.vy = v[3]; velSet = true; }
     if (!velSet) {
-      if (m.steer) this.vx = approach(this.vx, ix * m.steer, 900 * dt);
-      else if (this.onGround) this.vx = approach(this.vx, 0, (this.onIce() ? 260 : 1700) * dt);
-      else this.vx = approach(this.vx, ix * 55, 500 * dt);
+      if (m.steer) this.approachVelocity(ix * m.steer, 900, dt);
+      else if (this.onGround) this.approachVelocity(0, this.onIce() ? 260 : 1700, dt);
+      else this.approachVelocity(ix * 55, 500, dt);
     }
     if (m.update) m.update(this, mv, dt);
     if (this.move !== mv) return;
     // 秘技 派生: press I again during the skill (or its follow-on moves)
     if (Input.hit('ult') && !m.ult && this.followOf(m) && mv.t >= (m.followAt !== undefined ? m.followAt : Math.min(m.cancel, 0.2)) && this.tryFollow(m.skill)) return;
-    // a buffered 秘技 press wins over later attack presses
+    // 技能 stages: press U again during a stage for the next one
+    if (Input.hit('skill') && m.uskill) { const nx = this.uNext(); if (nx) { this.startUStage(nx.U, nx.stage); return; } }
+    // a buffered 秘技 / 技能 press wins over later attack presses
     if (Input.hit('ult')) { mv.buf = 'ult'; mv.bufSlot = this.secretSlot(); }
-    else if (mv.buf !== 'ult') {
+    else if (Input.hit('skill')) { mv.buf = 'skill'; mv.bufSlot = this.uSlot(); }
+    else if (mv.buf !== 'ult' && mv.buf !== 'skill') {
       if (Input.hit('attack')) mv.buf = 'attack';
       else if (Input.hit('jump')) mv.buf = 'jump';
     }
     if (m.ult) { if (mv.t >= dur) this.endMove(); return; }
     // roll a held light attack into a charge
-    if (m.light && this.holding && this.holdT >= CHARGE_START && this.onGround && mv.t >= m.cancel * 0.6) { this.enterCharge(); return; }
+    if (m.light && this.holding && this.holdT >= CHARGE_START * this.stats.chargeTimeMul && this.onGround && mv.t >= m.cancel * 0.6) { this.enterCharge(); return; }
     const firstHit = m.hits && m.hits.length ? m.hits[0].t : 0.04;
     if (Input.hit('dash') && mv.t >= Math.min(m.cancel, firstHit + 0.03) && this.doDash()) return;
     if (mv.t >= m.cancel) {
@@ -367,6 +439,7 @@ class Player extends Ent {
         return;
       }
       if (mv.buf === 'ult') { mv.buf = null; if (this.trySecret(mv.bufSlot)) return; }
+      if (mv.buf === 'skill') { mv.buf = null; if (this.trySkill(mv.bufSlot)) return; }
       if (ix && this.onGround && mv.t >= m.cancel + 0.05 && !m.loop && !m.steer) { this.endMove(); return; }
     }
     if (mv.t >= dur && !m.loop) this.endMove();
@@ -375,7 +448,7 @@ class Player extends Ent {
     const m = this.move ? this.move.m : null;
     const hit = this.makeHit({
       dmg: h.dmg, kx: h.kb[0], ky: h.kb[1], stun: h.stun, hs: h.hs === undefined ? 3 : h.hs,
-      heavy: h.heavy, launch: h.launch, src: h.src || (m && m.skill ? 'skill' : 'light'), finisher: h.finisher, radial: h.radial,
+      heavy: h.heavy, launch: h.launch, src: h.src || (m && (m.skill || m.uskill) ? 'skill' : 'light'), finisher: h.finisher, radial: h.radial,
       critBonus: h.critBonus, breakGuard: h.breakGuard, status: h.status,
     });
     Combat.box(this, 'p', h.box, hit, h.d || 0.08, { onHit: e => this.onMeleeHit(e, hit) });
@@ -395,8 +468,8 @@ class Player extends Ent {
     Sound.play('charge', { x: this.x, pitch: 1.2 });
   }
   updCharge(dt, ix) {
-    this.chargeT += dt * (1 + this.stats.chargeSpeed);
-    this.vx = approach(this.vx, ix * 26, 700 * dt);
+    this.chargeT += dt * (1 + this.stats.chargeSpeed) / this.stats.chargeTimeMul;
+    this.approachVelocity(ix * 26, 700, dt);
     const can2 = this.tech.charge2 || this.stats.charge2;
     if (this.chargeLv === 0 && this.chargeT >= CHARGE_L1) {
       this.chargeLv = 1;
@@ -429,7 +502,7 @@ class Player extends Ent {
     this.dashes--;
     const ix = Input.axisX();
     if (ix) this.face = ix;
-    this.state = 'dash'; this.dashT = 0.19; this.move = null;
+    this.state = 'dash'; this.dashT = 0.19; this.move = null; this.dashBrakePending = false;
     this.inv = Math.max(this.inv, 0.22);
     this.dashT0 = G.time; this.pdDone = false;
     this.vx = this.face * 450; this.vy = 0;
@@ -440,16 +513,25 @@ class Player extends Ent {
     this.fire('onDash');
     return true;
   }
+  endDash() {
+    this.state = 'normal'; this.dashBrakePending = true;
+    this.fire('onDashEnd');
+  }
   updDash(dt) {
     this.dashT -= dt; this.vy = 0;
     this.ghostT -= dt;
     if (this.ghostT <= 0) { this.ghostT = 0.025; FX.ghost(this.frame(), this.spr.ox, this.spr.oy, this.x, this.y, this.face < 0, this.hero.color, 0.22); }
-    if (Input.hit('attack')) { const m = this.pickAttack(null); if (m) { this.state = 'normal'; this.fire('onDashEnd'); this.startMove(m); return; } }
-    if (Input.hit('jump')) { this.state = 'normal'; this.fire('onDashEnd'); this.jumpBuf = 0.13; this.tryJump(); return; }
+    if (Input.hit('attack')) { const m = this.pickAttack(null); if (m) { this.endDash(); this.startMove(m); return; } }
+    // 冲刺 + U: the dash 技能
+    if (Input.hit('skill')) {
+      if (this.uReady('dash')) { this.endDash(); this.trySkill('dash'); return; }
+      this.uDenied();
+    }
+    if (Input.hit('jump')) { this.endDash(); this.jumpBuf = 0.13; this.tryJump(); return; }
     if (this.dashT <= 0) {
-      this.state = 'normal'; this.postDashT = 0.14;
-      this.vx = this.face * this.hero.speed * this.stats.speedMul;
-      this.fire('onDashEnd');
+      this.postDashT = 0.14;
+      this.vx = this.face * Math.min(120, this.hero.speed * this.stats.speedMul * 0.65);
+      this.endDash();
     }
   }
   // called by hurtPlayer when an attack lands during the opening frames of a dash
@@ -467,7 +549,12 @@ class Player extends Ent {
     Sound.play('perfect', { x: this.x });
     this.fire('onPerfect', srcX);
   }
-  isPerfectWindow() { return this.state === 'dash' && !this.pdDone && G.time - this.dashT0 <= this.stats.pdWindow; }
+  isPerfectWindow() {
+    const elapsed = G.time - this.dashT0;
+    // Mode assists extend the timing window without extending dash movement.
+    const assisted = curDifficulty() && !this.dead && this.state !== 'hurt';
+    return (this.state === 'dash' || assisted) && !this.pdDone && elapsed >= 0 && elapsed <= this.stats.pdWindow;
+  }
   // ---------- 秘技 (I + direction) ----------
   secretSlot() {
     if (!this.onGround) return 'air';
@@ -480,7 +567,7 @@ class Player extends Ent {
   followOf(m) {
     if (!m || !m.skill || m.isFollow) return null;
     const S = SKILLS[m.skill];
-    return S && S.follow && this.skillLv(m.skill) >= 2 ? S : null;
+    return S && this.skFollow(m.skill) ? S : null;
   }
   tryFollow(id) {
     const S = SKILLS[id];
@@ -497,7 +584,7 @@ class Player extends Ent {
     if (this.state === 'move' && this.followOf(this.move.m)) return this.tryFollow(this.move.m.skill);
     if (this.lastSkill && G.time - this.lastSkillT < FOLLOW_WINDOW) {
       const S = SKILLS[this.lastSkill];
-      if (S && S.follow && this.skillLv(S.id) >= 2) return this.tryFollow(S.id);
+      if (S && this.skFollow(S.id)) return this.tryFollow(S.id);
     }
     const slot = slotOverride || this.secretSlot();
     const s = this.secrets[slot];
@@ -513,8 +600,56 @@ class Player extends Ent {
     if (S.ult) this.inv = Math.max(this.inv, this.hero.moves[S.move].dur + 0.4);
     this.startMove(S.move);
     this.lastSkill = null;
+    const perks = this.wxPerksOf({ fam: 'sk', id: S.id });
+    if (perks) for (const pk of perks) if (pk.cast) pk.cast(this, S);
     this.fire('onSkill', s, slot, cost);
     if (S.ult) { this.fire('onUlt'); G.stats.ults++; } else G.stats.skills++;
+    return true;
+  }
+  // ---------- 技能 (U + direction, free, per-slot cooldown) ----------
+  uSlot() {
+    if (this.state === 'dash' || this.postDashT > 0) return 'dash';
+    if (Input.down('up')) return 'up';
+    if (Input.down('down')) return 'down';
+    return 'shot';
+  }
+  uReady(slot) { return !!this.uskills[slot] && !(this.ucd[slot] > 0); }
+  uDenied() {
+    Sound.play('error');
+    if (G.time - (this.counters.ucdT || -9) > 0.6) { this.counters.ucdT = G.time; FX.text(this.x, this.y - this.h - 10, '技能冷却中', '#9fe8c8', { size: 8 }); }
+  }
+  // the next stage of the 技能 being cast (or just finished), if its level has opened it
+  uNext() {
+    const m = this.state === 'move' && this.move.m;
+    let id, stage;
+    if (m && m.uskill) {
+      if (this.move.t < (m.followAt !== undefined ? m.followAt : Math.min(m.cancel, 0.16))) return null;
+      id = m.uskill; stage = m.ustage;
+    } else if (this.lastU && G.time - this.lastU.t < FOLLOW_WINDOW) { id = this.lastU.id; stage = this.lastU.stage; }
+    else return null;
+    const U = USKILLS[id], nx = stage + 1;
+    if (!U || nx >= wxAt(U, this.uLv(id)).n) return null;
+    return { U, stage: nx };
+  }
+  startUStage(U, stage) {
+    this.lastU = null;
+    this.startMove(U.moves[stage]);
+    if (stage > 0) {
+      FX.text(this.x, this.y - this.h - 10, uLabel(U, stage), WX_FAM.u.col, { size: 8 });
+      Sound.play('chargeLv', { x: this.x, pitch: 1.3 + stage * 0.2 });
+    }
+  }
+  trySkill(slotOverride) {
+    const nx = this.uNext();
+    if (nx) { this.startUStage(nx.U, nx.stage); return true; }
+    const slot = slotOverride || this.uSlot();
+    const s = this.uskills[slot];
+    if (!s) return false;
+    if (!this.uReady(slot)) { this.uDenied(); return false; }
+    const U = USKILLS[s.id];
+    this.ucd[slot] = uCooldown(U);
+    this.startUStage(U, 0);
+    G.stats.uskills = (G.stats.uskills || 0) + 1;
     return true;
   }
   die() {
@@ -568,7 +703,7 @@ class Player extends Ent {
     ctx.fillStyle = '#000';
     ctx.fillRect(Math.round(x - 7 + sd * 3), Math.round(gy - cy - 1), Math.round(14 - sd * 6), 2);
     ctx.globalAlpha = 1;
-    const armored = this.armorT > 0 || this.ironT > 0 || (this.move && this.move.m.armor);
+    const armored = this.armorT > 0 || this.ironT > 0 || (this.move && (this.move.m.armor || this.wxMod('armor')));
     if (armored || this.state === 'charge') {
       const col = this.ironT > 0 ? '#ffd36a' : this.state === 'charge' ? (this.chargeLv === 2 ? '#ffffff' : this.hero.color) : '#ffb347';
       const a = this.state === 'charge' ? 0.3 + 0.25 * this.chargeLv + 0.15 * Math.sin(G.time * 30) : 0.5;

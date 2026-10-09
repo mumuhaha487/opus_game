@@ -1,4 +1,27 @@
 'use strict';
+const DIFFICULTIES = {
+  normal: { name: '普通模式', clearHeal: 0.5, maxHpMul: 1.2, damageTakenMul: 0.85, roomShield: 0.15, pdWindowMul: 1.4, supplyHealMul: 1.3, chargeTimeMul: 0.75, killHeal: 2 },
+  hard: { name: '困难模式', clearHeal: 0.3, maxHpMul: 1.1, damageTakenMul: 0.95, roomShield: 0.08, pdWindowMul: 1.2, supplyHealMul: 1.15, chargeTimeMul: 0.9, killHeal: 1 },
+};
+function difficultyBuffs(id) {
+  const d = DIFFICULTIES[id === 'hard' ? 'hard' : 'normal'];
+  const pct = n => Math.round(n * 100);
+  return [
+    `通关回复已损失生命的${pct(d.clearHeal)}%`,
+    `最大生命 +${pct(d.maxHpMul - 1)}%`,
+    `受到伤害 -${pct(1 - d.damageTakenMul)}%`,
+    `战斗关卡入场护盾：最大生命的${pct(d.roomShield)}%`,
+    `见切判定窗口 +${pct(d.pdWindowMul - 1)}%`,
+    `药水、休憩治疗量 +${pct(d.supplyHealMul - 1)}%`,
+    `蓄满耗时 -${pct(1 - d.chargeTimeMul)}%`,
+    `每击杀一个怪物回复${d.killHeal}点生命`,
+  ];
+}
+function curDifficulty() {
+  if (!G.run || G.run.hard) return null;
+  return DIFFICULTIES[G.run.mode === 'hard' ? 'hard' : 'normal'];
+}
+
 // =====================================================================
 //  劫难挑战 — opt-in debuffs (劫数) that raise the 劫难值, which in turn
 //  unlocks boons (福缘) so skilled players get a richer, stronger run
@@ -17,16 +40,18 @@ const CURSES = [
   { id: 'fog', name: '迷雾', icon: 'eye', pts: [2], desc: () => '看不到门后的奖励' },
   { id: 'poverty', name: '贫者', icon: 'coin', pts: [1], desc: () => '商店价格 +40%' },
 ];
+const TRIAL_START_GOLD = 100;
+const TRIAL_SHOP_BARGAIN_CHANCE = 0.2;
 const BOONS = [
-  { pts: 3, name: '熵晶 +25%', icon: 'shard' },
+  { pts: 3, name: '每局额外复活一次', icon: 'phoenix' },
   { pts: 6, name: '金币 +30%', icon: 'coin' },
-  { pts: 9, name: '武学机缘：每个场景的武学上限 +1', icon: 'scroll' },
-  { pts: 12, name: '开局额外铭刻一枚稀有刻印', icon: 'crown' },
-  { pts: 16, name: '重掷 +2，商店折扣 20%', icon: 'ring' },
+  { pts: 9, name: '武学机缘：每个场景额外多一次武学', icon: 'scroll' },
+  { pts: 12, name: `开局获得额外金币 +${TRIAL_START_GOLD}`, icon: 'coin' },
+  { pts: 16, name: '商店打8折', icon: 'ring' },
   { pts: 20, name: '首领额外掉落一枚稀有刻印', icon: 'star' },
   { pts: 25, name: '开局额外参悟一次武学', icon: 'sword' },
-  { pts: 30, name: '伤害 +15%，击杀回复 1 点生命', icon: 'fist' },
-  { pts: 40, name: '熵晶 ×2 ·「劫主」之名', icon: 'phoenix' },
+  { pts: 30, name: '伤害 +15%，商店有概率在部分商品上打一折', icon: 'fist' },
+  { pts: 40, name: '熵晶 ×2 · 通关获得称号「劫主」', icon: 'phoenix' },
 ];
 const TRIAL_RANKS = [[0, '常世', '#c8c0e0'], [1, '小劫', '#7fe8c8'], [10, '中劫', '#5aa8ff'], [20, '大劫', '#c46aff'], [30, '天劫', '#ff8a3a'], [40, '劫主', '#ff3048']];
 function trialRank(pts) { let r = TRIAL_RANKS[0]; for (const k of TRIAL_RANKS) if (pts >= k[0]) r = k; return { name: r[1], col: r[2] }; }
@@ -44,16 +69,16 @@ function trialConfig(sel) {
     bossHp: 1 + [0, 0.3, 0.6][L('boss')], bossHaste: L('boss') >= 2 ? 1.15 : 1, bossPhase2: [0.55, 0.75, 1.01][L('boss')],
     healMul: 1 - [0, 0.4, 0.75][L('wither')], manaRegen: 1 - [0, 0.4, 0.7][L('drain')], manaGain: 1 - [0, 0.25, 0.5][L('drain')],
     maxHpMul: L('frail') ? 0.75 : 1, noRevive: !!L('frail'), fog: !!L('fog'), price: L('poverty') ? 1.4 : 1,
-    crystalMul: 1 + pts * 0.02, goldMul: 0, artBonus: 0, startSigil: false, rerolls: 0, discount: 1, bossSigil: false, startArt: false, dmgMul: 1, killHeal: 0,
+    crystalMul: 1 + pts * 0.02, goldMul: 0, artBonus: 0, revives: 0, startGold: 0, rerolls: 0, discount: 1, bossSigil: false, startArt: false, dmgMul: 1, shopBargainChance: 0,
   };
-  if (pts >= 3) m.crystalMul += 0.25;
+  if (pts >= 3) m.revives = 1;
   if (pts >= 6) m.goldMul += 0.3;
   if (pts >= 9) m.artBonus = 1;
-  if (pts >= 12) m.startSigil = true;
-  if (pts >= 16) { m.rerolls = 2; m.discount = 0.8; }
+  if (pts >= 12) m.startGold = TRIAL_START_GOLD;
+  if (pts >= 16) m.discount = 0.8;
   if (pts >= 20) m.bossSigil = true;
   if (pts >= 25) m.startArt = true;
-  if (pts >= 30) { m.dmgMul = 1.15; m.killHeal = 1; }
+  if (pts >= 30) { m.dmgMul = 1.15; m.shopBargainChance = TRIAL_SHOP_BARGAIN_CHANCE; }
   if (pts >= 40) m.crystalMul *= 2;
   return m;
 }

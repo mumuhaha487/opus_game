@@ -98,7 +98,7 @@ Object.assign(M, {
       const x0 = p.x, f = p.face;
       [50, 95, 140].forEach((d, i) => later(0.12 + i * 0.1, () => {
         const x = x0 + f * d;
-        G.projs.push(new Proj({ team: 'p', x: x + rand(-8, 8), y: Cam.y - 10, vx: 0, vy: 380, grav: 900, kind: 'orb', r: 7, c: '#8a7458', c2: ROCK, life: 2, light: 30, trail: 0.4, tc: '#5a4a3a', ghost: true, upd: q => { if (q.t > 0.1 && G.room.solidPx(q.x, q.y)) { q.kill(true); q.life = 0; } }, hit: p.makeHit({ dmg: 0.8, kx: 60, ky: -100, stun: 0.5, art: 'gao_pillar' }), onDie: q => { explodeP(q.x, q.y, 46, 2.0 * artMul(p, 'gao_pillar'), { c: C, c2: ROCK, src: 'heavy', shake: 0.45, sound: 'stomp', ky: -300 }); FX.debris(q.x, q.y, ['#7a6448', ROCK], 10); } }));
+        G.projs.push(new Proj({ team: 'p', x: x + rand(-8, 8), y: Cam.y - 10, vx: 0, vy: 380, grav: 900, kind: 'orb', r: 7, c: '#8a7458', c2: ROCK, life: 2, light: 30, trail: 0.4, tc: '#5a4a3a', ghost: true, upd: q => { if (q.t > 0.1 && G.room.solidPx(q.x, q.y)) { q.kill(true); q.life = 0; } }, hit: p.makeHit({ dmg: 0.8, kx: 60, ky: -100, stun: 0.5, art: 'gao_pillar' }), onDie: q => { explodeP(q.x, q.y, 46, 2.0 * artMul(p, 'gao_pillar'), { c: C, c2: ROCK, src: 'heavy', shake: 0.45, sound: 'stomp', ky: -300, wx: q.hit.wx }); FX.debris(q.x, q.y, ['#7a6448', ROCK], 10); } }));
       }));
       later(0.4, () => p.fire('onFinisher', null, { finisher: true }));
     }]],
@@ -268,7 +268,7 @@ Object.assign(M, {
       [24, 64, 104, 144].forEach((d, i) => later(i * 0.1, () => {
         const x = x0 + f * d, gy = G.room.floorBelow(x, p.y - 20);
         if (Math.abs(gy - p.y) > 50) return;
-        explodeP(x, gy - 10, 34 + i * 4, (1.2 + i * 0.25) * artMul(p, 'gao_knee'), { c: C, c2: ROCK, heavy: true, ky: -330, kx: 160, hs: 3, shake: 0.35, src: 'heavy', sound: 'stomp', pitch: 1.1 - i * 0.1 });
+        explodeP(x, gy - 10, 34 + i * 4, (1.2 + i * 0.25) * artMul(p, 'gao_knee'), { c: C, c2: ROCK, heavy: true, ky: -330, kx: 160, hs: 3, shake: 0.35, src: 'heavy', sound: 'stomp', pitch: 1.1 - i * 0.1, wx: { fam: 'art', id: 'gao_knee' } });
         FX.shock(x, gy, C, 40); FX.debris(x, gy - 2, [C, '#a08a6a'], 8);
         if (i === 3) p.fire('onFinisher', null, { finisher: true });
       }));
@@ -289,7 +289,7 @@ Object.assign(M, {
     keys: [[0, { lean: -8, aF: [150, 120], aB: [160, 130], ...G_SQUAT }], [0.08, { lean: 24, aF: [0, 0], aB: [150, 160], ...G_LUNGE }, 'outCubic'], [0.2, { lean: 24, aB: [0, 0], aF: [150, 160], ...G_LUNGE }, 'outCubic'], [0.56, { lean: 10 }]],
     ev: [0.08, 0.2].map((t, i) => [t, p => {
       const hit = p.makeHit({ dmg: 1.6, kx: 200, ky: -100, stun: 0.5, hs: 3, heavy: true, skill: 'gao_ki' });
-      G.projs.push(new Proj({ team: 'p', x: p.x + p.face * 22, y: p.y - 22 - (i ? 8 : -4), vx: p.face * 340, vy: i ? -30 : 20, kind: 'orb', r: 6, c: C, c2: '#fff6d0', life: 1.0, hit, pierce: 2, light: 70, trail: 0.6, onDie: q => explodeP(q.x, q.y, 34, 1.0 * skMul(p, 'gao_ki'), { c: C, src: 'skill', shake: 0.2 }) }));
+      G.projs.push(new Proj({ team: 'p', x: p.x + p.face * 22, y: p.y - 22 - (i ? 8 : -4), vx: p.face * 340, vy: i ? -30 : 20, kind: 'orb', r: 6, c: C, c2: '#fff6d0', life: 1.0, hit, pierce: 2, light: 70, trail: 0.6, onDie: q => explodeP(q.x, q.y, 34, 1.0 * skMul(p, 'gao_ki'), { c: C, src: 'skill', shake: 0.2, wx: q.hit.wx }) }));
       Sound.play('void', { x: p.x, pitch: 1.6 + i * 0.2 });
     }]),
   },
