@@ -26,6 +26,10 @@ const POOLS = {
   3: [{ t: 'yukiko', w: 2.4 }, { t: 'icebat', w: 2 }, { t: 'monk', w: 1.3 }, { t: 'wolf', w: 1.8 }, { t: 'sniper', w: 1.4 }, { t: 'crawler', w: 1 }],
   1: [{ t: 'spider', w: 2.2 }, { t: 'prism', w: 1.2 }, { t: 'drone', w: 2 }, { t: 'knight', w: 1.3 }, { t: 'charger', w: 1.5 }, { t: 'bomber', w: 1 }],
   2: [{ t: 'caster', w: 2 }, { t: 'soldier', w: 1.6 }, { t: 'sniper', w: 1.4 }, { t: 'shade', w: 2 }, { t: 'tentacle', w: 1.4 }, { t: 'crawler', w: 1 }, { t: 'bomber', w: 1 }],
+  // the alternative maps keep entirely their own monsters
+  4: [{ t: 'frogger', w: 2.6 }, { t: 'puffcap', w: 2 }, { t: 'firefly', w: 2.2 }, { t: 'gator', w: 1.3 }],
+  5: [{ t: 'scorp', w: 2.4 }, { t: 'vulture', w: 1.8 }, { t: 'sandman', w: 2 }, { t: 'sandworm', w: 1.4 }],
+  6: [{ t: 'cinder', w: 2.2 }, { t: 'salamander', w: 2 }, { t: 'cannoneer', w: 1.5 }, { t: 'hammerbot', w: 1.2 }],
 };
 const REWARD_INFO = {
   sigil: { name: '刻印', icon: 'star', col: '#c46aff' },
@@ -57,8 +61,10 @@ function startRun(heroId, weaponId, trialSel, mode = 'normal') {
     heroId, weaponId, seed: (Math.random() * 1e9) | 0, scene: 0, biome: SCENES[0].bi, depth: 0, globalRoom: 0,
     gold: T.start + (hard ? hard.startGold : 0), crystals: 0, rerolls: T.reroll + (hard ? hard.rerolls : 0), diff: { hp: 1, dmg: 1 }, dmgTakenMult: 1, bossHpMul: 1,
     shopSeen: {}, eventSeen: {}, time: 0, extraBless: T.bless, hard, mode,
-    layouts: [], artDepths: [],
+    layouts: [], artDepths: [], route: [],
   };
+  planRoute(G.run);
+  G.run.biome = G.run.route[0];
   planArtDepths(G.run);
   G.stats = newStats();
   G.player = new Player(heroId, 80, 100, weaponId);
@@ -110,6 +116,19 @@ function clearWorld() {
   G.boss = null; G.bossIntro = null; G.cine = 0; G.dim = 0; G.slowT = 0; G.freeze = 0; G.witchT = 0;
 }
 
+// which map each scene uses this run: one of the scene's options, never a map already used this run.
+// A map the last run used at the same scene is less likely, so back-to-back runs tend to differ.
+function planRoute(r) {
+  const rng = RNG(r.seed + 4243), used = new Set(), last = (Save.data && Save.data.lastRoute) || [];
+  r.route = SCENES.map((S, i) => {
+    const opts = (S.opts || [S.bi]).filter(b => !used.has(b));
+    const b = opts.length ? rng.weighted(opts.map(v => ({ v, w: v === last[i] ? 0.3 : 1 }))) : S.bi;
+    used.add(b);
+    return b;
+  });
+  if (Save.data) Save.data.lastRoute = r.route.slice();
+}
+function sceneBiome(r, s) { return r.route && r.route[s] !== undefined ? r.route[s] : SCENES[s].bi; }
 // 武学 windows: two guaranteed per scene before the boss (one early, one late; +1 with the 劫难 boon),
 // and the boss always drops a third. They come on top of the door's own reward.
 function planArtDepths(r) {
@@ -118,14 +137,14 @@ function planArtDepths(r) {
   r.artDepths = [rng.int(1, 2), rng.int(4, last)];
   if (r.hard && r.hard.artBonus) r.artDepths.push(3);
 }
-// pick a room layout for this scene; the first three rooms of a scene never repeat a layout
+// pick a room layout for this scene's map; the first rooms of a scene never repeat a layout
 function pickLayout(r) {
-  const S = SCENES[r.scene];
+  const L = BIOMES[r.biome].layouts;
   const rng = RNG(r.seed + r.globalRoom * 53);
   const used = r.layouts;
-  let opts = Object.keys(S.layouts).filter(k => !used.includes(k));
-  if (!opts.length) opts = Object.keys(S.layouts).filter(k => k !== used[used.length - 1]);
-  const l = rng.weighted(opts.map(k => ({ w: S.layouts[k], v: k })));
+  let opts = Object.keys(L).filter(k => !used.includes(k));
+  if (!opts.length) opts = Object.keys(L).filter(k => k !== used[used.length - 1]);
+  const l = rng.weighted(opts.map(k => ({ w: L[k], v: k })));
   used.push(l);
   return l;
 }
@@ -206,7 +225,7 @@ function planWaves(bi, depth, elite) {
     waves.push(list);
   }
   const nE = (elite ? (r.scene >= 1 ? 2 : 1) : 0) + (H ? H.eliteExtra : 0);
-  const strong = pool.filter(c => !['bomber', 'crawler', 'icebat', 'yukiko'].includes(c.t));
+  const strong = pool.filter(c => !['bomber', 'crawler', 'icebat', 'yukiko'].includes(c.t) && !ENEMY_DEFS[c.t].fodder);
   for (let i = 0; i < nE; i++) waves[waves.length - 1].push({ type: rng.pick(strong).t, elite: true });
   return waves;
 }
@@ -491,7 +510,7 @@ function goThrough(door) {
     if (door.next) {
       const r = G.run;
       r.scene = Math.min(SCENES.length - 1, r.scene + 1);
-      r.biome = SCENES[r.scene].bi;
+      r.biome = sceneBiome(r, r.scene);
       planArtDepths(r);
       enterRoom({ type: 'start' });
     } else enterRoom(door);
@@ -515,7 +534,7 @@ class Door extends Inter {
   prompt() { return '进入'; }
   label() {
     const d = this.d;
-    if (d.next) { const nb = BIOMES[SCENES[Math.min(SCENES.length - 1, G.run.scene + 1)].bi]; return { name: '前往 · ' + nb.name, col: '#ffffff', icon: 'star', icol: nb.accent }; }
+    if (d.next) { const nb = BIOMES[sceneBiome(G.run, Math.min(SCENES.length - 1, G.run.scene + 1))]; return { name: '前往 · ' + nb.name, col: '#ffffff', icon: 'star', icol: nb.accent }; }
     const ri = ROOM_INFO[d.type];
     if (d.reward && G.run.hard && G.run.hard.fog) return { name: d.type === 'elite' ? '精英 · ？' : '？？？', col: d.type === 'elite' ? '#ffc83a' : '#9a8acb', icon: 'eye', icol: '#9a8acb' };
     const wx = d.wx ? ' + 武学' : '';
@@ -889,6 +908,7 @@ function renderWorld() {
     if (l.flick) a *= 0.8 + 0.2 * Math.sin(G.time * 13 + l.x) * Math.sin(G.time * 7.3 + l.y);
     Light.add(l.x, l.y, l.r, l.c, a);
     if (l.fire && Math.random() < 0.5) FX.fire(l.x + rand(-4, 4), l.y + 2, 1);
+    if (l.lava && Math.random() < 0.2) FX.add({ k: 'px', x: l.x + rand(-22, 22), y: l.y + 3, vx: rand(-8, 8), vy: -rand(30, 80), g: 160, life: rand(0.3, 0.6), s: 2, c: pick(['#ffd36a', '#ff7a2a']), glow: true, add: true, shrink: true });
   }
   for (const it of G.inters) it.draw(ctx, gctx, cx, cy);
   FX.draw(ctx, gctx, cx, cy, 0);

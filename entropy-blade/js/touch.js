@@ -267,12 +267,12 @@ const TouchUI = (() => {
     const cost = SK ? skillCost(p, SK) : 0, manaOk = SK && p.mana >= cost;
     // 技能: the button shows whichever U slot the stick currently selects
     const uslot = p.uSlot(), us = p.uskills[uslot], US = us && USKILLS[us.id];
-    const uLeft = Math.max(0, p.ucd[uslot] || 0), uNext = p.uNext(), uOk = uLeft <= 0 || !!uNext;
+    const uNext = p.uNext(uslot);
     for (const b of T.btns) {
       const down = [...T.touches.values()].some(r => r.kind === 'btn' && r.b.id === b.id);
       const accent = b.id === 'attack' ? hc : ACCENT[b.id];
       let state = down ? 'down' : 'up';
-      if ((b.id === 'interact' && !near) || (b.id === 'dash' && p.dashes <= 0) || (b.id === 'ult' && !manaOk) || (b.id === 'skill' && !uOk)) state = down ? 'down' : 'dim';
+      if ((b.id === 'interact' && !near) || (b.id === 'dash' && p.dashes <= 0) || (b.id === 'ult' && !manaOk)) state = down ? 'down' : 'dim';
       const sink = down ? u : 0;
       blit(ctx, disc(b.d, accent, state), b.x, b.y + sink, u);
       // icon
@@ -291,8 +291,7 @@ const TouchUI = (() => {
         if (manaOk && SK.ult) { ctx.globalAlpha = 0.25 + 0.2 * Math.sin(performance.now() / 160); blit(ctx, disc(b.d, hc, 'down'), b.x, b.y + sink, u); ctx.globalAlpha = 1; }
       }
       if (b.id === 'skill' && US) {
-        const cd = uCooldown(US);
-        blit(ctx, arc(b.d, uLeft > 0 ? '#3a7a60' : '#c8ffe0', uLeft > 0 ? 1 - uLeft / cd : 1), b.x, b.y + sink, u);
+        blit(ctx, arc(b.d, '#c8ffe0', 1), b.x, b.y + sink, u);
         blit(ctx, badge(uslot, ACCENT.skill), b.x + b.r * 0.72, b.y - b.r * 0.72 + sink, u);
         // the next stage is open: pulse to invite the second press
         if (uNext) { ctx.globalAlpha = 0.3 + 0.25 * Math.sin(performance.now() / 90); blit(ctx, disc(b.d, '#ffffff', 'down'), b.x, b.y + sink, u); ctx.globalAlpha = 1; }

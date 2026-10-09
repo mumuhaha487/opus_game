@@ -84,7 +84,7 @@ const Combat = {
 
 // ---------- damage to enemies ----------
 function hitEnemy(p, e, h, hx, hy) {
-  if (!e || e.dead || e.spawning) return 0;
+  if (!e || e.dead || e.spawning || (e.intangible && !h.dot)) return 0;
   // the 武学 this hit came from may carry its own signature effects
   const perks = p && h.wx && p.wxPerksOf ? p.wxPerksOf(h.wx) : null;
   if (perks) { h = Object.assign({}, h); for (const pk of perks) if (pk.pre) pk.pre(p, e, h); }
@@ -135,7 +135,8 @@ function hitEnemy(p, e, h, hx, hy) {
   if (p) {
     p.dealt += dmg;
     if (!h.dot && !h.noCombo) p.addCombo();
-    if (!h.noEnergy) p.gainMana((h.dot ? 0.1 : h.energy !== undefined ? h.energy : 1) * p.hero.energyRate * 0.9);
+    // free, cooldown-less 技能 (U) hits charge 灵力 at 40% so spamming them can't feed 秘技 endlessly
+    if (!h.noEnergy) p.gainMana((h.dot ? 0.1 : h.energy !== undefined ? h.energy : 1) * (h.wx && h.wx.fam === 'u' ? 0.4 : 1) * p.hero.energyRate * 0.9);
     if (h.status && !e.dead) applyStatus(e, h.status[0], h.status[1], h.status[2]);
     if (!h.noProc && !h.dot) {
       p.fire('onHit', e, h, dmg, crit);
@@ -145,15 +146,18 @@ function hitEnemy(p, e, h, hx, hy) {
   }
   if (e.hp <= 0 && !e.dead) {
     e.die(h);
-    if (p) p.fire('onKill', e, h);
-    if (perks) for (const pk of perks) if (pk.kill) pk.kill(p, e, h);
+    // (a foe that cheated death is not a kill)
+    if (e.dead) {
+      if (p) p.fire('onKill', e, h);
+      if (perks) for (const pk of perks) if (pk.kill) pk.kill(p, e, h);
+    }
   }
   return dmg;
 }
 
 // status effects: stun (can't act), slow (fraction), mark (猎印), echo streaks
 function applyStatus(e, type, a, b) {
-  if (!e || e.dead) return;
+  if (!e || e.dead || e.intangible) return;
   const st = e.st;
   const res = e.boss ? 0.35 : 1;
   switch (type) {
@@ -203,12 +207,15 @@ function tickStatus(e, dt) {
 // ---------- damage to the player ----------
 function hurtPlayer(dmg, srcX, o = {}) {
   const p = G.player;
-  if (!p || p.dead || G.state !== 'play') return false;
-  // 极限闪避: attack arrives during the first frames of a dash
-  if (p.isPerfectWindow()) { p.perfectDodge(srcX); return false; }
-  // parry stances (e.g. 燕返架势)
-  if (p.move && p.move.m.parry && p.move.t >= p.move.m.parry[0] && p.move.t <= p.move.m.parry[1]) { p.move.m.onParry(p, srcX); return false; }
-  if (p.inv > 0 || p.ghost || G.god) return false;
+  if (!p || p.dead || G.state !== 'play' || G.god) return false;
+  // Existing poison and a committed grab cannot be dodged after they have landed.
+  if (!o.dot && !o.unavoidable) {
+    // 极限闪避: attack arrives during the first frames of a dash
+    if (p.isPerfectWindow()) { p.perfectDodge(srcX); return false; }
+    // parry stances (e.g. 燕返架势)
+    if (p.move && p.move.m.parry && p.move.t >= p.move.m.parry[0] && p.move.t <= p.move.m.parry[1]) { p.move.m.onParry(p, srcX); return false; }
+    if (p.inv > 0 || p.ghost) return false;
+  }
   dmg *= G.run ? G.run.dmgTakenMult : 1;
   dmg *= 1 - p.stats.armor;
   if (p.armorT > 0) dmg *= 0.6;
@@ -229,20 +236,24 @@ function hurtPlayer(dmg, srcX, o = {}) {
     p.shield -= ab; dmg -= ab;
     FX.ring(p.x, p.cy, 8, 22, '#9ff4ff', 0.25, 2);
     Sound.play('shield', { x: p.x });
-    if (dmg <= 0) { p.inv = 0.5; return true; }
+    if (dmg <= 0) { if (!o.dot) p.inv = 0.5; return true; }
   }
+  if (o.nonlethal) dmg = Math.min(dmg, Math.max(0, p.hp - 1));
+  if (dmg <= 0) return true;
   p.hp -= dmg;
-  p.inv = 1.0;
-  p.hurtFlash = 0.25;
   G.stats.dmgTaken += dmg;
-  p.resetCombo();
-  FX.num(p.x, p.y - p.h, dmg, { c: '#ff4a5a', big: true });
-  FX.hitSpark(p.x, p.cy, sign(p.x - srcX) || 1, '#ff4a5a', true);
-  FX.screenFlash('#ff1030', 0.25, 0.3);
-  Sound.play('hurt', { x: p.x });
-  Cam.shake(0.4);
-  G.hitstop(5);
-  if (!p.superArmor() && !o.noStagger) {
+  FX.num(p.x, p.y - p.h, dmg, { c: o.numc || '#ff4a5a', big: !o.dot });
+  if (!o.dot) {
+    p.inv = 1.0;
+    p.hurtFlash = 0.25;
+    p.resetCombo();
+    FX.hitSpark(p.x, p.cy, sign(p.x - srcX) || 1, '#ff4a5a', true);
+    FX.screenFlash('#ff1030', 0.25, 0.3);
+    Sound.play('hurt', { x: p.x });
+    Cam.shake(0.4);
+    G.hitstop(5);
+  }
+  if (!o.dot && !p.superArmor() && !o.noStagger) {
     p.state = 'hurt'; p.hurtT = 0.3; p.move = null;
     p.vx = (sign(p.x - srcX) || -p.face) * 170; p.vy = -200;
   }

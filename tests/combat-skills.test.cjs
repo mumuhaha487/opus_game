@@ -154,13 +154,13 @@ test('Eve starburst retains shot scaling and origin in its blast and eight shard
     assert.equal(g.run('orb.boomed'), true);
     assert.equal(g.run('shards.length'), 8);
     assert.deepEqual(g.json('hits[0].wx'), { fam: 'u', id: 'eve_u_shot' });
-    close(g.run('hits[0].dmg'), g.run('G.player.atk') * 2.4 * 1.3, 'blast damage');
+    close(g.run('hits[0].dmg'), g.run('G.player.atk') * 1.0 * 1.3, 'blast damage');
     for (const shard of g.json('shards.map(pr => ({ dmg: pr.hit.dmg, wx: pr.hit.wx }))')) {
       assert.deepEqual(shard.wx, { fam: 'u', id: 'eve_u_shot' });
-      close(shard.dmg, g.run('G.player.atk') * 0.5 * 1.3, 'fragment damage');
+      close(shard.dmg, g.run('G.player.atk') * 0.2 * 1.3, 'fragment damage');
     }
     g.run('shards[0].update(0.1);');
-    close(g.run('hits[1].dmg'), g.run('G.player.atk') * 0.5 * 1.3, 'actual fragment collision');
+    close(g.run('hits[1].dmg'), g.run('G.player.atk') * 0.2 * 1.3, 'actual fragment collision');
     assert.deepEqual(g.json('hits[1].wx'), { fam: 'u', id: 'eve_u_shot' });
   }
 });
@@ -248,28 +248,254 @@ test('Shadow Burial executes marked low-health enemies through frontal guard and
   assert.ok(g.run('boss.hp > 0'));
 });
 
-test('all heroes start with four mana-free U slots and independent cooldowns selected by real input', () => {
+test('all heroes start with four mana-free U slots without cooldowns, selected by real input', () => {
   const g = game();
   for (const hero of ['rin', 'eve', 'gao']) {
     begin(g, hero);
     assert.deepEqual(g.json('Object.keys(G.player.uskills).sort()'), ['dash', 'down', 'shot', 'up']);
+    assert.equal(g.run("'ucd' in G.player"), false, 'U skills keep no cooldown state');
     g.run('G.player.mana = 0;');
-    for (const slot of ['shot', 'up', 'down', 'dash']) {
-      g.run(`
-        if (G.player.move) G.player.endMove();
-        G.player.lastU = null; G.player.postDashT = ${slot === 'dash' ? 1 : 0};
-        Input.virt('ArrowUp', ${slot === 'up'}); Input.virt('ArrowDown', ${slot === 'down'}); Input.endStep();
-      `);
-      assert.equal(g.run('G.player.uSlot()'), slot);
-      assert.equal(g.run('G.player.trySkill()'), true, hero + ' ' + slot);
-      assert.equal(g.run('G.player.mana'), 0);
-      assert.equal(g.run(`G.player.move.m.uskill`), hero + '_u_' + slot);
-      close(g.run(`G.player.ucd.${slot}`), g.run(`uCooldown(USKILLS['${hero}_u_${slot}'])`), slot + ' initial cooldown');
-      assert.equal(g.run(`G.player.trySkill('${slot}')`), false, 'same cooldown denies an immediate recast');
+    for (const pass of [1, 2]) {
+      for (const slot of ['shot', 'up', 'down', 'dash']) {
+        g.run(`
+          if (G.player.move) G.player.endMove();
+          G.player.lastU = null; G.player.postDashT = ${slot === 'dash' ? 1 : 0};
+          Input.virt('ArrowUp', ${slot === 'up'}); Input.virt('ArrowDown', ${slot === 'down'}); Input.endStep();
+        `);
+        assert.equal(g.run('G.player.uSlot()'), slot);
+        assert.equal(g.run('G.player.trySkill()'), true, hero + ' ' + slot + ' pass ' + pass);
+        assert.equal(g.run('G.player.mana'), 0);
+        assert.equal(g.run(`G.player.move.m.uskill`), hero + '_u_' + slot);
+        assert.equal(g.run(`G.player.move.name`), g.run(`USKILLS['${hero}_u_${slot}'].moves[0]`));
+        assert.equal(g.run(`G.player.trySkill('${slot}')`), false, 'a fresh cast waits for the current stage to recover');
+      }
+      // the second pass starts every slot again at once: nothing is on cooldown
+      assert.equal(g.run('G.stats.uskills'), 4 * pass);
     }
-    assert.equal(g.run('G.stats.uskills'), 4);
-    g.run("Input.virt('ArrowUp', false); Input.virt('ArrowDown', false); Input.endStep(); var before = { ...G.player.ucd }; G.player.update(0.1);");
-    for (const slot of ['shot', 'up', 'down', 'dash']) close(g.run(`G.player.ucd.${slot}`), g.run(`before.${slot} - 0.1`), slot + ' cooldown advances');
+    g.run("Input.virt('ArrowUp', false); Input.virt('ArrowDown', false); Input.endStep();");
+  }
+});
+
+test('a different U direction stays buffered until recovery and starts its own skill for every hero', () => {
+  const dt = 1 / 60;
+  for (const hero of ['rin', 'eve', 'gao']) {
+    for (const pressAt of [0.08, 0.18]) {
+      const g = game();
+      begin(g, hero);
+      g.run(`takeArt(G.player, { kind: 'uUp', id: '${hero}_u_up' }); Input.virt('ArrowUp', true);`);
+      controllerPress(g, 'KeyU', dt);
+      controllerAdvance(g, pressAt, dt);
+      g.run("Input.virt('ArrowUp', false); Input.virt('ArrowDown', true);");
+      controllerPress(g, 'KeyU', dt);
+      assert.equal(g.run('G.player.move.name'), `u_${hero}_up1`, hero + ' preserves the current stage');
+      assert.deepEqual(g.json('({ action: G.player.move.buf, slot: G.player.move.bufSlot })'), { action: 'skill', slot: 'down' });
+      g.run("Input.virt('ArrowDown', false);");
+      while (g.run(`G.player.move.t + ${dt} < G.player.move.m.cancel`)) {
+        controllerAdvance(g, dt, dt);
+        assert.equal(g.run('G.player.move.name'), `u_${hero}_up1`, hero + ' waits through recovery');
+      }
+      controllerUntil(g, `G.player.move && G.player.move.name === 'u_${hero}_down1'`, dt, 3);
+      assert.equal(g.run('G.stats.uskills'), 2, 'buffered input starts a new cast instead of continuing the up ladder');
+    }
+  }
+});
+
+test('rising U grants one extra lift per airtime and real landing and wall jumping restore it', () => {
+  const dt = 1 / 60;
+  for (const hero of ['rin', 'gao']) {
+    const g = game();
+    begin(g, hero);
+    g.run(`
+      G.room = new Room(100, 60, 0);
+      for (let x = 0; x < G.room.w; x++) for (let y = 54; y < G.room.h; y++) G.room.set(x, y, 1);
+      G.player.x = 200; G.player.y = 500; G.player.onGround = false; G.player.vy = 0;
+      Input.virt('ArrowUp', true);
+    `);
+    const castUp = () => {
+      controllerPress(g, 'KeyU', dt);
+      assert.equal(g.run('G.player.move.name'), `u_${hero}_up1`);
+      controllerAdvance(g, 0.1, dt);
+    };
+    castUp();
+    assert.ok(g.run('G.player.vy < -50 && G.player.y < 500'), hero + ' first airborne cast lifts the player');
+    controllerUntil(g, '!G.player.move', dt);
+    castUp();
+    assert.ok(g.run('G.player.vy > 0'), hero + ' repeated cast cannot reverse the fall again');
+    controllerUntil(g, 'G.player.onGround', dt);
+    assert.equal(g.run('G.player.y'), 864, 'actual floor collision ends the airtime');
+    g.run("Input.virt('KeyK', true); updatePlay(1 / 60); Input.endStep();");
+    controllerUntil(g, 'G.player.vy >= 0', dt);
+    g.run("Input.virt('KeyK', false);");
+    castUp();
+    assert.ok(g.run('G.player.vy < -50 && !G.player.onGround'), hero + ' a new jump has another aerial lift');
+    controllerUntil(g, '!G.player.move', dt);
+    g.run("for (let y = 0; y < 54; y++) G.room.set(14, y, 1); Input.virt('ArrowRight', true);");
+    controllerUntil(g, 'G.player.wallT > 0', dt);
+    assert.equal(g.run('G.player.onGround'), false, 'wall contact happens before landing');
+    const wallX = g.run('G.player.x');
+    controllerPress(g, 'KeyK', dt);
+    assert.ok(g.run('G.player.vy < -300') && g.run('G.player.x') < wallX, 'jump input really jumps away from the wall');
+    g.run("Input.virt('ArrowRight', false);");
+    controllerUntil(g, 'G.player.vy >= 0', dt);
+    castUp();
+    assert.ok(g.run('G.player.vy < -50 && !G.player.onGround'), hero + ' wall jump restores the additional lift');
+  }
+});
+
+test('real U projectile hits grant 40 percent of the mana credited by the same non-U hit', () => {
+  const dt = 1 / 60;
+  for (const hero of ['rin', 'eve', 'gao']) {
+    const g = game();
+    begin(g, hero);
+    g.run(`
+      G.player.mana = 0;
+      var victim = fixtureEnemy('soldier', 150);
+      var credited = [];
+      var originalHit;
+      G.player.on('onHit', (p, e, hit, dmg) => { originalHit = hit; credited.push({ mana: p.mana, dmg, wx: hit.wx }); });
+    `);
+    controllerPress(g, 'KeyU', dt);
+    controllerUntil(g, 'credited.length > 0', dt, 60);
+    assert.equal(g.run('credited.length'), 1, hero + ' shot has landed once');
+    assert.deepEqual(g.json('credited[0].wx'), { fam: 'u', id: `${hero}_u_shot` });
+    assert.ok(g.run('credited[0].mana > 0 && victim.hp < victim.maxHp'), 'the actual projectile awards mana and deals damage');
+    g.run(`
+      G.projs = []; G.zones = []; Combat.clear();
+      G.player.mana = 0;
+      Combat.area('p', victim.x - 20, victim.y - victim.h - 20, 40, victim.h + 40,
+        { ...originalHit, wx: null }, 0.5, { owner: G.player });
+    `);
+    controllerAdvance(g, dt, dt);
+    assert.equal(g.run('credited.length'), 2, 'matching non-U hit uses the real collision pipeline');
+    assert.equal(g.run('credited[1].wx'), null, 'neutral hit stays neutral while U is still running');
+    close(g.run('credited[0].dmg'), g.run('credited[1].dmg'), hero + ' identical hit damage');
+    close(g.run('credited[0].mana'), g.run('credited[1].mana') * 0.4, hero + ' U mana ratio');
+  }
+});
+
+test('real scorp venom ticks respect defenses, shields, damage accounting and God mode without hit reactions', () => {
+  const dt = 1 / 60;
+  for (const scenario of ['shields', 'nonlethal', 'god']) {
+    const g = game();
+    begin(g);
+    g.run(`
+      G.run.dmgTakenMult = 1.5; G.player.stats.armor = 0.5; G.player.inv = 0;
+      var scorp = fixtureEnemy('scorp', 122);
+      scorp.dmgMul = 2; scorp.onGround = true; scorp.setState('wind', 'wind'); scorp.stT = 0.38;
+      var hurtEvents = [];
+      G.player.on('onHurt', (p, dmg) => hurtEvents.push(dmg));
+    `);
+    controllerUntil(g, '!!G.player.venomZ', dt, 60);
+    assert.equal(g.run('G.stats.dmgTaken'), 18, 'real sting passes through armor and the run damage multiplier');
+    g.run(`
+      G.enemies = []; Combat.clear();
+      var stingDmg = G.stats.dmgTaken;
+      hurtEvents.length = 0;
+      G.player.inv = 3; G.player.ghost = true;
+      G.player.combo = 8; G.player.comboT = 10;
+      G.player.hp = ${scenario === 'nonlethal' ? 2 : 80};
+      G.player.shield = ${scenario === 'nonlethal' ? 0 : 6};
+      G.god = ${scenario === 'god'};
+    `);
+    controllerAdvance(g, 1, dt);
+    assert.equal(g.run('G.player.state'), 'normal', 'poison does not stagger the player');
+    assert.equal(g.run('G.player.combo'), 8, 'poison preserves the active combo');
+    close(g.run('G.player.inv'), 2, 'poison neither grants nor refreshes invulnerability');
+    if (scenario === 'shields') {
+      assert.equal(g.run('G.player.hp'), 80);
+      assert.equal(g.run('G.player.shield'), 2, 'defended tick damage is absorbed by the shield');
+      assert.deepEqual(g.json('hurtEvents'), [], 'fully absorbed poison does not report health damage');
+      controllerAdvance(g, 0.7, dt);
+      assert.equal(g.run('G.player.shield'), 0);
+      assert.equal(g.run('G.player.hp'), 78, 'next tick uses the remaining shield before damaging health');
+      assert.equal(g.run('G.stats.dmgTaken - stingDmg'), 2);
+      assert.deepEqual(g.json('hurtEvents'), [2]);
+      assert.ok(g.run('G.player.inv > 1'), 'existing poison still ticks while invulnerable');
+    } else if (scenario === 'nonlethal') {
+      controllerAdvance(g, 0.7, dt);
+      assert.equal(g.run('G.player.hp'), 1);
+      assert.equal(g.run('G.player.dead'), false);
+      assert.equal(g.run('G.stats.dmgTaken - stingDmg'), 1, 'nonlethal damage records only actual health lost');
+      assert.deepEqual(g.json('hurtEvents'), [1], 'ticks at one health do not create false damage events');
+    } else {
+      assert.equal(g.run('G.player.hp'), 80);
+      assert.equal(g.run('G.player.shield'), 6, 'God mode also protects against poison already applied');
+      assert.equal(g.run('G.stats.dmgTaken'), g.run('stingDmg'));
+      assert.deepEqual(g.json('hurtEvents'), []);
+    }
+  }
+});
+
+test('phase-two toad tongue capture and delayed spit use defenses and actual damage while remaining nonlethal', () => {
+  const dt = 1 / 60;
+  for (const [hp, shield, expectedDamage, god] of [[80, 11, 13, false], [5, 22, 2, false], [5, 4, 4, false], [80, 11, 0, true]]) {
+    const g = game();
+    begin(g);
+    g.run(`
+      G.player.x = 320; G.player.shield = 6; G.player.inv = 0;
+      G.run.dmgTakenMult = 1.5; G.player.stats.armor = 0.5;
+      var toad = new Boss('toad', 200, 288);
+      toad.phase = 2; toad.dmgMul = 2; toad.face = 1; toad.onGround = true;
+      toad.setState('tongueW', 'mouth'); toad.stT = 0.43;
+      G.enemies = [toad];
+      var hurtEvents = [];
+      G.player.on('onHurt', (p, dmg) => hurtEvents.push(dmg));
+    `);
+    controllerUntil(g, 'G.player.hidden', dt, 60);
+    assert.equal(g.run('toad.state'), 'swallow', 'the real locked-angle tongue captures the player');
+    assert.equal(g.run('G.stats.dmgTaken'), 15, 'tongue strike uses run scaling, armor and the initial shield');
+    assert.deepEqual(g.json('hurtEvents'), [15]);
+    g.run(`
+      G.player.hp = ${hp}; G.player.shield = ${shield}; G.player.inv = 5;
+      G.god = ${god};
+    `);
+    controllerUntil(g, '!G.player.hidden', dt, 90);
+    assert.equal(g.run('G.player.hp'), hp - expectedDamage);
+    assert.equal(g.run('G.player.shield'), god ? shield : Math.max(0, shield - 24), 'shield is consumed before the nonlethal health clamp');
+    assert.equal(g.run('G.stats.dmgTaken'), 15 + expectedDamage);
+    assert.deepEqual(g.json('hurtEvents'), expectedDamage ? [15, expectedDamage] : [15]);
+    assert.equal(g.run('G.player.dead'), false);
+    assert.ok(g.run('G.player.inv > 0'), 'the committed spit resolves despite previously granted invulnerability');
+    assert.ok(g.run('G.player.vx > 300 && G.player.vy < -200'), 'spit preserves its authored launch instead of generic knockback');
+  }
+});
+
+test('Gao full-screen mountain slam cannot damage or attach statuses underground, while existing burn and emerged targets still work', () => {
+  const dt = 1 / 60;
+  for (const [type, state, windup] of [['scorpqueen', 'dig', 0.6], ['gator', 'dive', 0.35], ['sandworm', 'sink', 0.4]]) {
+    const g = game();
+    begin(g, 'gao');
+    g.run(`
+      G.player.x = 300; G.player.inv = 10;
+      G.player.secrets.down = { id: 'gao_mountain', lv: 1 };
+      var target = ${type === 'scorpqueen' ? "new Boss('scorpqueen', 450, 288)" : `fixtureEnemy('${type}', 450)`};
+      target.hp = target.maxHp = 10000; target.onGround = true;
+      G.enemies = [target];
+      applyStatus(target, 'burn', 3, 0.25);
+      target.setState('${state}'); target.stT = ${windup};
+      Input.virt('ArrowDown', true);
+    `);
+    controllerAdvance(g, dt, dt);
+    assert.equal(g.run('target.intangible'), true, type + ' enters its actual underground state');
+    controllerPress(g, 'KeyI', dt);
+    assert.equal(g.run('G.player.move.name'), 'ult2');
+    g.run('var buriedHp = target.hp; var existingBurn = target.st.burn; var existingBurnDmg = target.st.burnDmg; G.player.updMove(1.31, 0);');
+    assert.equal(g.run('G.player.move.landed'), true, 'real mountain fallback slam runs');
+    assert.equal(g.run('target.hp'), g.run('buriedHp'), type + ' ignores the full-screen ground hit');
+    assert.equal(g.run('target.st.stun'), 0, 'the blocked slam cannot stun an underground target');
+    g.run("applyStatus(target, 'burn', 5, 1);");
+    assert.equal(g.run('target.st.burn'), g.run('existingBurn'), 'new attacks cannot refresh an underground burn');
+    assert.equal(g.run('target.st.burnDmg'), g.run('existingBurnDmg'));
+    g.run('target.update(0.51);');
+    assert.ok(g.run('target.hp < buriedHp && target.st.burn > 0'), 'burn attached before hiding still ticks through the actual entity update');
+    controllerUntil(g, '!target.intangible && target.onGround && !G.player.move', dt);
+    g.run('target.x = 450; target.y = 288; target.onGround = true; G.player.x = 300; G.player.y = 288; G.player.onGround = true; G.player.mana = G.player.stats.maxMana;');
+    controllerPress(g, 'KeyI', dt);
+    assert.equal(g.run('G.player.move.name'), 'ult2');
+    g.run('var emergedHp = target.hp; G.player.updMove(1.31, 0);');
+    assert.ok(g.run('target.hp < emergedHp'), type + ' takes the full-screen hit after its actual emergence');
+    assert.ok(g.run('target.st.stun > 0'), 'emerged targets receive the landed stun');
+    assert.deepEqual(g.errors, []);
   }
 });
 
@@ -283,7 +509,7 @@ test('real U upgrades open exactly their ladder stages and fully upgraded U skil
       for (let level = 1; level <= levels.length; level++) {
         if (level > 1) g.run(`takeArt(G.player, { kind: 'uUp', id: '${id}' });`);
         assert.equal(g.run(`G.player.uskills.${slot}.lv`), level);
-        g.run(`G.player.endMove(); G.player.lastU = null; G.player.ucd.${slot} = 0; G.time += 1;`);
+        g.run(`G.player.endMove(); G.player.lastU = null; G.time += 1;`);
         assert.equal(g.run(`G.player.trySkill('${slot}')`), true);
         for (let stage = 0; stage < levels[level - 1].n; stage++) {
           assert.equal(g.run('G.player.move.name'), g.run(`USKILLS['${id}'].moves[${stage}]`), id + ' level ' + level);
@@ -348,6 +574,11 @@ function controllerPress(g, key, dt) {
 
 function controllerAdvance(g, seconds, dt) {
   g.run(`for (let frame = 0; frame < ${Math.ceil(seconds / dt - 1e-9)}; frame++) { updatePlay(${dt}); Input.endStep(); }`);
+}
+
+function controllerUntil(g, condition, dt, maxFrames = 240) {
+  g.run(`for (let frame = 0; frame < ${maxFrames} && !(${condition}); frame++) { updatePlay(${dt}); Input.endStep(); }`);
+  assert.equal(!!g.run(condition), true, 'game loop reaches: ' + condition);
 }
 
 function controllerDash(g, dt) {

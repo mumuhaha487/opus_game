@@ -616,6 +616,192 @@ const Sound = (() => {
         C: { chords: ['Am', 'B', 'Em', 'Em'], drums: 'fill', bass: 'drive16', arp: 'updown' },
       }, order: ['A', 'A', 'B', 'C', 'A'],
     },
+    // 瘴雨沼泽 — a slow, damp lament: flute over plucked koto
+    mire: {
+      bpm: 84, inst: { lead: 'flute', arp: 'koto', bass: 'sub' }, delay: 0.75,
+      sections: {
+        I: { chords: ['Em', 'C', 'Em', 'B'], drums: 'none', bass: 'long', arp: 'bell', pad: true },
+        A: {
+          chords: ['Em', 'C', 'Am', 'B', 'Em', 'G', 'Am', 'B'], drums: 'half', bass: 'half', arp: 'up8', pad: true, lead: [
+            'E5 - - - - - G5 - F#5 - - - E5 - - -',
+            'C5 - - - - - - - E5 - - - D5 - C5 -',
+            'A4 - - - C5 - E5 - - - D5 - C5 - - -',
+            'B4 - - - - - - - D#5 - - - F#5 - - -',
+            'G5 - - - - - F#5 - E5 - - - B4 - - -',
+            'D5 - - - - - B4 - G4 - - - B4 - D5 -',
+            'C5 - - - - - B4 - A4 - - - E5 - - -',
+            'D#5 - - - - - - - B4 - - - - - - -',
+          ]
+        },
+        B: {
+          chords: ['Am', 'Em', 'C', 'B', 'Am', 'Em', 'F', 'B'], drums: 'lofi', bass: 'walk', arp: 'updown', pad: true, lead: [
+            'A5 - - - G5 - E5 - - - C5 - - - - -',
+            'B4 - - - - - E5 - G5 - - - - - - -',
+            'E5 - - - G5 - - - C6 - - - B5 - A5 -',
+            'B5 - - - - - - - F#5 - - - - - - -',
+            'C6 - - - B5 - A5 - - - E5 - - - - -',
+            'G5 - - - - - E5 - B4 - - - - - - -',
+            'A5 - - - - - F5 - C5 - - - A4 - - -',
+            'B4 - - - - - - - D#5 - - - F#5 - - -',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A'],
+    },
+    // 黄沙废城 — a caravan's phrygian-dominant march on drums and a reedy flute
+    dune: {
+      bpm: 112, kit: 'taiko', inst: { lead: 'flute', arp: 'koto', bass: 'saw' }, delay: 0.5,
+      sections: {
+        I: { chords: ['E', 'F', 'E', 'F'], drums: 'taikoA', bass: 'long', arp: 'bell' },
+        A: {
+          chords: ['E', 'F', 'Dm', 'E', 'Am', 'G', 'F', 'E'], drums: 'gallop', bass: 'pulse8', arp: 'up8', lead: [
+            'E5 - F5 - G#5 - - - A5 - G#5 - F5 - E5 -',
+            'F5 - - - - - E5 - D5 - - - C5 - - -',
+            'D5 - E5 - F5 - - - A5 - - - G#5 - F5 -',
+            'E5 - - - - - - - . . B4 - C5 - D5 -',
+            'E5 - - - A5 - - - C6 - B5 - A5 - - -',
+            'G5 - - - - - F5 - E5 - D5 - - - - -',
+            'F5 - - - E5 - D5 - C5 - - - D5 - - -',
+            'E5 - - - - - - - G#4 - - - B4 - - -',
+          ]
+        },
+        B: {
+          chords: ['Am', 'Dm', 'E', 'E', 'Am', 'Dm', 'F', 'E'], drums: 'taikoB', bass: 'synco', arp: 'updown', pad: true, lead: [
+            'A5 - - - C6 - B5 - A5 - - - G#5 - - -',
+            'F5 - - - A5 - - - D6 - - - C6 - B5 -',
+            'G#5 - - - - - B5 - E6 - - - - - - -',
+            'D6 - C6 - B5 - A5 - G#5 - - - - - - -',
+            'A5 - - - E5 - - - A5 - B5 - C6 - - -',
+            'D6 - - - C6 - A5 - F5 - - - - - - -',
+            'A5 - - - G#5 - F5 - E5 - - - F5 - - -',
+            'E5 - - - - - - - - - - - . . . .',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A', 'B'],
+    },
+    // 熔铸炉城 — hammering four-on-the-floor, a square lead like struck iron
+    forge: {
+      bpm: 124, inst: { lead: 'square', arp: 'bell', bass: 'saw' }, delay: 0.5,
+      sections: {
+        I: { chords: ['Dm', 'Dm', 'Bb', 'A'], drums: 'synth', bass: 'oct8', arp: 'bell' },
+        A: {
+          chords: ['Dm', 'Bb', 'C', 'A', 'Dm', 'Bb', 'Gm', 'A'], drums: 'four', bass: 'oct8', arp: 'up16', lead: [
+            'D5 - - D5 - - F5 - A5 - - - G5 - F5 -',
+            'F5 - - - D5 - - - Bb4 - - - D5 - - -',
+            'E5 - - E5 - - G5 - C6 - - - Bb5 - A5 -',
+            'A5 - - - - - - - C#5 - - - E5 - - -',
+            'D6 - - - C6 - A5 - - - F5 - A5 - D6 -',
+            'D6 - - - Bb5 - - - F5 - - - D5 - - -',
+            'G5 - - - Bb5 - D6 - - - C6 - Bb5 - G5 -',
+            'A5 - - - - - - - E5 - - - C#5 - - -',
+          ]
+        },
+        B: {
+          chords: ['Gm', 'Dm', 'Bb', 'A', 'Gm', 'Dm', 'Eb', 'A'], drums: 'drive', bass: 'drive16', arp: 'updown', pad: true, lead: [
+            'G5 - - - - - Bb5 - D6 - - - - - C6 -',
+            'A5 - - - - - F5 - D5 - - - - - - -',
+            'F5 - - - G5 - - - Bb5 - - - A5 - G5 -',
+            'E5 - - - - - - - C#5 - - - - - - -',
+            'G5 - - - Bb5 - - - D6 - - - Eb6 - D6 -',
+            'D6 - - - A5 - - - F5 - - - D5 - - -',
+            'Eb5 - - - G5 - - - Bb5 - - - G5 - - -',
+            'A5 - - - - - - - C#6 - - - E6 - - -',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A', 'B'],
+    },
+    // 蟾仙·大蟇 — a lurching, heavy swamp march
+    bossMire: {
+      bpm: 136, kit: 'taiko', inst: { lead: 'saw', arp: 'koto', bass: 'saw' }, delay: 0.5,
+      sections: {
+        I: { chords: ['Em', 'Em', 'C', 'B'], drums: 'drive', bass: 'gallop' },
+        A: {
+          chords: ['Em', 'C', 'D', 'B', 'Em', 'C', 'Am', 'B'], drums: 'taikoB', bass: 'gallop', arp: 'up16', lead: [
+            'E5 - - - G5 - B5 - - - A5 - G5 - F#5 -',
+            'G5 - - - - - E5 - - - C5 - - - E5 -',
+            'F#5 - - - A5 - D6 - - - C6 - B5 - A5 -',
+            'B5 - - - - - - - F#5 - - - D#5 - - -',
+            'E6 - - - D6 - B5 - - - G5 - B5 - E6 -',
+            'C6 - - - B5 - G5 - - - E5 - G5 - C6 -',
+            'A5 - - - C6 - E6 - - - D6 - C6 - A5 -',
+            'B5 - - - D#6 - F#6 - - - - - D#6 - - -',
+          ]
+        },
+        B: {
+          chords: ['Am', 'Em', 'C', 'B', 'Am', 'Em', 'F', 'B'], drums: 'four', bass: 'drive16', arp: 'updown', pad: true, lead: [
+            'C6 - - - - - B5 - A5 - - - - - E5 -',
+            'G5 - - - - - F#5 - E5 - - - B4 - - -',
+            'E5 - - - G5 - C6 - - - B5 - A5 - G5 -',
+            'F#5 - - - - - - - D#5 - - - F#5 - - -',
+            'A5 - - - C6 - E6 - - - F6 - E6 - C6 -',
+            'B5 - - - - - G5 - - - E5 - G5 - B5 -',
+            'A5 - - - C6 - - - F6 - - - E6 - - -',
+            'D#6 - - - - - - - B5 - - - F#5 - - -',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A', 'B'],
+    },
+    // 流沙蝎后 — a frantic phrygian-dominant chase on koto
+    bossDune: {
+      bpm: 150, kit: 'taiko', inst: { lead: 'koto', arp: 'pulse', bass: 'saw' }, delay: 0.5,
+      sections: {
+        I: { chords: ['A', 'Bb', 'A', 'Bb'], drums: 'drive', bass: 'gallop', arp: 'up16' },
+        A: {
+          chords: ['A', 'Bb', 'Gm', 'A', 'Dm', 'C', 'Bb', 'A'], drums: 'gallop', bass: 'gallop', arp: 'up16', lead: [
+            'A5 - Bb5 - C#6 - - - D6 - C#6 - Bb5 - A5 -',
+            'Bb5 - - - - - A5 - G5 - - - F5 - - -',
+            'G5 - A5 - Bb5 - - - D6 - - - C#6 - Bb5 -',
+            'A5 - - - - - - - E5 - - - C#5 - - -',
+            'D6 - - - F6 - - - A6 - G6 - F6 - E6 -',
+            'E6 - - - - - C6 - G5 - - - E5 - - -',
+            'D6 - - - C6 - Bb5 - A5 - - - G5 - - -',
+            'A5 - - - C#6 - - - E6 - - - - - - -',
+          ]
+        },
+        B: {
+          chords: ['Dm', 'A', 'Bb', 'A', 'Dm', 'A', 'Gm', 'A'], drums: 'four', bass: 'drive16', arp: 'updown', pad: true, lead: [
+            'F6 - - - E6 - D6 - - - A5 - - - - -',
+            'C#6 - - - - - E6 - A5 - - - - - - -',
+            'D6 - - - Bb5 - - - F5 - - - G5 - A5 -',
+            'A5 - - - - - - - C#6 - - - - - - -',
+            'D6 - F6 - A6 - - - G6 - F6 - E6 - D6 -',
+            'C#6 - - - - - A5 - E5 - - - - - - -',
+            'Bb5 - - - D6 - - - G5 - - - Bb5 - - -',
+            'A5 - - - - - - - C#6 - - - E6 - - -',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A', 'B'],
+    },
+    // 炎铸巨像 — pounding anvil rhythm under a driving square lead
+    bossForge: {
+      bpm: 154, inst: { lead: 'square', arp: 'pulse', bass: 'saw' }, delay: 0.5,
+      sections: {
+        I: { chords: ['F#m', 'F#m', 'D', 'C#'], drums: 'drive', bass: 'drive16', arp: 'up16' },
+        A: {
+          chords: ['F#m', 'D', 'E', 'C#', 'F#m', 'D', 'Bm', 'C#'], drums: 'four', bass: 'oct8', arp: 'up16', lead: [
+            'F#5 - - F#5 - - A5 - C#6 - - - B5 - A5 -',
+            'A5 - - - F#5 - - - D5 - - - F#5 - - -',
+            'G#5 - - G#5 - - B5 - E6 - - - D6 - C#6 -',
+            'C#6 - - - - - - - G#5 - - - F5 - - -',
+            'F#6 - - - E6 - C#6 - - - A5 - C#6 - F#6 -',
+            'F#6 - - - D6 - - - A5 - - - F#5 - - -',
+            'B5 - - - D6 - F#6 - - - E6 - D6 - B5 -',
+            'C#6 - - - - - - - G#5 - - - C#6 - - -',
+          ]
+        },
+        B: {
+          chords: ['Bm', 'F#m', 'D', 'C#', 'Bm', 'F#m', 'G', 'C#'], drums: 'drive', bass: 'drive16', arp: 'updown', pad: true, lead: [
+            'D6 - - - - - C#6 - B5 - - - - - F#5 -',
+            'A5 - - - - - G#5 - F#5 - - - - - - -',
+            'F#5 - - - A5 - - - D6 - - - C#6 - B5 -',
+            'G#5 - - - - - - - F5 - - - - - - -',
+            'B5 - - - D6 - - - F#6 - - - G6 - F#6 -',
+            'F#6 - - - C#6 - - - A5 - - - F#5 - - -',
+            'G5 - - - B5 - - - D6 - - - B5 - - -',
+            'C#6 - - - - - - - F6 - - - G#6 - - -',
+          ]
+        },
+      }, order: ['I', 'A', 'B', 'A', 'B'],
+    },
     rest: {
       bpm: 88, inst: { lead: 'keys', arp: 'keys', bass: 'sub' }, delay: 0.75,
       sections: {

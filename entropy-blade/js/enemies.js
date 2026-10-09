@@ -1,6 +1,6 @@
 'use strict';
 // =====================================================================
-//  ENEMIES — sprites (3 biome palettes) + base class + AI
+//  ENEMIES — sprites (per-map palettes) + base class + AI
 // =====================================================================
 const EPAL = {
   bug: [
@@ -34,7 +34,7 @@ const EPAL = {
     { armor: '#4a5a7a', armorD: '#2a3248', trim: '#bfe6ff', visor: '#9fe8ff', steel: '#e8f0ff', cloth: '#1e2638' },
   ],
 };
-const BIOME_GLOW = ['#ffa040', '#45f0ff', '#ff3048', '#9fd8ff'];
+const BIOME_GLOW = ['#ffa040', '#45f0ff', '#ff3048', '#9fd8ff', '#b8f060', '#ffc850', '#ff7a2a'];
 
 // ---------- custom (non-rig) sprite bakers ----------
 function bakeCustom(name, w, h, ox, oy, defs) {
@@ -348,7 +348,8 @@ class Enemy extends Ent {
     super(x, y, D.w, D.h);
     this.type = type; this.D = D;
     this.bi = G.room ? G.room.bi : 0;
-    this.spr = SPR[D.spr + this.bi] || SPR[D.spr];
+    // per-map palette bake, else the type's own bake, else the first map's palette
+    this.spr = SPR[D.spr + this.bi] || SPR[D.spr] || SPR[D.spr + 0];
     const diff = G.run ? G.run.diff : { hp: 1, dmg: 1 };
     this.elite = !!o.elite;
     const H = G.run && G.run.hard;
@@ -374,6 +375,7 @@ class Enemy extends Ent {
     let m = 1;
     if (this.st.vulnT > 0) m *= 1.2;
     if (this.state === 'stun') m *= 1.25;
+    if (this.D.taken) m *= this.D.taken(this, h);
     return m;
   }
   frame() { return animFrame(this.spr, this.anim, this.animT); }
@@ -415,6 +417,8 @@ class Enemy extends Ent {
   }
   die(h) {
     if (this.dead) return;
+    // some foes cheat death once (沙俑 复形)
+    if (this.D.preDie && this.D.preDie(this, h || {})) return;
     this.dead = true;
     const fr = this.frame();
     FX.disintegrate(fr, this.spr.ox, this.spr.oy, this.x, this.y, this.face < 0, BIOME_GLOW[this.bi], h && h.heavy ? 1.6 : 1);

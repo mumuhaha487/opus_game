@@ -13,7 +13,7 @@ function eveOrbShot(p, o) {
     explodeP(q.x, q.y, o.r || 50, o.boom, { c: o.c, src: o.src || 'skill', ky: -240, kx: 160, shake: 0.35, noProc: false, sound: 'explode', pitch: 1.1, wx: hit.wx });
     if (o.shards) for (let i = 0; i < o.shards; i++) {
       const a = i * TAU / o.shards;
-      G.projs.push(new Proj({ team: 'p', x: q.x, y: q.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, kind: 'shard', r: 2.5, c: o.c, c2: '#ffffff', life: 0.45, hit: p.makeHit({ dmg: 0.5, kx: 40, ky: -40, stun: 0.2, src: o.src || 'skill', wx: hit.wx }) }));
+      G.projs.push(new Proj({ team: 'p', x: q.x, y: q.y, vx: Math.cos(a) * 260, vy: Math.sin(a) * 260, kind: 'shard', r: 2.5, c: o.c, c2: '#ffffff', life: 0.45, hit: p.makeHit({ dmg: o.shardDmg || 0.5, kx: 40, ky: -40, stun: 0.2, src: o.src || 'skill', wx: hit.wx }) }));
     }
   };
   const pr = new Proj({

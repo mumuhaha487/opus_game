@@ -36,10 +36,13 @@ function autoStart(q) {
   let trial = null;
   if (q.get('hard')) { trial = {}; for (const t of q.get('hard').split(',')) { const [id, lv] = t.split(':'); trial[id] = +(lv || 1); } }
   startRun(hero, q.get('weapon'), trial, q.get('mode') || 'normal');
-  // scene=N (0..3) or legacy biome=N
-  let scene = q.has('scene') ? +q.get('scene') : SCENES.findIndex(s => s.bi === +(q.get('biome') || 0));
+  // route=4,5,6,2 forces the map of every scene; scene=N (0..3) and/or biome=N (any map; picks the scene that offers it unless scene is given)
+  if (q.get('route')) q.get('route').split(',').forEach((b, i) => { if (BIOMES[+b] && i < SCENES.length) G.run.route[i] = +b; });
+  const want = q.has('biome') ? +q.get('biome') : null;
+  let scene = q.has('scene') ? +q.get('scene') : want !== null ? SCENES.findIndex(s => (s.opts || [s.bi]).includes(want)) : 0;
   scene = clamp(scene < 0 ? 0 : scene, 0, SCENES.length - 1);
-  G.run.scene = scene; G.run.biome = SCENES[scene].bi;
+  if (want !== null && BIOMES[want]) G.run.route[scene] = want;
+  G.run.scene = scene; G.run.biome = sceneBiome(G.run, scene);
   const room = q.get('room');
   if (room) enterRoom({ type: room, reward: q.get('reward') || 'bless' });
   const P = G.player;

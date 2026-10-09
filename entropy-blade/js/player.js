@@ -19,9 +19,9 @@ class Player extends Ent {
     this.mods = {}; this.flags = {}; this.counters = {};
     this.secrets = {};
     for (const id in SKILLS) { const S = SKILLS[id]; if (S.hero === heroId && S.def) this.secrets[S.slot] = { id, lv: 1 }; }
-    // 技能 (U + direction): every slot known from the start, each on its own cooldown
-    this.uskills = {}; this.ucd = {}; this.lastU = null;
-    for (const id in USKILLS) { const U = USKILLS[id]; if (U.hero === heroId) { this.uskills[U.slot] = { id, lv: 1 }; this.ucd[U.slot] = 0; } }
+    // 技能 (U + direction): every slot known from the start, no cooldown — the stage's own recovery is the only limit
+    this.uskills = {}; this.lastU = null;
+    for (const id in USKILLS) { const U = USKILLS[id]; if (U.hero === heroId) this.uskills[U.slot] = { id, lv: 1 }; }
     this.arts = { up: null, down: null, dash: null };
     this.tech = {};
     this.recalc();
@@ -33,7 +33,7 @@ class Player extends Ent {
     this.jumpsLeft = 0; this.coyote = 0; this.jumpBuf = 0; this.jumpHeld = false;
     this.inv = 0; this.hurtT = 0; this.hurtFlash = -1; this.armorT = 0; this.ironT = 0;
     this.combo = 0; this.comboT = 0; this.maxCombo = 0;
-    this.anim = 'idle'; this.animT = 0; this.airChains = 0; this.airRises = 0;
+    this.anim = 'idle'; this.animT = 0; this.airChains = 0; this.airRises = 0; this.uLifts = 0;
     this.dealt = 0; this.trail = 0; this.hidden = false; this.squash = 0; this.landT = 0;
     this.lastMove = null; this.chainT = 0; this.dropT = 0; this.deadT = 0;
     this.revives = 0; this.ghostT = 0;
@@ -196,7 +196,6 @@ class Player extends Ent {
       if (this.ironT <= 0 && this.ironLv >= 3) explodeP(this.x, this.cy, 70, 2.5 * skMul(this, 'gao_iron'), { c: '#ffd36a', heavy: true, src: 'skill', wx: { fam: 'sk', id: 'gao_iron' }, shake: 0.5, noProc: false });
     }
     this.manaFlash -= dt;
-    for (const k in this.ucd) if (this.ucd[k] > 0) this.ucd[k] -= dt;
     if (this.chillT > 0) { this.chillT -= dt; if (Math.random() < 0.25) FX.add({ k: 'px', x: this.x + rand(-6, 6), y: this.y - rand(4, 28), vx: 0, vy: -12, life: 0.4, s: 1.5, c: '#bfe6ff', glow: true }); }
     if (!this.dead && !(this.move && this.move.m.ult) && this.mana < this.stats.maxMana) this.mana = Math.min(this.stats.maxMana, this.mana + this.stats.manaRegen * dt);
     if (this.comboT > 0 && !(this.flags.comboFreeze && G.enemies.some(e => !e.dead))) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
@@ -229,7 +228,7 @@ class Player extends Ent {
       case 'hurt':
         this.hurtT -= dt;
         this.vx = approach(this.vx, 0, 500 * dt);
-        if (this.tech.recover && Input.hit('dash') && this.dashes > 0) {
+        if (this.tech.recover && !this.hidden && Input.hit('dash') && this.dashes > 0) {
           this.dashes--; this.state = 'normal'; this.inv = Math.max(this.inv, 0.45); this.vy = Math.min(this.vy, -120);
           FX.ring(this.x, this.cy, 4, 24, '#ffffff', 0.25, 2); FX.text(this.x, this.y - this.h - 6, '受身', '#ffffff');
           Sound.play('dash', { x: this.x, pitch: 1.3 });
@@ -247,9 +246,10 @@ class Player extends Ent {
     const wasGround = this.onGround;
     moveBody(this, dt, G.room);
     if (this.onGround) {
-      this.coyote = 0.1; this.jumpsLeft = this.stats.jumps - 1; this.airChains = 0; this.airRises = 0; this.airRefill = false; this.wallT = 0;
+      this.coyote = 0.1; this.jumpsLeft = this.stats.jumps - 1; this.airChains = 0; this.airRises = 0; this.uLifts = 0; this.airRefill = false; this.wallT = 0;
       if (!wasGround) this.onLand(fallV);
       if (this.onLandOnce) { const f = this.onLandOnce; this.onLandOnce = null; f(this); }
+      if (this.inPool('lava')) this.lavaBurn();
     } else {
       this.coyote -= dt;
       // wall slide: pressing into a wall while falling
@@ -260,6 +260,20 @@ class Player extends Ent {
     this.updAnim(dt);
   }
   onIce() { return this.onGround && this.groundT === 1 && G.room && G.room.ice && G.room.ice.has(Math.floor(this.x / TILE)); }
+  // standing in a 泥沼 mud pool / 熔渠 molten channel (the sunken floor of those columns)
+  inPool(kind) {
+    const R = G.room, set = R && R[kind], tx = Math.floor(this.x / TILE);
+    return !!(set && this.onGround && this.groundT === 1 && set.has(tx) && this.y >= R.gy[tx] * TILE - 1);
+  }
+  lavaBurn() {
+    this.vy = -400; this.onGround = false;
+    FX.burst(this.x, this.y - 2, { n: 14, c: ['#ffd36a', '#ff7a2a', '#ffffff'], sp: [40, 140], ang: -Math.PI / 2, spread: 1.2, glow: true });
+    Sound.play('fire', { x: this.x });
+    if (G.time - (this.counters.lavaT || -9) > 0.5) {
+      this.counters.lavaT = G.time;
+      if (hurtPlayer(Math.max(6, Math.round(this.maxHp * 0.07)), this.x, { noStagger: true })) FX.text(this.x, this.y - this.h - 10, '灼烧', '#ff8a3a', { size: 8 });
+    }
+  }
   approachVelocity(target, acc, dt) {
     this.vx = approach(this.vx, target, Math.max(acc, this.dashBrakePending ? 2200 : 0) * dt);
     // Keep braking armed through windup and later authored velocity tracks.
@@ -272,7 +286,9 @@ class Player extends Ent {
     this.chillT = Math.max(this.chillT || 0, t);
   }
   updNormal(dt, ix) {
-    const sp = this.hero.speed * this.stats.speedMul * this.dyn.spd * (this.chillT > 0 ? 0.62 : 1) * (this.counters.wxSpdT > G.time ? 1.25 : 1);   // 虎踞
+    const mud = this.inPool('mud');
+    const sp = this.hero.speed * this.stats.speedMul * this.dyn.spd * (this.chillT > 0 ? 0.62 : 1) * (this.counters.wxSpdT > G.time ? 1.25 : 1) * (mud ? 0.68 : 1);   // 虎踞 / 泥沼
+    if (mud && ix && Math.random() < 0.25) FX.add({ k: 'px', x: this.x - ix * 5, y: this.y - 1, vx: -ix * rand(10, 40), vy: -rand(30, 70), g: 400, life: 0.35, s: 1.5, c: pick(['#4a5232', '#7a8a52']) });
     const ice = this.onIce();
     const acc = this.onGround ? (ice ? (ix ? 420 : 160) : 2400) : 1600;
     if (ice && Math.abs(this.vx) > 60 && Math.random() < 0.2) FX.add({ k: 'px', x: this.x - sign(this.vx) * 4, y: this.y - 1, vx: -this.vx * 0.2, vy: -rand(10, 30), life: 0.3, s: 1.5, c: '#dff4ff', glow: true });
@@ -322,7 +338,7 @@ class Player extends Ent {
     this.vy = -(this.tech.wallRun ? 430 : 385);
     this.vx = -d * 230; this.face = -d;
     this.wallT = 0; this.wallLock = 0.14; this.jumpBuf = 0; this.jumpHeld = true;
-    this.airChains = 0; this.airRises = 0;
+    this.airChains = 0; this.airRises = 0; this.uLifts = 0;
     if (this.tech.wallRun) this.jumpsLeft = this.stats.jumps - 1; else this.jumpsLeft = Math.max(this.jumpsLeft, 1);
     Sound.play('jump', { x: this.x, pitch: 1.2 });
     FX.dust(this.x + d * this.w / 2, this.y - 10, 6, -d);
@@ -414,7 +430,7 @@ class Player extends Ent {
     // 秘技 派生: press I again during the skill (or its follow-on moves)
     if (Input.hit('ult') && !m.ult && this.followOf(m) && mv.t >= (m.followAt !== undefined ? m.followAt : Math.min(m.cancel, 0.2)) && this.tryFollow(m.skill)) return;
     // 技能 stages: press U again during a stage for the next one
-    if (Input.hit('skill') && m.uskill) { const nx = this.uNext(); if (nx) { this.startUStage(nx.U, nx.stage); return; } }
+    if (Input.hit('skill') && m.uskill) { const nx = this.uNext(this.uSlot()); if (nx) { this.startUStage(nx.U, nx.stage); return; } }
     // a buffered 秘技 / 技能 press wins over later attack presses
     if (Input.hit('ult')) { mv.buf = 'ult'; mv.bufSlot = this.secretSlot(); }
     else if (Input.hit('skill')) { mv.buf = 'skill'; mv.bufSlot = this.uSlot(); }
@@ -523,10 +539,7 @@ class Player extends Ent {
     if (this.ghostT <= 0) { this.ghostT = 0.025; FX.ghost(this.frame(), this.spr.ox, this.spr.oy, this.x, this.y, this.face < 0, this.hero.color, 0.22); }
     if (Input.hit('attack')) { const m = this.pickAttack(null); if (m) { this.endDash(); this.startMove(m); return; } }
     // 冲刺 + U: the dash 技能
-    if (Input.hit('skill')) {
-      if (this.uReady('dash')) { this.endDash(); this.trySkill('dash'); return; }
-      this.uDenied();
-    }
+    if (Input.hit('skill') && this.uskills.dash) { this.endDash(); this.trySkill('dash'); return; }
     if (Input.hit('jump')) { this.endDash(); this.jumpBuf = 0.13; this.tryJump(); return; }
     if (this.dashT <= 0) {
       this.postDashT = 0.14;
@@ -606,20 +619,16 @@ class Player extends Ent {
     if (S.ult) { this.fire('onUlt'); G.stats.ults++; } else G.stats.skills++;
     return true;
   }
-  // ---------- 技能 (U + direction, free, per-slot cooldown) ----------
+  // ---------- 技能 (U + direction, free, no cooldown) ----------
   uSlot() {
     if (this.state === 'dash' || this.postDashT > 0) return 'dash';
     if (Input.down('up')) return 'up';
     if (Input.down('down')) return 'down';
     return 'shot';
   }
-  uReady(slot) { return !!this.uskills[slot] && !(this.ucd[slot] > 0); }
-  uDenied() {
-    Sound.play('error');
-    if (G.time - (this.counters.ucdT || -9) > 0.6) { this.counters.ucdT = G.time; FX.text(this.x, this.y - this.h - 10, '技能冷却中', '#9fe8c8', { size: 8 }); }
-  }
-  // the next stage of the 技能 being cast (or just finished), if its level has opened it
-  uNext() {
+  // the next stage of the 技能 being cast (or just finished), if its level has opened it.
+  // A plain U (or the same direction) continues the chain; another direction starts its own 技能.
+  uNext(slot) {
     const m = this.state === 'move' && this.move.m;
     let id, stage;
     if (m && m.uskill) {
@@ -629,6 +638,7 @@ class Player extends Ent {
     else return null;
     const U = USKILLS[id], nx = stage + 1;
     if (!U || nx >= wxAt(U, this.uLv(id)).n) return null;
+    if (slot && slot !== 'shot' && slot !== U.slot) return null;
     return { U, stage: nx };
   }
   startUStage(U, stage) {
@@ -640,14 +650,14 @@ class Player extends Ent {
     }
   }
   trySkill(slotOverride) {
-    const nx = this.uNext();
-    if (nx) { this.startUStage(nx.U, nx.stage); return true; }
     const slot = slotOverride || this.uSlot();
+    const nx = this.uNext(slot);
+    if (nx) { this.startUStage(nx.U, nx.stage); return true; }
     const s = this.uskills[slot];
     if (!s) return false;
-    if (!this.uReady(slot)) { this.uDenied(); return false; }
+    // no cooldown, but a fresh cast still waits for the current move's recovery (the press is buffered)
+    if (this.state === 'move' && this.move.t < this.move.m.cancel) return false;
     const U = USKILLS[s.id];
-    this.ucd[slot] = uCooldown(U);
     this.startUStage(U, 0);
     G.stats.uskills = (G.stats.uskills || 0) + 1;
     return true;

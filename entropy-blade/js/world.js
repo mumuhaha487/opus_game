@@ -5,33 +5,52 @@
 const BIOMES = [
   {
     id: 'sakura', name: '落樱古道', en: 'SAKURA PASS', music: 'bamboo', ambient: '#c8a8a8', boss: 'warden',
-    accent: '#ffb070', accent2: '#ff9ab8',
+    accent: '#ffb070', accent2: '#ff9ab8', layouts: { field: 3, tiers: 2.4, trench: 1.6, tall: 1.2 },
     tile: { base: '#33261f', dark: '#1f1714', line: '#45342a', top: '#8cc850', topD: '#4f8030', topB: '#3c2e22', edge: '#120c0a', plat: '#6e4c2e', platTop: '#d8a466', platD: '#3c2818' },
   },
   {
     id: 'crystal', name: '晶渊回廊', en: 'CRYSTAL ABYSS', music: 'crystal', ambient: '#7f8fc4', boss: 'empress',
-    accent: '#45f0ff', accent2: '#b26cff',
+    accent: '#45f0ff', accent2: '#b26cff', layouts: { cave: 3, tall: 2, trench: 1.6, field: 1 },
     tile: { base: '#152338', dark: '#0c1626', line: '#1d3150', top: '#3fe6c4', topD: '#1c7d72', topB: '#22405a', edge: '#060c16', plat: '#2a3d5a', platTop: '#7ff7ff', platD: '#16253a' },
   },
   {
     id: 'core', name: '熵能核心', en: 'ENTROPY CORE', music: 'core', ambient: '#a07c8c', boss: 'king',
-    accent: '#ff3048', accent2: '#ffb347',
+    accent: '#ff3048', accent2: '#ffb347', layouts: { field: 2, tall: 2, trench: 2, tiers: 1.2 },
     tile: { base: '#1a0b14', dark: '#10060c', line: '#2a1220', top: '#e8b84a', topD: '#8a5a1e', topB: '#3a1424', edge: '#070205', plat: '#2c1420', platTop: '#ff3048', platD: '#1a0a12' },
   },
   {
     id: 'snow', name: '苍雪寒山', en: 'FROSTPEAK TEMPLE', music: 'snow', ambient: '#a8b8d8', boss: 'yukionna',
-    accent: '#bfe6ff', accent2: '#ffb070',
+    accent: '#bfe6ff', accent2: '#ffb070', layouts: { tiers: 3, field: 1.6, trench: 2, tall: 1.4 },
     tile: { base: '#2a3044', dark: '#181c2a', line: '#3a4258', top: '#f4f9ff', topD: '#b8c8e2', topB: '#5a6682', edge: '#0c0e16', plat: '#5a4636', platTop: '#eef5ff', platD: '#2e231c' },
   },
+  {
+    // night rain over a drowned shrine marsh; mud pools drag at your feet
+    id: 'mire', name: '瘴雨沼泽', en: 'RAINMIRE MARSH', music: 'mire', ambient: '#8aa894', boss: 'toad',
+    accent: '#a8e070', accent2: '#e8d070', layouts: { bog: 3, field: 2, tiers: 1.2, trench: 1.2 },
+    tile: { base: '#252a1e', dark: '#141810', line: '#343c28', top: '#7aa848', topD: '#3e5e2a', topB: '#2a3220', edge: '#0a0c08', plat: '#4a3a26', platTop: '#a8c070', platD: '#2a2016' },
+  },
+  {
+    // a sand-buried walled city under a white afternoon sun
+    id: 'dune', name: '黄沙废城', en: 'DUNE RUINS', music: 'dune', ambient: '#d0b088', boss: 'scorpqueen',
+    accent: '#ffd070', accent2: '#ff8a4a', layouts: { dunes: 3, tiers: 1.8, field: 1.4, tall: 1.2 },
+    tile: { base: '#6a4a2c', dark: '#43301e', line: '#7e5c38', top: '#f0c878', topD: '#c89850', topB: '#8a6438', edge: '#2a1a0e', plat: '#7a5a3a', platTop: '#f4d8a0', platD: '#4a3220' },
+  },
+  {
+    // an iron foundry city on a volcano; molten channels burn whoever lands in them
+    id: 'forge', name: '熔铸炉城', en: 'CINDER FOUNDRY', music: 'forge', ambient: '#9c8478', boss: 'colossus',
+    accent: '#ff9a3a', accent2: '#ffd36a', layouts: { foundry: 3, tall: 1.6, trench: 1.4, field: 1 },
+    tile: { base: '#2c2729', dark: '#181517', line: '#3c3539', top: '#c8834a', topD: '#7a4a2a', topB: '#3a2a26', edge: '#0a0808', plat: '#4a4448', platTop: '#e8a050', platD: '#26222a' },
+  },
 ];
-// a run = 第一大关 (three scenes, each its own map type, monsters and boss) + 终章
+// a run = 第一大关 (three scenes) + 终章. Each scene rolls one of its maps per run (see planRoute):
+// every map has its own monsters and boss, and a map never repeats within a run.
 const SCENES = [
-  { bi: 0, chapter: 1, label: '第一大关 · 其一', layouts: { field: 3, tiers: 2.4, trench: 1.6, tall: 1.2 } },
-  { bi: 3, chapter: 1, label: '第一大关 · 其二', layouts: { tiers: 3, field: 1.6, trench: 2, tall: 1.4 } },
-  { bi: 1, chapter: 1, label: '第一大关 · 其三', layouts: { cave: 3, tall: 2, trench: 1.6, field: 1 } },
-  { bi: 2, chapter: 2, label: '终章', layouts: { field: 2, tall: 2, trench: 2, tiers: 1.2 }, final: true },
+  { bi: 0, opts: [0, 4], chapter: 1, label: '第一大关 · 其一' },
+  { bi: 3, opts: [3, 5, 1], chapter: 1, label: '第一大关 · 其二' },
+  { bi: 1, opts: [1, 6, 3], chapter: 1, label: '第一大关 · 其三' },
+  { bi: 2, opts: [2], chapter: 2, label: '终章', final: true },
 ];
-const LAYOUT_NAMES = { field: '平野', tiers: '阶台', trench: '断沟', tall: '高阁', cave: '洞窟' };
+const LAYOUT_NAMES = { field: '平野', tiers: '阶台', trench: '断沟', tall: '高阁', cave: '洞窟', bog: '泥沼', dunes: '沙丘', foundry: '熔渠' };
 
 // ---------- dithered gradient ----------
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -272,6 +291,196 @@ function buildBackground(bi) {
     });
     b.layers.push({ c: far, f: 0.06, y: 4 }, { c: mid, f: 0.18, y: 16, glow: midGlow }, { c: near, f: 0.42, y: 0 });
     b.snow = true;
+  } else if (bi === 4) {
+    // 瘴雨沼泽 — rain at night: a veiled moon, mist banks, drowned trees, stilt huts and a sunken gate
+    b.sky = ditherGrad(W, H, ['#05080a', '#0a1414', '#122220', '#1c322a', '#2a4436', '#3e5a44']);
+    const sx = b.sky.getContext('2d');
+    for (let i = 0; i < 24; i++) { sx.fillStyle = pick(['#9ab8a0', '#c8d8c0']); sx.fillRect(rng.int(0, W), rng.int(0, 60), 1, 1); }
+    const mg = sx.createRadialGradient(120, 60, 6, 120, 60, 80);
+    mg.addColorStop(0, 'rgba(220,240,200,0.4)'); mg.addColorStop(1, 'rgba(120,160,120,0)');
+    sx.fillStyle = mg; sx.fillRect(30, 0, 180, 150);
+    const moon = pixLayer(40, 40, x => { x.circ(20, 20, 13, '#dfe8c8'); x.circ(16, 17, 3, '#c8d4b0'); x.circ(24, 24, 2, '#ccd8b4'); });
+    sx.drawImage(moon, 100, 40);
+    // rain clouds dragging across the moon
+    for (let i = 0; i < 6; i++) { sx.fillStyle = i % 2 ? 'rgba(20,40,34,0.75)' : 'rgba(40,64,52,0.5)'; sx.fillRect(rng.int(-40, 300), 48 + i * 9 + rng.int(-3, 3), rng.int(80, 220), 2 + (i % 3)); }
+    // far: low rounded hills melting into mist
+    const far = pixLayer(480, 270, x => {
+      const hills = (base, amp, col, seed) => {
+        const pts = [[0, 270]];
+        for (let px = 0; px <= 480; px += 6) pts.push([px, base - Math.abs(Math.sin(px * 0.012 + seed)) * amp - Math.sin(px * 0.05 + seed) * 4]);
+        pts.push([480, 270]); x.poly(pts, col);
+      };
+      hills(170, 40, '#1a2c26', 0.7);
+      for (let i = 0; i < 3; i++) x.rect(0, 166 + i * 8, 480, 3, '#2a4034');
+      hills(196, 26, '#14221c', 2.3);
+    });
+    // mid: drowned trees hung with moss, stilt huts with warm windows, a half-sunk torii
+    const glowDots = [];
+    const mid = pixLayer(640, 270, x => {
+      const S = '#0e1814', M = '#24382c';
+      x.poly([[0, 270], [0, 232], [160, 226], [320, 234], [480, 224], [640, 232], [640, 270]], S);
+      x.rect(0, 238, 640, 2, '#2a4436');
+      const tree = (cx, base, h) => {
+        x.line(cx, base, cx - 2, base - h, 4, S);
+        for (let k = 0; k < 4; k++) {
+          const by = base - h * (0.55 + k * 0.12), dir = k % 2 ? 1 : -1, len = 16 + k * 3;
+          x.line(cx - 2, by, cx - 2 + dir * len, by - 8, 2, S);
+          for (let q = 0; q < 3; q++) { const mx = cx - 2 + dir * len * (0.4 + q * 0.25); x.line(mx, by - 6, mx, by + 6 + q * 4, 1, M); }
+        }
+        x.ell(cx - 2, base - h - 4, 16, 9, 0, S);
+      };
+      for (let i = 0; i < 7; i++) { const tx = rng.int(0, 639), th = rng.int(46, 80); wrapDo(tx, 40, 640, X => tree(X, 236, th)); }
+      const hut = (cx, base) => {
+        for (const ox of [-12, -2, 10]) x.rect(cx + ox, base - 22, 2, 22, S);
+        x.rect(cx - 16, base - 34, 32, 12, S);
+        x.poly([[cx - 22, base - 34], [cx + 22, base - 34], [cx + 4, base - 48], [cx - 6, base - 48]], S);
+        glowDots.push([cx - 8, base - 30], [cx + 4, base - 30]);
+      };
+      hut(250, 232); hut(520, 228);
+      x.rect(400, 206, 3, 30, S); x.rect(428, 210, 3, 26, S);
+      x.poly([[392, 206], [440, 210], [438, 206], [394, 202]], S); x.rect(398, 212, 34, 2, S);
+    });
+    // windows and their wobbling reflections on the water
+    const midGlow = pixLayer(640, 270, x => { for (const [dx, dy] of glowDots) { x.rect(dx, dy, 3, 3, '#ffc070'); x.rect(dx, 241, 3, 1, '#a07040'); x.rect(dx + 1, 243, 2, 1, '#a07040'); } });
+    mid.getContext('2d').drawImage(midGlow, 0, 0);
+    // near: reeds and cattails, vines hanging from the top edge
+    const near = pixLayer(720, 270, x => {
+      for (let i = 0; i < 26; i++) {
+        const rx = rng.int(0, 719), h = rng.int(30, 70), lean = rng.range(-0.15, 0.15), tip = rng.chance(0.5);
+        wrapDo(rx, 10, 720, X => {
+          x.line(X, 270, X + h * lean, 270 - h, 1.6, '#0c1610');
+          if (tip) x.ell(X + h * lean, 270 - h + 4, 1.6, 5, lean, '#2a1c12');
+          x.poly([[X, 270], [X + 6 + h * lean * 0.5, 270 - h * 0.6], [X + 2, 270]], '#101c14');
+        });
+      }
+      for (let i = 0; i < 9; i++) {
+        let px = rng.int(0, 719), py = 0; const len = rng.int(20, 90);
+        for (let k = 0; k < len; k++) { px += Math.sin(k * 0.2 + i) * 0.5; py++; x.rect(px, py, 2, 1, '#0a140e'); if (k % 7 === 0) x.ell(px + 2, py, 3, 1.6, 0.5, '#122418'); }
+      }
+    });
+    b.layers.push({ c: far, f: 0.06, y: 4 }, { c: mid, f: 0.2, y: 14, glow: midGlow }, { c: near, f: 0.44, y: 10 });
+    b.rain = true; b.fireflies = true; b.haze = 'rgba(40,70,56,0.16)';
+  } else if (bi === 5) {
+    // 黄沙废城 — white afternoon sun over dunes, a sand-buried city wall, a broken stupa, a leaning watchtower
+    b.sky = ditherGrad(W, H, ['#5a8ac0', '#8ab0d0', '#d8d0b0', '#f0d098', '#f4b878', '#e89860']);
+    const sx = b.sky.getContext('2d');
+    const sg = sx.createRadialGradient(380, 70, 10, 380, 70, 140);
+    sg.addColorStop(0, 'rgba(255,250,220,0.75)'); sg.addColorStop(1, 'rgba(255,220,160,0)');
+    sx.fillStyle = sg; sx.fillRect(220, 0, 260, 220);
+    const sun = pixLayer(60, 60, x => { x.circ(30, 30, 20, '#fff8e0'); x.circ(30, 30, 16, '#ffffff'); });
+    sx.drawImage(sun, 350, 40);
+    for (let i = 0; i < 5; i++) { sx.fillStyle = 'rgba(255,240,210,0.35)'; sx.fillRect(rng.int(-40, 400), 26 + i * 18, rng.int(60, 160), 2); }
+    // far: two ranks of dunes with sunlit crests
+    const far = pixLayer(480, 270, x => {
+      const dune = (base, amp, col, crest, seed) => {
+        const yAt = px => base - (Math.sin(px * 0.014 + seed) * 0.6 + Math.sin(px * 0.031 + seed * 2) * 0.4) * amp;
+        const pts = [[0, 270]];
+        for (let px = 0; px <= 480; px += 4) pts.push([px, yAt(px)]);
+        pts.push([480, 270]); x.poly(pts, col);
+        for (let px = 0; px <= 480; px += 4) x.rect(px, yAt(px), 4, 1, crest);
+      };
+      dune(176, 26, '#d8a868', '#f4d498', 0.4);
+      dune(200, 20, '#c08a50', '#e8bc80', 2.2);
+    });
+    const glowDots = [];
+    const mid = pixLayer(640, 270, x => {
+      const S = '#8a5a34', SD = '#6a4428', L = '#b07a48';
+      x.poly([[0, 270], [0, 226], [140, 218], [300, 228], [460, 214], [640, 224], [640, 270]], '#a87444');
+      // crenellated city wall with a gate arch, sand drifted against it
+      x.rect(40, 196, 300, 34, S);
+      for (let k = 0; k < 15; k++) if (k % 4 !== 2) x.rect(40 + k * 20, 188, 12, 9, S);
+      x.rect(40, 196, 300, 2, L);
+      x.rect(170, 206, 26, 24, '#3a2414'); x.ell(183, 206, 13, 10, 0, '#3a2414');
+      x.poly([[40, 230], [90, 214], [130, 230]], '#c8945c'); x.poly([[250, 230], [300, 218], [345, 230]], '#c8945c');
+      // broken stupa
+      x.rect(432, 204, 36, 10, SD); x.ell(450, 198, 15, 12, 0, S);
+      x.rect(447, 176, 6, 12, SD); for (let k = 0; k < 4; k++) x.rect(445 + k, 174 - k * 4, 10 - k * 2, 2, SD);
+      x.poly([[456, 190], [465, 194], [460, 200]], '#a87444');
+      // leaning watchtower
+      x.save(); x.translate(560, 224); x.rotate(0.06);
+      x.rect(-9, -60, 18, 60, S); x.rect(-13, -66, 26, 6, SD); x.rect(-4, -50, 8, 10, '#3a2414');
+      x.restore();
+      glowDots.push([181, 214], [557, 175]);
+    });
+    const midGlow = pixLayer(640, 270, x => { for (const [dx, dy] of glowDots) x.rect(dx, dy, 3, 3, '#ffb050'); });
+    mid.getContext('2d').drawImage(midGlow, 0, 0);
+    // near: snapped columns and wind-carved rocks
+    const near = pixLayer(720, 270, x => {
+      for (let i = 0; i < 6; i++) {
+        const cx = rng.int(0, 719), h = rng.int(60, 140), j = rng.int(4, 12);
+        wrapDo(cx, 24, 720, X => {
+          x.rect(X, 270 - h, 14, h, '#5a3a20');
+          for (let k = 0; k < h; k += 12) x.rect(X, 270 - h + k, 14, 1, '#3e2814');
+          x.poly([[X, 270 - h], [X + 4, 270 - h - j], [X + 8, 270 - h - 3], [X + 14, 270 - h - j * 0.6], [X + 14, 270 - h]], '#5a3a20');
+        });
+      }
+      for (let i = 0; i < 5; i++) {
+        const rx = rng.int(0, 719), rw = rng.int(50, 110), rh = rng.int(16, 36);
+        wrapDo(rx, rw, 720, X => x.ell(X + rw / 2, 270, rw / 2, rh, 0, '#6a4426'));
+      }
+    });
+    b.layers.push({ c: far, f: 0.06, y: 8 }, { c: mid, f: 0.2, y: 16, glow: midGlow }, { c: near, f: 0.44, y: 14 });
+    b.sand = true; b.haze = 'rgba(240,200,140,0.1)';
+  } else if (bi === 6) {
+    // 熔铸炉城 — smoke-choked sky lit from below, a lava-veined volcano, chimneys and furnace halls
+    b.sky = ditherGrad(W, H, ['#0a0808', '#181012', '#2a1614', '#4a2216', '#7a3a1a', '#b85a22']);
+    const sx = b.sky.getContext('2d');
+    for (let i = 0; i < 8; i++) { sx.fillStyle = i % 2 ? 'rgba(30,20,20,0.6)' : 'rgba(60,34,26,0.45)'; sx.fillRect(rng.int(-60, 420), 18 + i * 16 + rng.int(-4, 4), rng.int(120, 260), 5 + (i % 3) * 2); }
+    // far: the volcano, its smoke plume and glowing lava veins
+    const farGlow = pixLayer(480, 270, x => {
+      for (let k = 0; k < 5; k++) { let px = 300 + rng.int(-10, 10), py = 98; for (let s = 0; s < 40; s++) { px += rng.int(-2, 2) + (k - 2) * 0.6; py += 2; x.rect(px, py, 2, 2, s < 8 ? '#ffd36a' : '#ff6a2a'); } }
+      x.ell(300, 96, 14, 4, 0, '#ffb347');
+    });
+    const far = pixLayer(480, 270, x => {
+      x.poly([[120, 270], [270, 100], [330, 96], [470, 270]], '#1e1414');
+      x.poly([[270, 100], [300, 104], [330, 96], [320, 120], [285, 122]], '#2a1a16');
+      for (let k = 0; k < 6; k++) x.ell(290 + k * 6, 80 - k * 14, 14 + k * 5, 8 + k * 2, 0, k % 2 ? '#241a1a' : '#2c2020');
+      const pts = [[0, 270]];
+      for (let px = 0; px <= 480; px += 8) pts.push([px, 214 - Math.abs(Math.sin(px * 0.02 + 1.1)) * 30]);
+      pts.push([480, 270]); x.poly(pts, '#160f10');
+    });
+    far.getContext('2d').drawImage(farGlow, 0, 0);
+    // mid: chimneys with ember mouths, furnace halls with glowing doors, a chain gantry
+    const glowDots = [];
+    const mid = pixLayer(640, 270, x => {
+      const S = '#120c0c', S2 = '#1c1414';
+      x.rect(0, 228, 640, 42, S);
+      for (let i = 0; i < 6; i++) {
+        const cx = rng.int(0, 639), h = rng.int(70, 130), w = rng.int(8, 14);
+        wrapDo(cx, w + 4, 640, X => { x.rect(X, 228 - h, w, h, S2); x.rect(X - 2, 228 - h, w + 4, 4, S); for (let k = 1; k < 4; k++) x.rect(X, 228 - h + k * h / 4, w, 1, S); });
+        glowDots.push([cx + 2, 228 - h - 1, w - 4]);
+      }
+      const hall = (cx, w, h) => {
+        x.rect(cx, 228 - h, w, h, S2); x.poly([[cx - 4, 228 - h], [cx + w / 2, 228 - h - 14], [cx + w + 4, 228 - h]], S2);
+        for (let k = 0; k < 3; k++) glowDots.push([cx + 8 + k * (w - 22) / 2, 214, 6]);
+      };
+      hall(80, 70, 40); hall(380, 90, 46);
+      x.rect(200, 150, 160, 4, S); for (let k = 0; k < 9; k++) x.line(200 + k * 20, 154, 210 + k * 20, 150, 1, S);
+      for (let k = 0; k < 4; k++) x.line(220 + k * 40, 154, 220 + k * 40, 174 + k * 6, 1, S);
+    });
+    const midGlow = pixLayer(640, 270, x => {
+      for (const [dx, dy, w] of glowDots) {
+        if (w > 6) { x.rect(dx, dy, w, 2, '#ff7a2a'); x.rect(dx + 1, dy - 2, w - 2, 2, '#ffd36a'); }
+        else { x.rect(dx, dy, w, 10, '#ff8a3a'); x.rect(dx + 1, dy + 2, w - 2, 7, '#ffd36a'); }
+      }
+    });
+    mid.getContext('2d').drawImage(midGlow, 0, 0);
+    // near: giant gears and hanging chains in silhouette
+    const near = pixLayer(720, 270, x => {
+      const gear = (cx, cy, r, teeth) => {
+        x.circ(cx, cy, r, '#0e0a0a');
+        for (let k = 0; k < teeth; k++) { const a = k * TAU / teeth; x.save(); x.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r); x.rotate(a); x.rect(-3, -4, 7, 8, '#0e0a0a'); x.restore(); }
+        x.circ(cx, cy, r * 0.35, '#1a1212'); x.circ(cx, cy, r * 0.15, '#0e0a0a');
+      };
+      gear(120, 250, 44, 14); gear(470, 262, 30, 10); gear(650, 240, 52, 16);
+      for (let i = 0; i < 7; i++) {
+        const cx = rng.int(0, 719), len = rng.int(40, 140);
+        for (let k = 0; k < len; k += 5) { x.rect(cx, k, 3, 4, '#100a0a'); x.rect(cx + 1, k + 1, 1, 2, '#2a1a16'); }
+        if (rng.chance(0.5)) x.poly([[cx - 4, len], [cx + 7, len], [cx + 1.5, len + 8]], '#100a0a');
+      }
+    });
+    b.layers.push({ c: far, f: 0.06, y: 6, glow: farGlow }, { c: mid, f: 0.2, y: 16, glow: midGlow }, { c: near, f: 0.44, y: 10 });
+    b.embers = true; b.ash = true; b.haze = 'rgba(60,24,12,0.16)';
   } else {
     b.sky = ditherGrad(W, H, ['#030003', '#0e0207', '#200510', '#3a0a18']);
     const sx = b.sky.getContext('2d');
@@ -320,6 +529,9 @@ function buildBackground(bi) {
   // screen-space ambient particles
   b.drops = [];
   for (let i = 0; i < 110; i++) b.drops.push({ x: rand(0, W), y: rand(0, H), s: rand(0.6, 1.4), p: rand(0, 1) });
+  // a second set for the layered effects (fireflies over rain, ash over embers)
+  b.motes = [];
+  for (let i = 0; i < 90; i++) b.motes.push({ x: rand(0, W), y: rand(0, H), s: rand(0.6, 1.4), p: rand(0, TAU) });
   BG[bi] = b;
   return b;
 }
@@ -343,7 +555,7 @@ function drawBackground(ctx, gctx, bi, camx, camy, t, roomH) {
       }
     }
     // haze between layers
-    ctx.fillStyle = bi === 0 ? 'rgba(150,70,90,0.12)' : bi === 1 ? 'rgba(5,30,50,0.2)' : bi === 3 ? 'rgba(60,80,130,0.14)' : 'rgba(40,5,15,0.2)';
+    ctx.fillStyle = b.haze || (bi === 0 ? 'rgba(150,70,90,0.12)' : bi === 1 ? 'rgba(5,30,50,0.2)' : bi === 3 ? 'rgba(60,80,130,0.14)' : 'rgba(40,5,15,0.2)');
     ctx.fillRect(0, 0, W, H);
   }
   if (b.shafts) {
@@ -435,6 +647,47 @@ function drawWeather(ctx, gctx, bi, camx, camy, t, dt, front) {
     }
     ctx.globalAlpha = 1; gctx.globalAlpha = 1;
   }
+  if (b.sand) {
+    // wind-driven sand: long grains racing sideways, wobbling as they go
+    for (let i = front ? 0 : 40; i < (front ? 40 : 110); i++) {
+      const d = b.drops[i];
+      d.x -= (front ? 260 : 150) * d.s * dt; d.p += dt;
+      d.y += Math.sin(d.p * 3 + i) * 12 * dt;
+      if (d.x < -20) { d.x = W + rand(0, 60); d.y = rand(0, H); }
+      if (d.y < -4 || d.y > H + 4) d.y = rand(0, H);
+      const x = ((d.x - camx * (front ? 0.5 : 0.15)) % (W + 40) + W + 40) % (W + 40) - 20;
+      ctx.globalAlpha = front ? 0.55 : 0.3;
+      ctx.fillStyle = i % 3 ? '#f4d8a0' : '#e0b070';
+      ctx.fillRect(Math.round(x), Math.round(d.y), front ? (i % 4 ? 2 : Math.round(6 * d.s)) : Math.round(3 * d.s), 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (b.ash) {
+    for (let i = front ? 0 : 30; i < (front ? 30 : 90); i++) {
+      const d = b.motes[i];
+      d.y += (front ? 26 : 14) * d.s * dt; d.p += dt * 0.6;
+      if (d.y > H + 4) { d.y = -4; d.x = rand(0, W + 40); }
+      const x = ((d.x + Math.sin(d.p * 1.3 + i) * 9 - camx * (front ? 0.5 : 0.15)) % W + W) % W;
+      ctx.globalAlpha = front ? 0.7 : 0.4;
+      ctx.fillStyle = i % 4 ? '#6a6060' : '#9a8a84';
+      ctx.fillRect(Math.round(x), Math.round(d.y), front && d.s > 1.1 ? 2 : 1, front && d.s > 1.1 ? 2 : 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (b.fireflies) {
+    // marsh fireflies: slow drifting, pulsing on and off
+    for (let i = front ? 0 : 20; i < (front ? 12 : 60); i++) {
+      const d = b.motes[i];
+      d.p += dt * (0.4 + d.s * 0.3);
+      const x = ((d.x + Math.sin(d.p + i) * 30 - camx * (front ? 0.5 : 0.2)) % W + W) % W;
+      const y = d.y * 0.7 + 50 + Math.sin(d.p * 1.7 + i * 2) * 14;
+      const a = Math.max(0, Math.sin(d.p * 2.3 + i * 1.7));
+      if (a < 0.05) continue;
+      ctx.globalAlpha = a; ctx.fillStyle = '#e8ff8a'; ctx.fillRect(Math.round(x), Math.round(y), front ? 2 : 1, front ? 2 : 1);
+      gctx.globalAlpha = a * 0.8; gctx.fillStyle = '#b8f060'; gctx.fillRect(Math.round(x) - 2, Math.round(y) - 2, 5, 5);
+    }
+    ctx.globalAlpha = 1; gctx.globalAlpha = 1;
+  }
 }
 
 // =====================================================================
@@ -484,6 +737,7 @@ function genRoom(seed, bi, type, layout) {
   R.type = type; R.seed = seed; R.layout = layout;
   const base = h - 3;
   const gy = new Array(w).fill(base);
+  const mud = [], lava = [];
   if (layout === 'field') {
     let x = 9;
     while (x < w - 22) {
@@ -515,7 +769,33 @@ function genRoom(seed, bi, type, layout) {
       for (let i = x; i < Math.min(w - 22, x + len); i++) gy[i] = clamp(base + off, base - 2, base + 1);
       x += len;
     }
+  } else if (layout === 'bog') {
+    // low banks between sunken mud pools (泥沼 slows whoever wades in)
+    let x = 9;
+    while (x < w - 22) {
+      const bank = rng.int(4, 8), pool = rng.int(4, 7), lift = rng.pick([0, 0, -1]);
+      for (let i = x; i < Math.min(w - 22, x + bank); i++) gy[i] = base + lift;
+      x += bank;
+      for (let i = x; i < Math.min(w - 22, x + pool); i++) { gy[i] = base + 1; mud.push(i); }
+      x += pool;
+    }
+  } else if (layout === 'dunes') {
+    // rolling dunes: two swells beating against each other
+    const ph = rng.range(0, TAU), ph2 = rng.range(0, TAU);
+    for (let i = 9; i < w - 22; i++) gy[i] = base - Math.round(1.4 + Math.sin(i * 0.23 + ph) * 1.2 + Math.sin(i * 0.09 + ph2) * 0.8);
+  } else if (layout === 'foundry') {
+    // iron floor cut by molten channels (熔渠 burns and throws you out), with raised casting blocks
+    let x = 10;
+    while (x < w - 24) {
+      const run = rng.int(6, 10);
+      if (rng.chance(0.45)) { const bx = x + rng.int(1, run - 4), bl = rng.int(2, 3); for (let i = bx; i < bx + bl; i++) gy[i] = base - 2; }
+      x += run;
+      const ch = rng.int(3, 4);
+      for (let i = x; i < Math.min(w - 24, x + ch); i++) { gy[i] = base + 2; lava.push(i); }
+      x += ch;
+    }
   }
+  if (bi === 4 && type === 'boss') for (const [a, b] of [[8, 13], [w - 14, w - 9]]) for (let i = a; i < b; i++) { gy[i] = base + 1; mud.push(i); }
   if (fight) for (let i = 1; i < w; i++) if (gy[i] - gy[i - 1] > 2) gy[i] = gy[i - 1] + 2;
   for (let tx = 0; tx < w; tx++) for (let ty = gy[tx]; ty < h; ty++) R.set(tx, ty, 1);
   for (let ty = 0; ty < h; ty++) { R.set(0, ty, 1); R.set(1, ty, 1); R.set(w - 1, ty, 1); R.set(w - 2, ty, 1); }
@@ -537,6 +817,9 @@ function genRoom(seed, bi, type, layout) {
       for (let i = ix; i < Math.min(w - 4, ix + il); i++) R.ice.add(i);
     }
   }
+  // 瘴雨沼泽 mud pools / 熔铸炉城 molten channels (only where the layout dug them)
+  R.mud = new Set(mud.filter(i => gy[i] > base));
+  R.lava = new Set(lava.filter(i => gy[i] > base));
   // platforms
   const plats = [];
   const tryPlat = (px, py, pw) => {
@@ -572,7 +855,7 @@ function genRoom(seed, bi, type, layout) {
   R.base = base;
   R.spawnX = 5 * TILE; R.spawnY = gy[5] * TILE;
   // spawn spots
-  for (let tx = 8; tx < w - 6; tx++) R.spots.push({ x: tx * TILE + 8, y: gy[tx] * TILE });
+  for (let tx = 8; tx < w - 6; tx++) if (!R.lava.has(tx)) R.spots.push({ x: tx * TILE + 8, y: gy[tx] * TILE });
   for (const p of plats) for (let tx = p.x; tx < p.x + p.w; tx++) R.spots.push({ x: tx * TILE + 8, y: p.y * TILE, plat: true });
   for (let tx = 10; tx < w - 8; tx += 2) R.airSpots.push({ x: tx * TILE, y: Math.max(3 * TILE, (gy[tx] - rng.int(5, 8)) * TILE) });
   R.airSpots = R.airSpots.filter(a => !R.solidPx(a.x, a.y) && !R.solidPx(a.x, a.y - 16) && !R.solidPx(a.x, a.y + 12));
@@ -591,6 +874,7 @@ function genProps(R, rng) {
   const place = (tx, kind, extra) => {
     if (used.has(tx) || used.has(tx - 1) || used.has(tx + 1)) return;
     if (gy[tx - 1] !== gy[tx] || gy[tx + 1] !== gy[tx]) return;
+    if (R.mud.has(tx) || R.lava.has(tx)) return;
     if (R.tile(tx, gy[tx] - 1) !== 0 || R.tile(tx, gy[tx] - 2) !== 0) return;
     used.add(tx);
     R.props.push(Object.assign({ kind, x: tx * TILE + 8, y: gy[tx] * TILE, seed: rng.int(0, 9999) }, extra || {}));
@@ -601,6 +885,9 @@ function genProps(R, rng) {
     if (bi === 0) place(tx, rng.weighted([{ w: 3, v: 'toro' }, { w: 3, v: 'bamboo' }, { w: 1.2, v: 'shrine' }, { w: 1.5, v: 'jizo' }, { w: 2.5, v: 'bush' }]), { col: '#ffb060' });
     else if (bi === 1) place(tx, rng.weighted([{ w: 4, v: 'crystal' }, { w: 3, v: 'shroom' }, { w: 2, v: 'rock' }]), { col: rng.pick(['#45f0ff', '#b26cff', '#6affc8']) });
     else if (bi === 3) place(tx, rng.weighted([{ w: 3.5, v: 'snowpine' }, { w: 2.5, v: 'toroSnow' }, { w: 1.6, v: 'jizoSnow' }, { w: 2, v: 'icespike' }, { w: 1.4, v: 'flags' }]), { col: '#ffb070' });
+    else if (bi === 4) place(tx, rng.weighted([{ w: 3, v: 'reeds' }, { w: 2, v: 'deadtree' }, { w: 1.4, v: 'frogidol' }, { w: 2.2, v: 'glowshroom' }, { w: 1.6, v: 'stump' }]), { col: '#b8f060' });
+    else if (bi === 5) place(tx, rng.weighted([{ w: 2.6, v: 'column' }, { w: 2.2, v: 'urns' }, { w: 1.4, v: 'skull' }, { w: 1.6, v: 'sandbrazier' }, { w: 1.8, v: 'banner' }]), { col: '#ffb050' });
+    else if (bi === 6) place(tx, rng.weighted([{ w: 2.4, v: 'anvil' }, { w: 2, v: 'crucible' }, { w: 2, v: 'pipes' }, { w: 1.6, v: 'ingots' }, { w: 1.4, v: 'gearprop' }]), { col: '#ff8a3a' });
     else place(tx, rng.weighted([{ w: 3, v: 'brazier' }, { w: 2, v: 'obelisk' }, { w: 3, v: 'rubble' }, { w: 1, v: 'statue' }]), { col: '#ff3048' });
   }
 }
@@ -634,6 +921,21 @@ function renderRoomTiles(R) {
             // frost-bitten granite with pale cracks
             for (let k = 0; k < 3; k++) { const hx = hash2(tx * 3 + k, ty * 11, 17); x.rect(px + Math.floor(hx * 14), py + Math.floor(hash2(tx, ty * 7 + k, 19) * 14), 2, 1, hx < 0.4 ? T.line : '#46506a'); }
             if (h < 0.15) { let cx = px + 3 + Math.floor(hash2(tx, ty, 23) * 8), cy = py + 2; for (let k = 0; k < 7; k++) { x.rect(cx, cy, 1, 1, '#4e5a78'); cx += Math.round(hash2(tx + k, ty, 29) * 2 - 1); cy += 2; } }
+          } else if (bi === 4) {
+            // waterlogged peat threaded with roots
+            for (let k = 0; k < 3; k++) { const hx = hash2(tx * 5 + k, ty * 3, 61); x.rect(px + Math.floor(hx * 14), py + Math.floor(hash2(tx, ty * 3 + k, 63) * 14), 2, 1, hx < 0.5 ? T.line : '#1c2216'); }
+            if (h < 0.18) x.line(px + 1, py + 3 + Math.floor(hash2(tx, ty, 65) * 6), px + 14, py + 6 + Math.floor(hash2(tx, ty, 66) * 6), 1, '#3a3222');
+          } else if (bi === 5) {
+            // sandstone in strata, sand speckle, the odd fossil shell
+            if (ty % 2 === 0) x.rect(px, py + 6, 16, 1, T.line);
+            x.rect(px, py + 12, 16, 1, mix(T.base, T.dark, 0.3));
+            for (let k = 0; k < 4; k++) { const hx = hash2(tx * 7 + k, ty * 5, 67); x.rect(px + Math.floor(hx * 15), py + Math.floor(hash2(tx, ty * 5 + k, 69) * 15), 1, 1, hx < 0.5 ? '#8a6a44' : '#5a3e24'); }
+            if (h < 0.05) { x.circ(px + 8, py + 9, 2.4, '#c8a878'); x.line(px + 6, py + 9, px + 10, py + 9, 0.6, '#8a6a44'); }
+          } else if (bi === 6) {
+            // riveted iron plates; now and then a seam glows with heat
+            x.rect(px, py, 16, 1, T.line); x.rect(px, py, 1, 16, T.line);
+            for (const [rx, ry] of [[2, 2], [13, 2], [2, 13], [13, 13]]) x.rect(px + rx, py + ry, 1, 1, '#5a5054');
+            if (h < 0.07) { let cx = px + 3 + Math.floor(hash2(tx, ty, 75) * 8), cy = py + 3; for (let k = 0; k < 6; k++) { x.rect(cx, cy, 1, 1, '#ff6a2a'); cx += Math.round(hash2(tx + k, ty, 77) * 2 - 1); cy += 2; } }
           } else {
             if (h < 0.25) { let cx = px + Math.floor(hash2(tx, ty, 3) * 12) + 2, cy = py + 2; for (let k = 0; k < 10; k++) { x.rect(cx, cy, 1, 1, '#4a1424'); cx += Math.round(hash2(tx + k, ty, 7) * 2 - 1); cy += 1; } }
             if (h > 0.9) x.rect(px + 6, py + 6, 3, 3, '#2a0e18');
@@ -661,6 +963,13 @@ function renderRoomTiles(R) {
           }
           if (lf) x.rect(px, py, 1, 5, T.top);
           if (rt) x.rect(px + 15, py, 1, 5, T.top);
+        } else if (up && R.mud.has(tx) && ty === R.gy[tx]) {
+          // murky pool surface with a scum line and the odd bubble
+          x.rect(px, py, 16, 5, '#2e3220'); x.rect(px, py, 16, 1, '#7a8a52'); x.rect(px, py + 1, 16, 1, '#4a5232');
+          if (hash2(tx, ty, 71) < 0.4) x.ell(px + 4 + Math.floor(hash2(tx, ty, 72) * 8), py + 3, 1.5, 1, 0, '#5a6a3e');
+        } else if (up && R.lava.has(tx) && ty === R.gy[tx]) {
+          x.rect(px, py, 16, 6, '#c8381a'); x.rect(px, py, 16, 3, '#ff7a2a'); x.rect(px, py, 16, 1, '#ffd36a');
+          if (hash2(tx, ty, 73) < 0.5) x.rect(px + 3 + Math.floor(hash2(tx, ty, 74) * 9), py + 2, 3, 1, '#ffe8a0');
         } else if (up) {
           x.rect(px, py, 16, 4, T.topB);
           x.rect(px, py, 16, 2, T.topD);
@@ -672,6 +981,18 @@ function renderRoomTiles(R) {
             for (let k = 0; k < 16; k += 2) { const hh = hash2(tx * 16 + k, ty, 31); if (hh < 0.55) x.rect(px + k, py - 1 - Math.floor(hh * 3), 1, 1 + Math.floor(hh * 3), hh < 0.25 ? T.top : T.topD); }
             if (h < 0.12) { x.rect(px + 7, py - 3, 1, 3, T.topD); x.rect(px + 6, py - 4, 3, 1, pick(['#ff9ab8', '#ffe08a', '#ffffff'])); }
             for (let k = 0; k < 16; k += 3) if (hash2(tx * 16 + k, ty, 33) < 0.3) x.rect(px + k, py + 4, 1, 1 + Math.floor(hash2(tx * 16 + k, ty, 34) * 2), T.topD);
+          } else if (bi === 4) {
+            // rank marsh grass and dripping moss
+            for (let k = 0; k < 16; k += 2) { const hh = hash2(tx * 16 + k, ty, 81); if (hh < 0.5) x.rect(px + k, py - 1 - Math.floor(hh * 4), 1, 1 + Math.floor(hh * 4), hh < 0.2 ? T.top : T.topD); }
+            for (let k = 0; k < 16; k += 3) if (hash2(tx * 16 + k, ty, 83) < 0.35) x.rect(px + k, py + 3, 1, 2 + Math.floor(hash2(tx * 16 + k, ty, 84) * 3), T.topD);
+          } else if (bi === 5) {
+            // wind ripples in the sand
+            x.rect(px, py, 16, 3, T.topD); x.rect(px, py, 16, 1, T.top);
+            if (h < 0.5) x.rect(px + 2 + Math.floor(hash2(tx, ty, 85) * 8), py + 2, 5, 1, T.top);
+            for (let k = 0; k < 16; k += 4) if (hash2(tx * 16 + k, ty, 86) < 0.3) x.rect(px + k, py - 1, 3, 1, T.top);
+          } else if (bi === 6) {
+            x.rect(px, py + 2, 16, 1, '#1a1416');
+            for (let k = 1; k < 16; k += 5) x.rect(px + k, py + 1, 2, 1, '#e8a050');
           } else {
             if (h < 0.5) x.rect(px + 7, py + 1, 2, 3, T.topD);
           }
@@ -686,6 +1007,9 @@ function renderRoomTiles(R) {
         if (bi === 0) { x.rect(px + (tx % 2 ? 7 : 11), py + 1, 1, 4, T.platD); x.rect(px + 2, py + 3, 3, 1, '#8a6440'); }
         if (bi === 2) x.rect(px + 4, py + 2, 8, 1, '#5a1a28');
         if (bi === 3) { x.rect(px, py, 16, 2, T.platTop); if (hash2(tx, ty, 61) < 0.5) x.rect(px + 4, py - 1, 6, 1, T.platTop); x.rect(px + (tx % 2 ? 7 : 11), py + 2, 1, 3, T.platD); }
+        if (bi === 4) { x.rect(px + (tx % 2 ? 5 : 11), py + 1, 1, 4, T.platD); x.line(px, py + 3, px + 16, py + 2, 0.6, '#8a7a50'); }
+        if (bi === 5) x.rect(px + 3, py + 2, 10, 1, '#c8a068');
+        if (bi === 6) for (let k = 2; k < 16; k += 4) x.rect(px + k, py + 2, 2, 2, '#1a1618');
         if (l) { x.rect(px, py, 1, 6, T.edge); x.poly([[px + 2, py + 6], [px + 6, py + 6], [px + 3, py + 11]], T.platD); }
         if (r) { x.rect(px + 15, py, 1, 6, T.edge); x.poly([[px + 10, py + 6], [px + 14, py + 6], [px + 13, py + 11]], T.platD); }
       }
@@ -696,7 +1020,13 @@ function renderRoomTiles(R) {
   R.tileGlow = pixLayer(pw, ph, x => {
     for (let ty = 0; ty < R.h; ty++) for (let tx = 0; tx < R.w; tx++) {
       const t = R.tile(tx, ty);
-      if (t === 1 && R.tile(tx, ty - 1) !== 1) { if (bi !== 3) x.rect(tx * TILE, ty * TILE, 16, 1, R.biome.tile.top); else if (R.ice.has(tx)) x.rect(tx * TILE, ty * TILE, 16, 2, '#6ab8f0'); }
+      if (t === 1 && R.tile(tx, ty - 1) !== 1) {
+        const pool = ty === R.gy[tx];
+        if (pool && R.lava.has(tx)) x.rect(tx * TILE, ty * TILE, 16, 4, '#ff7a2a');
+        else if (pool && R.mud.has(tx)) { /* murky water does not glow */ }
+        else if (bi !== 3) x.rect(tx * TILE, ty * TILE, 16, 1, R.biome.tile.top);
+        else if (R.ice.has(tx)) x.rect(tx * TILE, ty * TILE, 16, 2, '#6ab8f0');
+      }
       if (t === 2 && bi !== 3) x.rect(tx * TILE, ty * TILE, 16, 1, R.biome.tile.platTop);
     }
   });
@@ -712,7 +1042,14 @@ function renderRoomTiles(R) {
     if (p.kind === 'obelisk') R.lights.push({ x: p.x, y: p.y - 20, r: 60, c: '#ff3048' });
     if (p.kind === 'toroSnow') R.lights.push({ x: p.x, y: p.y - 18, r: 100, c: '#ffb070', flick: true });
     if (p.kind === 'icespike') R.lights.push({ x: p.x, y: p.y - 8, r: 50, c: '#9fd8ff' });
+    if (p.kind === 'frogidol') R.lights.push({ x: p.x, y: p.y - 14, r: 50, c: '#b8f060' });
+    if (p.kind === 'glowshroom') R.lights.push({ x: p.x, y: p.y - 6, r: 46, c: '#b08aff' });
+    if (p.kind === 'sandbrazier') R.lights.push({ x: p.x, y: p.y - 18, r: 100, c: '#ffb050', flick: true, fire: true });
+    if (p.kind === 'crucible') R.lights.push({ x: p.x, y: p.y - 14, r: 90, c: '#ff8a3a', flick: true });
   }
+  // molten channels light the hall from below
+  let lx = -99;
+  for (let tx = 0; tx < R.w; tx++) if (R.lava.has(tx) && tx - lx >= 3) { lx = tx; R.lights.push({ x: tx * TILE + 8, y: R.gy[tx] * TILE - 4, r: 80, c: '#ff7a2a', flick: true, lava: true }); }
 }
 function drawProp(x, p, R) {
   const X = p.x, Y = p.y;
@@ -809,6 +1146,83 @@ function drawProp(x, p, R) {
       for (let k = 0; k < 6; k++) { const fx = X - 8 + k * 3, fy = Y - 25 + k * 0.6 + Math.abs(k - 2.5) * 0.6; x.rect(fx, fy, 2.4, 3.5, ['#e84a3a', '#f0c050', '#4a9ae8', '#f4f4f4', '#5ac85a', '#e84a3a'][k]); }
       x.rect(X - 11, Y - 27, 3, 1, '#f0f6ff'); x.rect(X + 8, Y - 23, 3, 1, '#f0f6ff');
       break;
+    // ---------- 瘴雨沼泽 ----------
+    case 'reeds':
+      for (let k = 0; k < 5; k++) {
+        const rx = X - 6 + k * 3 + rng.int(-1, 1), hh = rng.int(14, 26), ln = rng.int(-3, 3);
+        x.line(rx, Y, rx + ln, Y - hh, 1, k % 2 ? '#4a6a30' : '#5e8038');
+        if (k % 2 === 0) x.ell(rx + ln, Y - hh + 3, 1.2, 3, 0, '#5a3a20');
+      }
+      break;
+    case 'deadtree':
+      x.line(X, Y, X - 1, Y - 30, 3, '#2a2418'); x.line(X - 1, Y - 18, X - 10, Y - 26, 2, '#2a2418');
+      x.line(X - 1, Y - 24, X + 9, Y - 34, 2, '#2a2418'); x.line(X - 1, Y - 30, X - 4, Y - 38, 1.5, '#2a2418');
+      for (let k = 0; k < 5; k++) x.line(X - 9 + k * 4, Y - 26 - (k % 2) * 6, X - 9 + k * 4, Y - 16 - k * 2, 1, '#4a5a34');
+      break;
+    case 'frogidol': // mossy stone frog with lantern eyes
+      x.rect(X - 7, Y - 3, 14, 3, '#3a3e34'); x.ell(X, Y - 9, 8, 6, 0, '#4e5446');
+      x.ell(X - 4, Y - 14, 3, 2.6, 0, '#4e5446'); x.ell(X + 4, Y - 14, 3, 2.6, 0, '#4e5446');
+      x.rect(X - 5, Y - 15, 2, 2, '#1a1c14'); x.rect(X + 3, Y - 15, 2, 2, '#1a1c14');
+      x.rect(X - 6, Y - 7, 12, 1, '#2a2e24'); x.rect(X - 7, Y - 11, 4, 2, '#5e7a3a'); x.rect(X + 3, Y - 6, 3, 1, '#5e7a3a');
+      break;
+    case 'glowshroom':
+      x.rect(X - 1, Y - 6, 2, 6, '#c8c0a0'); x.ell(X, Y - 7, 4.5, 2.6, 0, '#7a5aa8');
+      x.rect(X + 4, Y - 4, 1, 4, '#c8c0a0'); x.ell(X + 4.5, Y - 4.5, 2.6, 1.6, 0, '#7a5aa8');
+      x.rect(X - 5, Y - 3, 1, 3, '#c8c0a0'); x.ell(X - 5, Y - 3.5, 2, 1.2, 0, '#7a5aa8');
+      break;
+    case 'stump':
+      x.rect(X - 5, Y - 8, 10, 8, '#3a2c1c'); x.ell(X, Y - 8, 5, 1.6, 0, '#6a5434');
+      x.line(X - 5, Y, X - 9, Y - 1, 2, '#3a2c1c'); x.line(X + 5, Y, X + 9, Y - 1, 2, '#3a2c1c'); x.rect(X - 2, Y - 6, 1, 4, '#2a2014');
+      break;
+    // ---------- 黄沙废城 ----------
+    case 'column': {
+      const hh = rng.int(16, 30);
+      x.rect(X - 6, Y - 3, 12, 3, '#8a6440'); x.rect(X - 4, Y - hh, 8, hh - 3, '#c8945c');
+      x.rect(X - 4, Y - hh, 2, hh - 3, '#e0b070'); x.rect(X + 2, Y - hh, 2, hh - 3, '#a87444');
+      x.poly([[X - 5, Y - hh], [X - 2, Y - hh - 4], [X + 1, Y - hh - 1], [X + 5, Y - hh - 3], [X + 5, Y - hh]], '#c8945c');
+      for (let k = Y - hh + 5; k < Y - 4; k += 6) x.rect(X - 4, k, 8, 1, '#8a6440');
+      break;
+    }
+    case 'urns':
+      x.ell(X - 4, Y - 5, 4, 5, 0, '#a0583a'); x.rect(X - 6, Y - 11, 4, 2, '#8a4a30');
+      x.ell(X + 4, Y - 4, 3.4, 4, 0, '#b86a44'); x.rect(X + 3, Y - 9, 3, 2, '#8a4a30'); x.rect(X - 7, Y - 6, 6, 1, '#e8b070');
+      break;
+    case 'skull': // bleached beast skull half-buried in sand
+      x.ell(X, Y - 2, 9, 3, 0, '#c8945c'); x.ell(X + 1, Y - 6, 6, 4, 0, '#efe2c8'); x.rect(X + 2, Y - 7, 2, 2, '#3a2414');
+      x.poly([[X - 4, Y - 7], [X - 11, Y - 13], [X - 6, Y - 6]], '#efe2c8'); x.poly([[X + 5, Y - 8], [X + 12, Y - 14], [X + 8, Y - 6]], '#efe2c8');
+      break;
+    case 'sandbrazier':
+      x.rect(X - 1, Y - 12, 3, 12, '#5a3a20'); x.rect(X - 5, Y - 2, 11, 2, '#5a3a20');
+      x.poly([[X - 7, Y - 16], [X + 8, Y - 16], [X + 5, Y - 11], [X - 4, Y - 11]], '#8a5a30'); x.rect(X - 7, Y - 16, 15, 1, '#e0b070');
+      break;
+    case 'banner':
+      x.rect(X - 1, Y - 34, 2, 34, '#4a3220');
+      x.poly([[X + 1, Y - 33], [X + 13, Y - 31], [X + 10, Y - 26], [X + 14, Y - 20], [X + 1, Y - 22]], '#b8342a');
+      x.rect(X + 3, Y - 30, 5, 1, '#e8c070'); x.rect(X - 2, Y - 35, 4, 2, '#e8c070');
+      break;
+    // ---------- 熔铸炉城 ----------
+    case 'anvil':
+      x.rect(X - 4, Y - 4, 8, 4, '#2a2628'); x.rect(X - 2, Y - 8, 4, 4, '#3a3438');
+      x.poly([[X - 9, Y - 12], [X + 7, Y - 12], [X + 10, Y - 10], [X + 6, Y - 8], [X - 6, Y - 8]], '#4a4448'); x.rect(X - 9, Y - 12, 16, 1, '#8a8088');
+      break;
+    case 'crucible': // a pot of molten metal
+      x.rect(X - 1, Y - 4, 2, 4, '#2a2628'); x.poly([[X - 8, Y - 14], [X + 8, Y - 14], [X + 6, Y - 4], [X - 6, Y - 4]], '#3a3438');
+      x.rect(X - 8, Y - 15, 16, 2, '#4a4448'); x.rect(X - 6, Y - 14, 12, 2, '#ff8a2a');
+      break;
+    case 'pipes':
+      for (let k = 0; k < 3; k++) {
+        const px = X - 7 + k * 5, hh = 18 + k * 6;
+        x.rect(px, Y - hh, 4, hh, '#3a3438'); x.rect(px, Y - hh, 1, hh, '#5a5258'); x.rect(px - 1, Y - hh, 6, 2, '#4a4448'); x.rect(px - 1, Y - 8, 6, 1, '#2a2628');
+      }
+      break;
+    case 'ingots':
+      for (let r = 0; r < 3; r++) for (let k = 0; k < 3 - r; k++) { const ix = X - 7 + k * 5 + r * 2.5, iy = Y - 3 - r * 3; x.rect(ix, iy, 5, 3, '#a8742a'); x.rect(ix, iy, 5, 1, '#e8b85a'); }
+      break;
+    case 'gearprop':
+      x.circ(X, Y - 11, 10, '#3a3438');
+      for (let k = 0; k < 8; k++) { const a = k * TAU / 8; x.rect(X + Math.cos(a) * 10 - 2, Y - 11 + Math.sin(a) * 10 - 2, 4, 4, '#3a3438'); }
+      x.circ(X, Y - 11, 4, '#2a2628'); x.circ(X, Y - 11, 1.6, '#8a8088'); x.rect(X - 6, Y - 2, 12, 2, '#2a2628');
+      break;
   }
 }
 function drawPropGlow(x, p) {
@@ -822,6 +1236,10 @@ function drawPropGlow(x, p) {
     case 'barrel': x.rect(X - 4, Y - 13, 8, 1, '#7dff6a'); break;
     case 'toroSnow': x.rect(X - 2, Y - 20, 4, 4, '#ffb070'); break;
     case 'icespike': x.rect(X - 1, Y - 8, 2, 5, '#9fd8ff'); break;
+    case 'frogidol': x.rect(X - 5, Y - 15, 2, 2, '#b8f060'); x.rect(X + 3, Y - 15, 2, 2, '#b8f060'); break;
+    case 'glowshroom': x.ell(X, Y - 7, 4, 2, 0, '#c89aff'); x.ell(X + 4.5, Y - 4.5, 2, 1, 0, '#c89aff'); break;
+    case 'sandbrazier': x.rect(X - 5, Y - 18, 11, 3, '#ffb050'); break;
+    case 'crucible': x.rect(X - 6, Y - 15, 12, 3, '#ffd36a'); break;
   }
 }
 

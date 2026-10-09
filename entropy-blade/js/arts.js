@@ -3,7 +3,7 @@
 //  HEROES (4/4) — loadout registries. Arts, skills and secrets are all
 //  武学: one reward pool, one Lv1–4 ladder (see WX_* below).
 //   ARTS    武技  (↑/↓/冲刺 + 攻击; a 4-move chain 起手 → 派生 → 连段 → 终式)
-//   USKILLS 技能  (U / ↑U / ↓U / 冲刺U; free, cooldown; up to three stages)
+//   USKILLS 技能  (U / ↑U / ↓U / 冲刺U; free, no cooldown; up to three stages)
 //   SKILLS  秘技  (I + direction, costs 灵力 mana; Lv2 派生, Lv3 进化)
 //   WEAPONS 武器  (chosen on the character screen)
 //   TECHS   招式解锁
@@ -143,7 +143,8 @@ SK({ id: 'gao_mountain', hero: 'gao', slot: 'down', ult: true, name: '镇岳', i
   evo: '落地后升起环形岩刺' });
 
 // =====================================================================
-//  技能 USKILLS — U + direction. Free (no 灵力), each slot on its own cooldown.
+//  技能 USKILLS — U + direction. Free (no 灵力) and no cooldown: each stage's
+//  recovery is what paces it, so damage is tuned per second of commitment.
 //  moves[k] is stage k+1; which stages a level opens is set per skill in
 //  WX_LEVELS — press U again during or right after a stage for the next one.
 //  Moves live in moves_u.js.
@@ -151,32 +152,32 @@ SK({ id: 'gao_mountain', hero: 'gao', slot: 'down', ult: true, name: '镇岳', i
 const USKILLS = {};
 function USK(o) { USKILLS[o.id] = o; }
 // ----------------------------- RIN -----------------------------
-USK({ id: 'rin_u_shot', hero: 'rin', slot: 'shot', name: '飞刃', icon: 'wave', cd: 1.1, moves: ['u_rin_shot1', 'u_rin_shot2', 'u_rin_shot3'],
-  stages: ['甩出贯穿的月牙剑气（130%）', '交叉刃：X 形双剑气（各 110%）', '千刃：五道扇形剑气齐发（各 100%），借势后跃'] });
-USK({ id: 'rin_u_up', hero: 'rin', slot: 'up', name: '升月', icon: 'meteor', cd: 3.0, moves: ['u_rin_up1', 'u_rin_up2', 'u_rin_up3'],
-  stages: ['小跃并斜上斩出对空月牙（150%，挑飞）', '月轮：抛出悬停的刃轮，持续切割空中敌人', '坠月：巨大月刃自天而降砸向前方（320%）'] });
-USK({ id: 'rin_u_down', hero: 'rin', slot: 'down', name: '地走刃', icon: 'spike', cd: 3.4, moves: ['u_rin_down1', 'u_rin_down2', 'u_rin_down3'],
-  stages: ['刀尖划地，贴地疾走的刃波（150%，挑飞）', '刃林：沿路依次迸出四道刀刃（各 100%）', '断地：前后两侧同时迸出刀刃（各 110%）'] });
-USK({ id: 'rin_u_dash', hero: 'rin', slot: 'dash', name: '影刃', icon: 'feather', cd: 4.0, moves: ['u_rin_dash1', 'u_rin_dash2', 'u_rin_dash3'],
-  stages: ['冲刺中掷出三柄影刃（各 90%，贯穿）', '回刃：影刃折返飞回，沿途再斩', '影杀：瞬身穿过前方所有敌人并连斩'] });
+USK({ id: 'rin_u_shot', hero: 'rin', slot: 'shot', name: '飞刃', icon: 'wave', moves: ['u_rin_shot1', 'u_rin_shot2', 'u_rin_shot3'],
+  stages: ['甩出贯穿的月牙剑气（100%）', '交叉刃：X 形双剑气（各 65%）', '千刃：五道扇形剑气齐发（各 55%），借势后跃'] });
+USK({ id: 'rin_u_up', hero: 'rin', slot: 'up', name: '升月', icon: 'meteor', moves: ['u_rin_up1', 'u_rin_up2', 'u_rin_up3'],
+  stages: ['小跃并斜上斩出对空月牙（130%，挑飞）', '月轮：抛出悬停的刃轮，持续切割空中敌人', '坠月：巨大月刃自天而降砸向前方（340%）'] });
+USK({ id: 'rin_u_down', hero: 'rin', slot: 'down', name: '地走刃', icon: 'spike', moves: ['u_rin_down1', 'u_rin_down2', 'u_rin_down3'],
+  stages: ['刀尖划地，贴地疾走的刃波（110%，挑飞）', '刃林：沿路依次迸出四道刀刃（各 120%）', '断地：前后两侧同时迸出刀刃（各 100%）'] });
+USK({ id: 'rin_u_dash', hero: 'rin', slot: 'dash', name: '影刃', icon: 'feather', moves: ['u_rin_dash1', 'u_rin_dash2', 'u_rin_dash3'],
+  stages: ['冲刺中掷出三柄影刃（各 60%，贯穿）', '回刃：影刃折返飞回，沿途再斩', '影杀：瞬身穿过前方所有敌人并连斩'] });
 // ----------------------------- EVE -----------------------------
-USK({ id: 'eve_u_shot', hero: 'eve', slot: 'shot', name: '魔弹', icon: 'eye', cd: 1.0, moves: ['u_eve_shot1', 'u_eve_shot2', 'u_eve_shot3'],
-  stages: ['射出贯穿两名敌人的重魔弹（160%）', '三连魔弹：瞬间补射三发（各 110%）', '星爆弹：爆炸并迸射 8 枚碎片（240%）'] });
-USK({ id: 'eve_u_up', hero: 'eve', slot: 'up', name: '照明星', icon: 'star', cd: 3.0, moves: ['u_eve_up1', 'u_eve_up2', 'u_eve_up3'],
-  stages: ['斜上射出照明弹，炸开后落下 7 颗星弹（各 60%）', '双星：再射两枚照明弹覆盖更远', '流星雨：前方倾泻 14 颗流星（各 70%）'] });
-USK({ id: 'eve_u_down', hero: 'eve', slot: 'down', name: '跳雷', icon: 'orb', cd: 3.2, moves: ['u_eve_down1', 'u_eve_down2', 'u_eve_down3'],
-  stages: ['贴地抛出弹跳雷，碰到敌人即爆（200%）', '连锁雷：再抛两枚不同弹道的跳雷', '雷阵：身周布下五枚地雷依次引爆（各 140%，眩晕）'] });
-USK({ id: 'eve_u_dash', hero: 'eve', slot: 'dash', name: '回旋射击', icon: 'ring', cd: 2.4, moves: ['u_eve_dash1', 'u_eve_dash2', 'u_eve_dash3'],
-  stages: ['冲刺中旋身，向四周射出 8 发子弹（各 60%）', '交叉火力：斜向两道贯穿速射', '幻影齐射：两道幻影各射 5 发魔弹'] });
+USK({ id: 'eve_u_shot', hero: 'eve', slot: 'shot', name: '魔弹', icon: 'eye', moves: ['u_eve_shot1', 'u_eve_shot2', 'u_eve_shot3'],
+  stages: ['射出贯穿两名敌人的重魔弹（100%）', '三连魔弹：瞬间补射三发（各 50%）', '星爆弹：爆炸（100%）并迸射 8 枚碎片'] });
+USK({ id: 'eve_u_up', hero: 'eve', slot: 'up', name: '照明星', icon: 'star', moves: ['u_eve_up1', 'u_eve_up2', 'u_eve_up3'],
+  stages: ['斜上射出照明弹，炸开后落下 7 颗星弹（各 60%）', '双星：再射两枚照明弹覆盖更远', '流星雨：前方倾泻 14 颗流星（各 80%）'] });
+USK({ id: 'eve_u_down', hero: 'eve', slot: 'down', name: '跳雷', icon: 'orb', moves: ['u_eve_down1', 'u_eve_down2', 'u_eve_down3'],
+  stages: ['贴地抛出弹跳雷，碰到敌人即爆（90%）', '连锁雷：再抛两枚不同弹道的跳雷', '雷阵：身周布下五枚地雷依次引爆（各 70%，短暂眩晕）'] });
+USK({ id: 'eve_u_dash', hero: 'eve', slot: 'dash', name: '回旋射击', icon: 'ring', moves: ['u_eve_dash1', 'u_eve_dash2', 'u_eve_dash3'],
+  stages: ['冲刺中旋身，向四周射出 8 发子弹（各 50%）', '交叉火力：斜向两道贯穿速射（各 45%）', '幻影齐射：两道幻影连射魔弹（各 35%）'] });
 // ----------------------------- GAO -----------------------------
-USK({ id: 'gao_u_shot', hero: 'gao', slot: 'shot', name: '气弹', icon: 'orb', cd: 1.2, moves: ['u_gao_shot1', 'u_gao_shot2', 'u_gao_shot3'],
-  stages: ['推掌打出贯穿气弹（160%，击退）', '双掌气弹：上下两记更大的气弹', '气功炮：短距巨型气劲炮（300%）'] });
-USK({ id: 'gao_u_up', hero: 'gao', slot: 'up', name: '升龙气', icon: 'flame', cd: 3.0, moves: ['u_gao_up1', 'u_gao_up2', 'u_gao_up3'],
-  stages: ['上勾拳卷起吸人的气旋（挑飞，持续切割）', '双气旋：更远处再卷起两道', '炎龙：三道烈焰龙柱冲天（各 200%）'] });
-USK({ id: 'gao_u_down', hero: 'gao', slot: 'down', name: '震地', icon: 'spike', cd: 3.4, moves: ['u_gao_down1', 'u_gao_down2', 'u_gao_down3'],
-  stages: ['重踏地面，向两侧推出冲击波（各 140%）', '岩刺：两侧依次升起岩刺（各 110%）', '地震：周围地面敌人受 260% 伤害并眩晕'] });
-USK({ id: 'gao_u_dash', hero: 'gao', slot: 'dash', name: '猛虎掌', icon: 'fist', cd: 2.4, moves: ['u_gao_dash1', 'u_gao_dash2', 'u_gao_dash3'],
-  stages: ['冲刺中推出虎形掌劲（180%，贯穿）', '双虎掌：更大的第二记掌劲，重击破防', '虎啸：震天咆哮，冲击环眩晕周围（240%）'] });
+USK({ id: 'gao_u_shot', hero: 'gao', slot: 'shot', name: '气弹', icon: 'orb', moves: ['u_gao_shot1', 'u_gao_shot2', 'u_gao_shot3'],
+  stages: ['推掌打出贯穿气弹（110%，击退）', '双掌气弹：上下两记更大的气弹（各 80%）', '气功炮：短距巨型气劲炮（220%）'] });
+USK({ id: 'gao_u_up', hero: 'gao', slot: 'up', name: '升龙气', icon: 'flame', moves: ['u_gao_up1', 'u_gao_up2', 'u_gao_up3'],
+  stages: ['上勾拳卷起吸人的气旋（挑飞，持续切割）', '双气旋：更远处再卷起两道', '炎龙：三道烈焰龙柱冲天（各 160%）'] });
+USK({ id: 'gao_u_down', hero: 'gao', slot: 'down', name: '震地', icon: 'spike', moves: ['u_gao_down1', 'u_gao_down2', 'u_gao_down3'],
+  stages: ['重踏地面，向两侧推出冲击波（各 140%）', '岩刺：两侧依次升起岩刺（各 70%）', '地震：周围地面敌人受 160% 伤害并短暂眩晕'] });
+USK({ id: 'gao_u_dash', hero: 'gao', slot: 'dash', name: '猛虎掌', icon: 'fist', moves: ['u_gao_dash1', 'u_gao_dash2', 'u_gao_dash3'],
+  stages: ['冲刺中推出虎形掌劲（150%，贯穿）', '双虎掌：更大的第二记掌劲（160%），重击破防', '虎啸：震天咆哮，冲击环眩晕周围（180%）'] });
 
 // =====================================================================
 //  武技 ARTS — direction + attack. A 4-move chain (起手 → 派生 → 连段 → 终式);
@@ -268,18 +269,18 @@ const WX_PERKS = {
   huitang: { name: '回膛', desc: '命中加快冲刺次数的恢复', hit(p) { if (p.dashes < p.stats.dashes) p.dashRegen += 0.12; } },
   dijin: { name: '抵近', desc: '对 70 像素内的敌人伤害 +40%', pre(p, e, h) { if (Math.abs(e.x - p.x) < 70) h.dmg *= 1.4; } },
   tiaodan: {
-    name: '跳弹', desc: '魔弹命中后弹向附近另一名敌人（70%）',
+    name: '跳弹', desc: '魔弹命中后弹向附近另一名敌人（50%）',
     hit(p, e, h) {
       if (!h.proj || h._bounce) return;
       const t = nearestEnemy(e.x, e.cy, 170, x => x !== e);
       if (!t) return;
       const a = Math.atan2(t.cy - e.cy, t.x - e.x);
-      G.projs.push(new Proj({ team: 'p', x: e.x + Math.cos(a) * 8, y: e.cy + Math.sin(a) * 8, vx: Math.cos(a) * 700, vy: Math.sin(a) * 700, kind: 'bullet', r: 2.4, len: 16, c: '#5ad8ff', c2: '#ffffff', life: 0.4, light: 30, hits: new Set([e.id]), hit: Object.assign({}, h, { dmg: h.dmg * 0.7, _bounce: true }) }));
+      G.projs.push(new Proj({ team: 'p', x: e.x + Math.cos(a) * 8, y: e.cy + Math.sin(a) * 8, vx: Math.cos(a) * 700, vy: Math.sin(a) * 700, kind: 'bullet', r: 2.4, len: 16, c: '#5ad8ff', c2: '#ffffff', life: 0.4, light: 30, hits: new Set([e.id]), hit: Object.assign({}, h, { dmg: h.dmg * 0.5, _bounce: true }) }));
       Sound.play('clank', { x: e.x, pitch: 2.2 });
     },
   },
   bingjing: { name: '冰晶星', desc: '星弹命中使敌人减速 40%（1.5 秒）', hit(p, e) { applyStatus(e, 'slow', 0.4, 1.5); } },
-  retang: { name: '热膛', desc: '每次命中让这一招的冷却减少 0.25 秒', hit(p) { p.ucd.dash = Math.max(0, (p.ucd.dash || 0) - 0.25); } },
+  liekong: { name: '猎空', desc: '对浮空或飞行中的敌人伤害 +50%', pre(p, e, h) { if (e.flying || !e.onGround) h.dmg *= 1.5; } },
   chuanxin: { name: '穿心', desc: '暴击伤害 +60%', pre(p, e, h) { h.critDmgBonus = (h.critDmgBonus || 0) + 0.6; } },
   cibao: {
     name: '磁暴', desc: '命中时放出电弧，跳向附近一名敌人（40%）',
@@ -361,7 +362,7 @@ const WX_LEVELS = {
   eve_u_shot: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3, perk: 'tiaodan' }],
   eve_u_up: [{ n: 1, pow: 1 }, { n: 2, pow: 1.2 }, { n: 3, pow: 1.35, perk: 'bingjing' }],
   eve_u_down: [{ n: 1, pow: 1 }, { n: 3, pow: 1.25 }],
-  eve_u_dash: [{ n: 1, pow: 1 }, { n: 2, pow: 1.1, perk: 'retang' }, { n: 3, pow: 1.3 }],
+  eve_u_dash: [{ n: 1, pow: 1 }, { n: 2, pow: 1.1, perk: 'liekong' }, { n: 3, pow: 1.3 }],
   eve_snipe: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1, perk: 'chuanxin' }],
   eve_turret: [{ t: 1 }, { t: 3, f: 1 }],
   eve_backflip: [{ t: 2, f: 1 }],
@@ -505,7 +506,6 @@ function artChainNames(h, a, lv) {
 function skillCost(p, S) { return Math.max(1, Math.round(S.cost * p.stats.costMul)); }
 // 技能 helpers
 const uLabel = (U, k) => (k === 0 ? U.name : U.stages[k].split('：')[0]);
-const uCooldown = U => U.cd;
 const skTierMul = t => 1 + 0.35 * (t - 1);
 // what level lv of a 武学 adds over the level below it (its own unlocks, its signature effect, damage)
 function wxText(fam, E, lv, h) {
@@ -560,7 +560,7 @@ function heroMoveList(h, p) {
     const s = p.uskills[sl.id];
     if (!s) continue;
     const U = USKILLS[s.id];
-    rows.push([sl.long, `${U.name} Lv${s.lv}/${wxMax(U)}：${U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}（冷却 ${uCooldown(U).toFixed(1)} 秒）`]);
+    rows.push([sl.long, `${U.name} Lv${s.lv}/${wxMax(U)}：${U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}（无冷却）`]);
   }
   if (p) for (const sl of SECRET_SLOTS) {
     const s = p.secrets[sl.id];
@@ -649,7 +649,7 @@ function artView(a, p) {
   if (a.kind === 'uUp') {
     const U = USKILLS[a.id], sl = slotInfo(U_SLOTS, U.slot), col = WX_FAM.u.col;
     const lv = p.uskills[U.slot].lv + 1;
-    return { tag: `武学 · 技能 · ${sl.long}`, name: U.name, icon: U.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, U), desc: wxText('u', U, lv, h).join('；'), sub: `不耗灵力 · 冷却 ${uCooldown(U).toFixed(1)} 秒 · ${U.moves.slice(0, wxAt(U, lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}` };
+    return { tag: `武学 · 技能 · ${sl.long}`, name: U.name, icon: U.icon, col, frame: '#7ff7ff', lvText: lvBadge(lv, U), desc: wxText('u', U, lv, h).join('；'), sub: `不耗灵力 · 无冷却 · ${U.moves.slice(0, wxAt(U, lv).n).map((mn, k) => uLabel(U, k)).join(' → ')}` };
   }
   const S = SKILLS[a.id], sl = slotInfo(SECRET_SLOTS, S.slot), col = WX_FAM.sk.col, tag = `武学 · 秘技 · ${sl.long}`;
   const cur = p.secrets[S.slot];

@@ -1,7 +1,9 @@
 'use strict';
 // =====================================================================
-//  BOSSES (2/2) — 雪女·白霜 (new), and the signature traits of every boss:
+//  BOSSES (2/2) — 雪女·白霜, the bosses of the alternative maps, and the
+//  signature traits of every boss:
 //   荒鬼武将 鬼怒 · 雪女 寒气 · 晶核女皇 晶壁 · 熵之王 熵蚀
+//   蟾仙·大蟇 蟾毒 · 流沙蝎后 流沙 · 炎铸巨像 过热
 // =====================================================================
 
 // ---------------- 雪女 sprite ----------------
@@ -40,9 +42,10 @@ function bakeBosses2() {
     point: { n: 4, loop: true, fps: 8, draw: (x, t) => s(x, { t, point: true }) },
     hurt: { n: 1, draw: x => s(x, { t: 0.25 }) },
   });
+  bakeMapBosses();
 }
 BOSS_DEFS.yukionna = {
-  name: '雪女·白霜', en: 'YUKI-ONNA', title: '寒山雪夜的游魂', hp: 1750, w: 22, h: 64, dmg: 13, gold: [70, 90], spr: 'yukionna', speed: 105, kb: 0.1, poise: 22, flying: true,
+  name: '雪女·白霜', en: 'YUKI-ONNA', title: '寒山雪夜的游魂', hp: 1750, tier: 1, w: 22, h: 64, dmg: 13, gold: [70, 90], spr: 'yukionna', speed: 105, kb: 0.1, poise: 22, flying: true,
   stars: 3, style: '远程消耗', trait: '寒气', traitDesc: '始终与你保持距离；冰系攻击叠加寒气，满 5 层冻结并受到伤害',
   music: 'bossSnow',
 };
@@ -500,6 +503,696 @@ Object.assign(BOSS_TRAITS, {
         gctx.fillStyle = '#ff3048'; gctx.globalAlpha = 0.6; gctx.fillRect(ex - 3, -camY, 8, R.ph); gctx.globalAlpha = 1;
         if (Math.random() < 0.8) FX.add({ k: 'px', x: (side ? R.pw - b.voidW : b.voidW) + rand(-4, 4), y: b.y - rand(0, 160), vx: (side ? -1 : 1) * rand(5, 30), vy: -rand(10, 40), life: 0.6, s: 2, c: pick(['#ff3048', '#000000', '#ffd0d8']), glow: true });
       }
+    },
+  },
+});
+
+// =====================================================================
+//  BOSSES OF THE ALTERNATIVE MAPS
+//   瘴雨沼泽 蟾仙·大蟇   — crushing leaps, a grabbing tongue, venom that pools
+//   黄沙废城 流沙蝎后   — claws, a spear-like tail, tunnels that open quicksand
+//   熔铸炉城 炎铸巨像   — hammer, furnace breath, molten pours; overheats and kneels
+// =====================================================================
+function drawToad(x, o) {
+  const t = o.t, br = Math.sin(t * TAU) * 0.6, cr = o.crouch ? 3 : 0, air = o.air;
+  const cy = -14 + cr - (air ? 4 : 0);
+  if (air) { x.line(-12, cy + 4, -24, cy + 14, 5, '#4a6a2e'); x.line(-24, cy + 14, -30, cy + 16, 4, '#4a6a2e'); }
+  else { x.ell(-12, cy + 9, 11, 7, 0, '#4a6a2e'); x.ell(-14, cy + 13, 8, 2.6, 0, '#3a5424'); }
+  // a broad warty body with a pale belly
+  x.ell(0, cy, 22, 15 + br, 0, '#5e8a3a');
+  x.ell(2, cy + 5, 16, 8, 0, '#d8d49a');
+  for (const [wx, wy] of [[-12, -8], [-4, -12], [6, -10], [-16, 0], [10, -4]]) x.circ(wx, cy + wy, 1.8, '#7aa64a');
+  x.line(12, cy + 6, 15, -1, 4, '#4e7a30'); x.ell(16, -1, 4, 1.6, 0, '#4e7a30');
+  // a sage's sash and prayer beads
+  x.poly([[-14, cy - 6], [10, cy + 8], [8, cy + 11], [-16, cy - 3]], '#6a3a8a');
+  for (let k = 0; k < 6; k++) x.circ(-10 + k * 4, cy - 2 + k * 2.2, 1.4, '#e8c070');
+  // head: a wide mouth, a throat sac that swells before it spits
+  const hy = cy - 10;
+  x.ell(10, hy + 2, 13, 9, 0, '#5e8a3a');
+  if (o.throat || o.spit) x.ell(12, hy + 9, 7 + (o.spit ? 2 : 0), 5 + (o.spit ? 2 : 0), 0, '#e8d8a0');
+  if (o.mouth) { x.poly([[2, hy + 3], [23, hy + 1], [23, hy + 7], [3, hy + 6]], '#3a1418'); x.ell(14, hy + 5, 4, 1.6, 0, '#d86a7a'); }
+  else x.line(2, hy + 4, 22, hy + 3, 1, '#2a4418');
+  x.circ(5, hy - 6, 4, '#5e8a3a'); x.circ(15, hy - 6, 4, '#5e8a3a');
+  const eye = o.glow ? '#ffffff' : '#ffd23f';
+  x.ell(5.5, hy - 6.5, 2.4, 2, 0, eye); x.rect(5, hy - 7.5, 1, 2.6, '#1a1008');
+  x.ell(15.5, hy - 6.5, 2.4, 2, 0, eye); x.rect(15, hy - 7.5, 1, 2.6, '#1a1008');
+  // long white brows and beard of an old hermit
+  x.poly([[1, hy - 9], [-6, hy - 14], [-1, hy - 8]], '#efe8d8'); x.poly([[19, hy - 9], [24, hy - 15], [19, hy - 7]], '#efe8d8');
+  x.poly([[16, hy + 6], [20, hy + 16], [14, hy + 9]], '#efe8d8');
+  // a gourd slung on its back
+  x.circ(-16, cy - 14, 4, '#c88a3a'); x.circ(-16, cy - 20, 3, '#c88a3a'); x.rect(-17, cy - 25, 2, 2, '#8a5a20');
+}
+function drawScorpQueen(x, o) {
+  const ph = o.t * TAU, walk = o.walk, cy = -14 + (o.burrow ? 8 : 0);
+  for (let i = 0; i < 4; i++) {
+    const lx = -12 + i * 7, s = walk ? Math.sin(ph * 2 + i * 1.7) * 3 : Math.sin(ph + i) * 0.4;
+    x.line(lx, cy + 3, lx - 6 + s, cy + 8, 2.4, '#5a3a1a'); x.line(lx - 6 + s, cy + 8, lx - 8 + s, 0, 2, '#5a3a1a');
+    x.line(lx, cy + 3, lx + 6 - s, cy + 8, 2.4, '#6a4422'); x.line(lx + 6 - s, cy + 8, lx + 8 - s, 0, 2, '#6a4422');
+  }
+  // segmented golden carapace
+  x.ell(0, cy, 22, 8, 0, '#c8903a');
+  for (let k = -16; k <= 14; k += 6) { x.rect(k, cy - 7, 2, 13, '#8a5a20'); x.rect(k + 2, cy - 7, 3, 2, '#f0c060'); }
+  x.ell(0, cy + 4, 18, 3, 0, '#7a4a1c');
+  // head with a crown-like crest and a turquoise gem
+  x.ell(21, cy - 1, 8, 6, 0, '#c8903a');
+  x.poly([[16, cy - 6], [18, cy - 13], [21, cy - 7], [24, cy - 14], [26, cy - 6]], '#ffd36a');
+  x.rect(21, cy - 10, 2, 2, '#45d8c8');
+  for (const ex of [22, 25]) x.rect(ex, cy - 3, 1.6, 1.6, o.glow ? '#ffffff' : '#ff3a2a');
+  // pincers, open when she strikes
+  const op = o.claw ? 1 : 0;
+  for (const side of [-1, 1]) {
+    const by = cy + side * 2;
+    x.line(26, by, 34 + op * 6, by - 3 + side * 2, 3, '#b8803a');
+    x.ell(38 + op * 6, by - 4 + side * 2, 6, 3.4, side * 0.3, '#c8903a');
+    x.poly([[42 + op * 6, by - 6 + side * 2], [48 + op * 8, by - 8 + side * (2 + op * 3)], [44 + op * 6, by - 3 + side * 2]], '#f0c060');
+  }
+  // the tail: a high arc, or thrown forward over her head to stab
+  const pts = o.stab ? [[-20, cy - 2], [-26, cy - 14], [-20, cy - 28], [-6, cy - 36], [10, cy - 36], [24, cy - 30], [32, cy - 20]]
+    : [[-20, cy - 2], [-30, cy - 12], [-32, cy - 26], [-24, cy - 38], [-12, cy - 42], [-4, cy - 38], [-2, cy - 30]];
+  for (let k = 0; k < pts.length - 1; k++) { x.line(pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1], 6 - k * 0.6, k % 2 ? '#c8903a' : '#a87030'); x.circ(pts[k][0], pts[k][1], 3.4 - k * 0.3, '#f0c060'); }
+  const tp = pts[pts.length - 1];
+  x.poly([[tp[0] - 3, tp[1] - 2], [tp[0] + 3, tp[1] - 2], [tp[0] + 1, tp[1] + 7]], '#ff5a3a');
+  x.circ(tp[0], tp[1] - 1, 2, o.glow ? '#ffffff' : '#ffd36a');
+}
+// 炎铸巨像: a bronze furnace-golem with a forge hammer
+const COLOSSUS_LOOK = {
+  build: BUILDS.hulk, outline: '#0a0606',
+  col: { pants: '#5a4030', boot: '#3a2a20', sleeve: '#8a5a2a', hand: '#6a4422' },
+  kneePad: '#b8803a', shinCol: '#6a4a2a', gauntlet: '#4a3a30',
+  stance: { lean: 4, aF: [70, 30], aB: [95, 60], w: 40, lF: [66, 100], lB: [112, 92] },
+  runArms: s => ({ aF: [70 + 12 * s, 30], aB: [95 - 12 * s, 60], w: 40 }),
+  airArms: { aF: [-60, -90], aB: [130, 120], w: -100 },
+  torso(x, J, B, p) {
+    drawTorsoBase(x, J, B, this, p, '#8a5a2a', '#5a3a1c');
+    local(x, J.chest, p.lean, () => {
+      // furnace chest behind a grille (white-hot while it vents)
+      x.rect(-6, -6, 12, 11, '#2a1a12');
+      x.rect(-5, -5, 10, 9, p.fx > 0.5 ? '#ffffff' : '#ff7a2a'); x.rect(-5, -1, 10, 3, '#ffd36a');
+      if (p.fx <= 0.5) for (let k = -4; k <= 4; k += 3) x.rect(k, -5, 1, 9, '#2a1a12');
+      x.rect(-8, -8, 16, 2, '#c8903a'); x.rect(-8, 6, 16, 2, '#c8903a');
+    });
+    local(x, J.sF, p.lean, () => { x.rect(-5, -3, 10, 7, '#b8803a'); x.rect(-5, -3, 10, 1.4, '#f0c060'); for (const rx of [-3, 2]) x.rect(rx, 0, 1.2, 1.2, '#5a3a1c'); });
+  },
+  head(x, J, B, p) {
+    local(x, J.head, J.headA / DEG, () => {
+      x.rect(-4.5, -5, 9.5, 9, '#8a5a2a'); x.rect(-4.5, -5, 9.5, 1.6, '#c8903a');
+      x.rect(0, -2, 5, 2, '#1a0e0a'); x.rect(1, -1.6, 3.4, 1.2, p.eye ? '#ffd36a' : '#5a3010');
+      x.rect(-4.5, 2, 9.5, 2, '#5a3a1c');
+      x.rect(-3, -9, 3, 4, '#5a3a1c'); x.rect(1.5, -10, 3, 5, '#5a3a1c');
+    });
+  },
+  weapon(x, J, B, p) {
+    local(x, J.hF, p.w, () => {
+      x.line(-8, 0, 26, 0, 2.4, '#3a2418');
+      x.rect(24, -8, 11, 16, '#4a4448'); x.rect(24, -8, 11, 2.4, '#8a8088'); x.rect(33, -8, 2, 16, '#2a2628');
+      x.rect(26, -3, 6, 6, '#ff7a2a');
+    });
+  },
+};
+
+function bakeMapBosses() {
+  const ts = (x, o) => { x.scale(1.6, 1.6); drawToad(x, o); };
+  bakeCustom('toad', 160, 120, 80, 116, {
+    idle: { n: 6, loop: true, fps: 6, draw: (x, t) => ts(x, { t, throat: Math.sin(t * TAU) > 0.3 }) },
+    crouch: { n: 2, loop: true, fps: 10, draw: (x, t, i) => ts(x, { t, crouch: true, glow: i === 0 }) },
+    air: { n: 1, draw: x => ts(x, { t: 0.25, air: true }) },
+    mouth: { n: 1, draw: x => ts(x, { t: 0, mouth: true }) },
+    spit: { n: 2, loop: true, fps: 8, draw: (x, t, i) => ts(x, { t, spit: true, throat: true, glow: i === 0 }) },
+    hurt: { n: 1, draw: x => ts(x, { t: 0.5, crouch: true }) },
+  });
+  const qs = (x, o) => { x.scale(1.5, 1.5); drawScorpQueen(x, o); };
+  bakeCustom('scorpqueen', 172, 116, 74, 110, {
+    idle: { n: 6, loop: true, fps: 6, draw: (x, t) => qs(x, { t }) },
+    walk: { n: 6, loop: true, fps: 12, draw: (x, t) => qs(x, { t, walk: true }) },
+    claw: { n: 2, loop: true, fps: 12, draw: (x, t, i) => qs(x, { t, claw: true, glow: i === 0 }) },
+    stab: { n: 1, draw: x => qs(x, { t: 0, stab: true, glow: true }) },
+    burrow: { n: 2, loop: true, fps: 10, draw: (x, t) => qs(x, { t, burrow: true, walk: true }) },
+    hurt: { n: 1, draw: x => qs(x, { t: 0.3 }) },
+  });
+  bakeRig('colossus', COLOSSUS_LOOK, {
+    idle: { n: 6, gen: 'idle', loop: true, fps: 5 },
+    walk: { n: 8, gen: 'run', loop: true, fps: 7 },
+    hurt: { n: 1, gen: 'hurt' },
+    raise: { n: 1, gen: L => fullPose(L, { lean: -10, aF: [-150, -160], aB: [-130, -150], w: -170 }) },
+    slam: { n: 3, fps: 16, gen: (L, t) => fullPose(L, { lean: lerp(-6, 28, t), aF: [lerp(-120, 60, t), lerp(-120, 80, t)], aB: [lerp(-100, 70, t), lerp(-100, 90, t)], w: lerp(-150, 95, t), lF: [40, 100], lB: [130, 100] }) },
+    sweepW: { n: 1, gen: L => fullPose(L, { lean: -14, aF: [170, 160], aB: [150, 140], w: 175, lF: [70, 100], lB: [115, 95] }) },
+    sweep: { n: 3, fps: 18, gen: (L, t) => fullPose(L, { lean: lerp(-10, 20, t), aF: [lerp(170, 10, t), lerp(160, 0, t)], aB: [lerp(150, 40, t), lerp(140, 30, t)], w: lerp(175, -10, t), lF: [40, 100], lB: [130, 100] }) },
+    breath: { n: 2, fps: 8, loop: true, gen: (L, t) => fullPose(L, { lean: 14, aF: [110, 80], aB: [120, 90], w: 110, fx: 1, y: t * 0.5 }) },
+    vent: { n: 2, fps: 6, loop: true, gen: (L, t) => fullPose(L, { lean: 26, y: 4, aF: [80, 95], aB: [100, 95], w: 95, lF: [10, 100], lB: [170, 90], head: 25, fx: t < 0.5 ? 1 : 0 }) },
+    throw: { n: 2, fps: 10, gen: (L, t) => fullPose(L, { lean: lerp(-8, 10, t), aB: [lerp(-140, -60, t), lerp(-150, -50, t)], aF: [70, 30], w: 40 }) },
+  }, 170, 140, 85, 134, 2.1);
+}
+
+Object.assign(BOSS_DEFS, {
+  toad: {
+    name: '蟾仙·大蟇', en: 'GAMA, THE MIRE SAGE', title: '瘴泽深处修行千年的老蟾', hp: 1400, tier: 0, w: 54, h: 46, dmg: 16, gold: [60, 80], spr: 'toad', speed: 60, kb: 0.1, poise: 30,
+    stars: 2, style: '跳跃压制 · 毒沼', trait: '蟾毒', traitDesc: '吐出的毒涎落地化作毒沼，站在其中持续受伤；狂暴后长舌能把你卷进口中再吐出',
+    music: 'bossMire',
+  },
+  scorpqueen: {
+    name: '流沙蝎后', en: 'DUNE SCORPION QUEEN', title: '黄沙之下沉睡的女王', hp: 1750, tier: 1, w: 70, h: 40, dmg: 16, gold: [70, 90], spr: 'scorpqueen', speed: 80, kb: 0.1, poise: 26,
+    stars: 3, style: '钻地 · 突袭', trait: '流沙', traitDesc: '钻入沙下时无法被攻击；破土之处化作流沙，陷进去会被拖慢、拖向中心',
+    music: 'bossDune',
+  },
+  colossus: {
+    name: '炎铸巨像', en: 'CINDER COLOSSUS', title: '炉城不熄的守门铁像', hp: 2300, tier: 2, w: 40, h: 72, dmg: 18, gold: [80, 100], spr: 'colossus', speed: 55, kb: 0.1, poise: 34,
+    stars: 3, style: '重击 · 过热', trait: '过热', traitDesc: '每次出招都会积蓄炉温；炉温满时喷出蒸汽并跪地散热，此间炉心敞开，受到伤害 +60%',
+    music: 'bossForge',
+  },
+});
+
+// ---------------- hazards ----------------
+// 毒沼: a venom pool on the floor
+function toadPuddle(b, x, life = 4) {
+  const R = G.room;
+  if (x < 2.5 * TILE || x > R.pw - 2.5 * TILE) return;
+  const y = R.floorBelow(x, b.y - 40);
+  addZone({
+    x, y, life, tick: 0.5, r: 24,
+    onTick(z) { const p = G.player; if (p && !p.dead && Math.abs(p.x - z.x) < z.r && p.y > z.y - 8 && p.y <= z.y + 4) hurtPlayer(7 * b.dmgMul, z.x, { noStagger: true }); },
+    upd(z) { if (Math.random() < 0.25) FX.add({ k: 'px', x: z.x + rand(-z.r, z.r), y: z.y - 1, vx: 0, vy: -rand(10, 30), life: 0.5, s: rand(1.5, 3), c: pick(['#b8f060', '#7aa848']), glow: true }); },
+    drawFn(ctx, gctx, X, Y, z) {
+      const a = Math.min(1, z.t * 5, z.life);
+      ctx.globalAlpha = 0.75 * a; ctx.fillStyle = '#5a8a2a'; ctx.beginPath(); ctx.ellipse(X, Y - 1, z.r, 3, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#b8f060'; ctx.fillRect(Math.round(X - z.r * 0.6), Math.round(Y - 3), Math.round(z.r * 0.5), 1);
+      ctx.globalAlpha = 1;
+      gctx.globalAlpha = 0.4 * a; gctx.fillStyle = '#b8f060'; gctx.fillRect(X - z.r, Y - 4, z.r * 2, 4); gctx.globalAlpha = 1;
+    },
+  });
+}
+// 流沙: a sinkhole that halves your footing and drags you to its middle
+function quicksand(b, x, life = 3.2) {
+  const R = G.room, y = R.floorBelow(x, b.y - 40);
+  addZone({
+    x, y, life, r: 46,
+    upd(z, dt) {
+      const p = G.player;
+      if (p && !p.dead && p.onGround && Math.abs(p.x - z.x) < z.r && Math.abs(p.y - z.y) < 6) {
+        p.x -= p.vx * dt * 0.55;
+        const pull = clamp(z.x - p.x, -1, 1) * 18 * dt;
+        if (!R.solidPx(p.x + pull * 4, p.y - 4)) p.x += pull;
+        if (!z.told) { z.told = true; FX.text(p.x, p.y - p.h - 8, '流沙', '#ffd070', { size: 8 }); }
+      }
+      if (Math.random() < 0.4) { const a = rand(0, TAU), r = rand(10, z.r); FX.add({ k: 'px', x: z.x + Math.cos(a) * r, y: z.y - 1, vx: -Math.cos(a) * 30, vy: -rand(0, 10), life: 0.5, s: 1.5, c: pick(['#f0c878', '#c8945c']) }); }
+    },
+    drawFn(ctx, gctx, X, Y, z) {
+      const a = Math.min(1, z.t * 3, z.life * 1.5);
+      ctx.globalAlpha = 0.8 * a; ctx.fillStyle = '#a87444'; ctx.beginPath(); ctx.ellipse(X, Y - 1, z.r, 4, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#f0c878'; ctx.lineWidth = 1;
+      for (let k = 0; k < 3; k++) { const rr = (z.t * 18 + k * 15) % 45; ctx.beginPath(); ctx.ellipse(X, Y - 1, z.r - rr, Math.max(0.5, 4 - rr * 0.08), 0, 0, TAU); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    },
+  });
+}
+// 沙暴: a dust devil that crosses the arena and shoves you along
+function dustDevil(b, x0, dir) {
+  const R = G.room, floor = x => R.floorBelow(x, R.base * TILE - 30);
+  const box = Combat.area('e', x0 - 12, floor(x0) - 60, 24, 60, { dmg: 11 * b.dmgMul }, 6, { owner: b, multi: 0.6 });
+  addZone({
+    x: x0, y: floor(x0), life: 6,
+    upd(z, dt) {
+      z.x += dir * 120 * dt; z.y = floor(z.x); box.x = z.x - 12; box.y = z.y - 60;
+      const p = G.player;
+      if (p && !p.dead && Math.abs(p.x - z.x) < 30 && p.y > z.y - 66 && p.y <= z.y + 4 && !R.solidPx(p.x + dir * 10, p.y - 4)) p.x += dir * 70 * dt;
+      for (let i = 0; i < 2; i++) { const h = rand(0, 60), a = z.t * 14 + h * 0.3; FX.add({ k: 'px', x: z.x + Math.cos(a) * (4 + h * 0.25), y: z.y - h, vx: dir * 40, vy: -20, life: 0.3, s: 2, c: pick(['#f0c878', '#e0b070', '#c8945c']) }); }
+      if (z.x < 2.5 * TILE || z.x > R.pw - 2.5 * TILE) { z.life = 0; box.life = 0; }
+    },
+    onEnd() { box.life = 0; },
+    drawFn(ctx, gctx, X, Y, z) {
+      ctx.globalAlpha = 0.45; ctx.strokeStyle = '#e8c890'; ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) { const yy = Y - 6 - i * 10, w = 6 + i * 3 + Math.sin(z.t * 12 + i) * 2; ctx.beginPath(); ctx.ellipse(X + Math.sin(z.t * 8 + i) * 3, yy, w, 2.5, 0, 0, TAU); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    },
+  });
+}
+// slag shaken loose from the foundry ceiling
+function slagDrop(b, x) {
+  const R = G.room, gy = R.floorBelow(x, R.base * TILE - 30);
+  warnMarker(x, gy, 14, '#ff8a3a', 0.6);
+  later(0.6, () => {
+    const pr = new Proj({ team: 'e', x, y: gy - 190, vx: 0, vy: 520, kind: 'fireball', r: 4, dmg: 13 * b.dmgMul, life: 1.2, ghost: true, light: 40 });
+    pr.upd = q => { if (q.y >= gy - 3) { q.life = 0; FX.burst(x, gy - 2, { n: 10, c: ['#ffd36a', '#ff8a2a', '#5a5258'], sp: [40, 120], life: [0.2, 0.5] }); Sound.play('clank', { x, pitch: 0.7 }); } };
+    G.projs.push(pr);
+  });
+}
+
+// ---------------- 蟾仙·大蟇 AI ----------------
+BOSS_AI.toad = function (b, dt) {
+  const p = G.player, dx = p.x - b.x, d = Math.abs(dx), R = G.room;
+  const fast = b.phase > 1 ? 0.8 : 1, col = '#b8f060';
+  const mx = b.x + b.face * 30, my = b.y - 32;
+  switch (b.state) {
+    case 'idle': {
+      b.faceTarget(); b.vx = approach(b.vx, 0, 600 * dt); b.setAnim('idle');
+      if (b.cd <= 0 && b.onGround) {
+        const a = b.pickAttack([
+          { id: 'leap', w: d > 120 ? 3 : 1.6 },
+          { id: 'tongue', w: d < 240 ? 2.6 : 0.6 },
+          { id: 'spit', w: 2.2 },
+          { id: 'croak', w: 1.2, ok: b.minions.length < 2 },
+          { id: 'rain', w: 2, ok: b.phase > 1 },
+        ]);
+        b.n = 0; b.fired = false;
+        if (a === 'leap') { b.setState('crouch', 'crouch'); b.telegraph(0.5 * fast); b.leaps = b.phase > 1 ? 2 : 1; }
+        else if (a === 'tongue') { b.setState('tongueW', 'mouth'); b.telegraph(0.55 * fast); Sound.play('charge', { x: b.x, pitch: 1.4 }); }
+        else if (a === 'spit') { b.setState('spit', 'spit'); b.telegraph(0.5); Sound.play('void', { x: b.x, pitch: 0.7 }); }
+        else if (a === 'croak') { b.setState('croak', 'spit'); Sound.play('roar', { x: b.x, pitch: 1.6 }); }
+        else if (a === 'rain') { b.setState('rain', 'spit'); Sound.play('roar', { x: b.x, pitch: 1.3 }); }
+      }
+      break;
+    }
+    case 'crouch':
+      b.vx = 0; b.faceTarget();
+      if (b.stT > 0.5 * fast) {
+        // an arcing leap that comes down where you stand
+        const T = 0.85, tx = clamp(p.x, 4 * TILE, R.pw - 4 * TILE);
+        b.vy = -0.5 * GRAV * T; b.vx = (tx - b.x) / T;
+        b.setState('air', 'air'); Sound.play('jump', { x: b.x, pitch: 0.5 }); FX.dust(b.x, b.y, 14, 0);
+      }
+      break;
+    case 'air':
+      if (b.vy > 0 && Math.random() < 0.5) warnMarker(b.x, R.floorBelow(b.x, b.y), 40, col, 0.1);
+      if (b.onGround && b.stT > 0.15) {
+        b.vx = 0;
+        Cam.shake(0.6); Sound.play('stomp', { x: b.x }); Sound.play('explode', { x: b.x, pitch: 0.5 });
+        FX.shock(b.x, b.y, col, 70); FX.debris(b.x, b.y - 2, ['#4a5232', '#7a8a52', col], 16);
+        if (Math.abs(p.x - b.x) < 56 && p.y > b.y - 40) hurtPlayer(20 * b.dmgMul, b.x);
+        eShockwave(b, b.x + 24, b.y, 1, 13 * b.dmgMul); eShockwave(b, b.x - 24, b.y, -1, 13 * b.dmgMul);
+        if (--b.leaps > 0) { b.setState('crouch', 'crouch'); b.stT = 0.2; } else b.setState('recover', 'crouch');
+      }
+      break;
+    case 'tongueW':
+      b.vx = 0;
+      if (b.stT > 0.55 * fast) { b.setState('tongue', 'mouth'); b.tongue = 0; b.tAim = Math.atan2(p.cy - my, p.x - mx); b.caught = false; Sound.play('swoosh', { x: b.x, pitch: 1.2 }); }
+      break;
+    case 'tongue': {
+      // shoots out up to 230 px along the locked angle, then reels back in
+      const ext = b.stT < 0.22 ? b.stT / 0.22 : Math.max(0, 1 - (b.stT - 0.34) / 0.3);
+      b.tongue = 230 * ext;
+      const tx = mx + Math.cos(b.tAim) * b.tongue, ty = my + Math.sin(b.tAim) * b.tongue;
+      if (!b.caught && b.stT < 0.4 && dist(tx, ty, p.x, p.cy) < 14) {
+        b.caught = true;
+        if (hurtPlayer(14 * b.dmgMul, b.x)) {
+          if (b.phase > 1) {
+            // 吞噬: reeled in and swallowed, then spat back out
+            b.tongue = 0; b.setState('swallow', 'spit');
+            p.hidden = true; p.state = 'hurt'; p.hurtT = 1.15; p.move = null; p.vx = 0; p.vy = 0; p.x = b.x; p.inv = Math.max(p.inv, 1.4);
+            Sound.play('void', { x: b.x, pitch: 0.4 });
+            later(1.0, () => {
+              if (!p.hidden || p.dead) return;
+              p.hidden = false; p.x = clamp(b.x + b.face * 36, 3 * TILE, R.pw - 3 * TILE);
+              p.vx = b.face * 360; p.vy = -280; p.state = 'hurt'; p.hurtT = 0.35;
+              hurtPlayer(16 * b.dmgMul, b.x, { unavoidable: true, nonlethal: true, noStagger: true, numc: '#b8f060' });
+              p.inv = Math.max(p.inv, 0.8);
+              FX.burst(p.x, p.cy, { n: 20, c: ['#b8f060', '#ffffff'], sp: [40, 160], glow: true }); Sound.play('explode', { x: p.x, pitch: 1.4 }); Cam.shake(0.4);
+            });
+            break;
+          }
+          p.vx = (b.x > p.x ? 1 : -1) * 320; p.vy = -160;
+          FX.text(p.x, p.y - p.h - 8, '舌卷', '#ff8aa0', { size: 10 });
+        }
+      }
+      if (b.stT > 0.7) { b.tongue = 0; b.setState('recover', 'idle'); }
+      break;
+    }
+    case 'swallow':
+      b.vx = 0;
+      if (b.stT > 1.0) b.setState('recover', 'idle');
+      break;
+    case 'spit':
+      b.vx = 0; b.faceTarget();
+      if (b.n < (b.phase > 1 ? 3 : 2) && b.stT > 0.5 + b.n * 0.35) {
+        b.n++;
+        // three globs of venom; each becomes a 毒沼 where it lands
+        for (let i = 0; i < 3; i++) {
+          const T = 0.8 + i * 0.1, tx = clamp(p.x + (i - 1) * 46 + rand(-10, 10), 3 * TILE, R.pw - 3 * TILE);
+          const pr = new Proj({ team: 'e', x: mx, y: my, kind: 'orb', r: 4, c: '#b8f060', c2: '#ffffff', grav: 500, life: 3, dmg: 12 * b.dmgMul, light: 40 });
+          pr.vx = (tx - mx) / T; pr.vy = (R.floorBelow(tx, p.y - 20) - 4 - my - 0.5 * 500 * T * T) / T;
+          pr.onDie = q => toadPuddle(b, q.x, 4.5);
+          G.projs.push(pr);
+        }
+        Sound.play('shoot', { x: b.x, pitch: 0.6 });
+      }
+      if (b.stT > 1.6) b.setState('recover', 'idle');
+      break;
+    case 'croak':
+      b.vx = 0;
+      if (b.stT > 0.6 && !b.fired) {
+        b.fired = true;
+        // two 蛙武者 answer the call
+        for (const side of [-1, 1]) {
+          const x = clamp(b.x + side * 110, 4 * TILE, R.pw - 4 * TILE);
+          const m = new Enemy('frogger', x, R.floorBelow(x, b.y - 30));
+          G.enemies.push(m); b.minions.push(m);
+        }
+        FX.ring(b.x, b.cy, 10, 90, col, 0.5, 3);
+      }
+      if (b.stT > 1.2) b.setState('recover', 'idle');
+      break;
+    case 'rain':
+      b.vx = 0;
+      if (b.stT > 0.6 && !b.fired) {
+        b.fired = true;
+        // venom rains down around you: every drop marked, every drop a pool
+        for (let i = 0; i < 7; i++) later(i * 0.16, () => {
+          if (b.dead) return;
+          const x = clamp(p.x + rand(-140, 140), 3 * TILE, R.pw - 3 * TILE), gy = R.floorBelow(x, p.y - 60);
+          warnMarker(x, gy, 18, col, 0.7);
+          later(0.7, () => {
+            const pr = new Proj({ team: 'e', x, y: gy - 170, vx: 0, vy: 560, kind: 'orb', r: 3.6, c: '#b8f060', c2: '#ffffff', dmg: 12 * b.dmgMul, life: 1, ghost: true, light: 30 });
+            pr.upd = q => { if (q.y >= gy - 3) { q.life = 0; toadPuddle(b, x, 3.5); FX.burst(x, gy - 2, { n: 8, c: ['#b8f060', '#7aa848'], sp: [30, 90], life: [0.2, 0.4] }); } };
+            G.projs.push(pr);
+          });
+        });
+      }
+      if (b.stT > 1.8) b.setState('recover', 'idle');
+      break;
+    case 'recover':
+      b.vx = approach(b.vx, 0, 800 * dt);
+      if (b.stT > 0.75 * fast) { b.setState('idle', 'idle'); b.cd = rand(0.5, 1.0) * fast; }
+      break;
+    default: b.setState('idle', 'idle');
+  }
+};
+
+// ---------------- 流沙蝎后 AI ----------------
+BOSS_AI.scorpqueen = function (b, dt) {
+  const p = G.player, d = Math.abs(p.x - b.x), R = G.room;
+  const fast = b.phase > 1 ? 0.8 : 1, col = '#ffc850';
+  const sand = (x, y) => FX.add({ k: 'px', x: x + rand(-24, 24), y: y - 1, vx: rand(-60, 60), vy: -rand(60, 160), g: 500, life: rand(0.3, 0.6), s: rand(2, 3), c: pick(['#e0b070', '#c8945c', '#f4d8a0']) });
+  switch (b.state) {
+    case 'idle': {
+      b.faceTarget(); b.hidden = false; b.intangible = false;
+      if (d > 110) { b.vx = approach(b.vx, b.face * b.D.speed * (b.phase > 1 ? 1.3 : 1), 400 * dt); b.setAnim('walk'); }
+      else { b.vx = approach(b.vx, 0, 600 * dt); b.setAnim('idle'); }
+      if (b.cd <= 0 && b.onGround) {
+        const a = b.pickAttack([
+          { id: 'claw', w: d < 120 ? 3.2 : 0.4 },
+          { id: 'stab', w: d < 200 ? 2.4 : 1 },
+          { id: 'burrow', w: d > 140 ? 2.6 : 1.2 },
+          { id: 'spray', w: 2 },
+          { id: 'brood', w: 1.1, ok: b.phase > 1 && b.minions.length < 2 },
+          { id: 'storm', w: 1.6, ok: b.phase > 1 },
+        ]);
+        b.vx = 0; b.n = 0; b.fired = false;
+        if (a === 'claw') { b.setState('clawW', 'claw'); b.telegraph(0.5 * fast); b.claws = b.phase > 1 ? 2 : 1; }
+        else if (a === 'stab') { b.setState('stabW', 'stab'); b.sx = clamp(p.x, b.x - 170, b.x + 170); b.telegraph(0.5); Sound.play('charge', { x: b.x, pitch: 0.9 }); }
+        else if (a === 'burrow') { b.setState('dig', 'burrow'); Sound.play('stomp', { x: b.x, pitch: 0.8 }); }
+        else if (a === 'spray') { b.setState('spray', 'claw'); b.telegraph(0.45); }
+        else if (a === 'brood') { b.setState('brood', 'burrow'); Sound.play('roar', { x: b.x, pitch: 1.5 }); }
+        else if (a === 'storm') { b.setState('storm', 'idle'); Sound.play('swoosh', { x: b.x, pitch: 0.4 }); }
+      }
+      break;
+    }
+    case 'clawW':
+      b.faceTarget();
+      if (b.stT > 0.5 * fast) {
+        b.setState('claw', 'claw'); b.vx = b.face * 260;
+        bossBox(b, [10, -40, 80, 40], b.D.dmg, 0.16);
+        FX.slash(b.x + b.face * 50, b.y - 22, { r: 40, a0: -80, a1: 60, th: 10, c: col, f: b.face, dur: 0.22, sy: 0.7 });
+        Sound.play('slashHeavy', { x: b.x, pitch: 0.8 }); Cam.shake(0.25);
+      }
+      break;
+    case 'claw':
+      b.vx = approach(b.vx, 0, 800 * dt);
+      if (b.stT > 0.45) { if (--b.claws > 0) { b.setState('clawW', 'claw'); b.stT = 0.25; } else b.setState('recover', 'idle'); }
+      break;
+    case 'stabW': {
+      b.vx = 0;
+      if (b.stT < 0.4) b.sx = lerp(b.sx, clamp(p.x, b.x - 170, b.x + 170), 0.1);
+      const gy = R.floorBelow(b.sx, b.y - 20);
+      if (Math.random() < 0.5) warnMarker(b.sx, gy, 18, col, 0.1);
+      if (b.stT > 0.75 * fast) {
+        // the tail comes down like a spear on the marked spot
+        b.setState('stab', 'stab');
+        Combat.area('e', b.sx - 12, gy - 60, 24, 60, { dmg: 20 * b.dmgMul }, 0.18, { owner: b });
+        FX.shock(b.sx, gy, col, 34); FX.debris(b.sx, gy - 2, ['#e0b070', '#8a6438', col], 10);
+        FX.add({ k: 'beam', x: b.sx, y: gy, len: 70, w: 8, ang: -Math.PI / 2, c: '#ff8a4a', life: 0.2 });
+        Sound.play('stomp', { x: b.sx }); Cam.shake(0.35);
+        if (b.phase > 1) { const sx = b.sx; later(0.12, () => { if (!b.dead) { eShockwave(b, sx + 14, gy, 1, 11 * b.dmgMul); eShockwave(b, sx - 14, gy, -1, 11 * b.dmgMul); } }); }
+      }
+      break;
+    }
+    case 'stab':
+      if (b.stT > 0.6) b.setState('recover', 'idle');
+      break;
+    case 'dig':
+      b.vx = 0;
+      if (Math.random() < 0.7) sand(b.x, b.y);
+      if (b.stT > 0.6) { b.hidden = true; b.intangible = true; b.setState('tunnel'); }
+      break;
+    case 'tunnel': {
+      const dir = Math.sign(p.x - b.x) || b.face;
+      b.face = dir; b.vx = dir * 210 * (b.phase > 1 ? 1.2 : 1);
+      if (Math.random() < 0.8) sand(b.x, b.y);
+      if (Math.abs(p.x - b.x) < 16 || b.stT > 2.2 || b.hitWall) {
+        b.vx = 0; b.setState('surface'); b.telegraph(0.6);
+        warnMarker(b.x, R.floorBelow(b.x, b.y - 20), 46, col, 0.6); Sound.play('warn', { x: b.x });
+      }
+      break;
+    }
+    case 'surface':
+      b.vx = 0;
+      if (Math.random() < 0.7) FX.debris(b.x + rand(-30, 30), b.y - 2, ['#e0b070', '#8a6438'], 1);
+      if (b.stT > 0.6) {
+        b.hidden = false; b.intangible = false;
+        b.setState('erupt', 'claw'); b.vy = -380;
+        bossBox(b, [-40, -60, 80, 62], 20, 0.25, { onHit: pl => { pl.vy = -420; } });
+        quicksand(b, b.x, b.phase > 1 ? 4.5 : 3.2);
+        for (let i = 0; i < 16; i++) sand(b.x, b.y);
+        Sound.play('explode', { x: b.x, pitch: 0.6 }); Cam.shake(0.5);
+      }
+      break;
+    case 'erupt':
+      if (b.onGround && b.stT > 0.2) b.setState('recover', 'idle');
+      break;
+    case 'spray':
+      b.vx = 0; b.faceTarget();
+      if (b.n < (b.phase > 1 ? 3 : 2) && b.stT > 0.45 + b.n * 0.3) {
+        b.n++;
+        // a fan of venom-laced sand from the raised stinger
+        const ox = b.x - b.face * 4, oy = b.y - 76, a0 = Math.atan2(p.cy - oy, p.x - ox);
+        for (let i = 0; i < 5; i++) {
+          const a = a0 + (i - 2) * 0.17 + (b.n % 2 ? 0.08 : 0);
+          G.projs.push(new Proj({ team: 'e', x: ox, y: oy, vx: Math.cos(a) * 190, vy: Math.sin(a) * 190, kind: 'shard', r: 3, c: '#ffd070', c2: '#ffffff', dmg: 12 * b.dmgMul, life: 2.6, onHitP: () => venom(G.player, 2.6, 2.5 * b.dmgMul) }));
+        }
+        Sound.play('shoot', { x: b.x, pitch: 0.7 });
+      }
+      if (b.stT > 1.4) b.setState('recover', 'idle');
+      break;
+    case 'brood':
+      b.vx = 0;
+      if (b.stT > 0.6 && !b.fired) {
+        b.fired = true;
+        for (const s of [-1, 1]) { const x = clamp(b.x + s * 90, 4 * TILE, R.pw - 4 * TILE); const m = new Enemy('scorp', x, R.floorBelow(x, b.y - 30)); G.enemies.push(m); b.minions.push(m); }
+      }
+      if (b.stT > 1.1) b.setState('recover', 'idle');
+      break;
+    case 'storm':
+      b.vx = 0;
+      if (b.stT > 0.5 && !b.fired) {
+        b.fired = true;
+        // three dust devils sweep in from the far side
+        const from = p.x < R.pw / 2 ? R.pw - 4 * TILE : 4 * TILE, dir = from < R.pw / 2 ? 1 : -1;
+        for (let i = 0; i < 3; i++) later(i * 0.7, () => { if (!b.dead) dustDevil(b, from, dir); });
+        G.bossPhaseText = { t: 1.4, text: '沙暴' };
+      }
+      if (b.stT > 2.4) b.setState('recover', 'idle');
+      break;
+    case 'recover':
+      b.vx = approach(b.vx, 0, 800 * dt);
+      if (b.stT > 0.7 * fast) { b.setState('idle', 'idle'); b.cd = rand(0.5, 1.0) * fast; }
+      break;
+    default: b.setState('idle', 'idle');
+  }
+};
+
+// ---------------- 炎铸巨像 AI ----------------
+BOSS_AI.colossus = function (b, dt) {
+  const p = G.player, dx = p.x - b.x, d = Math.abs(dx), R = G.room;
+  const fast = b.phase > 1 ? 0.82 : 1, col = '#ff8a3a';
+  const heat = n => { b.heat = Math.min(100, (b.heat || 0) + n * (b.phase > 1 ? 1.25 : 1)); };
+  switch (b.state) {
+    case 'idle': {
+      b.faceTarget();
+      if ((b.heat || 0) >= 100) { b.fired = false; b.vx = 0; b.setState('ventIn', 'vent'); break; }
+      if (d > 90) { b.vx = approach(b.vx, b.face * b.D.speed * (b.phase > 1 ? 1.3 : 1), 300 * dt); b.setAnim('walk'); }
+      else { b.vx = approach(b.vx, 0, 500 * dt); b.setAnim('idle'); }
+      if (b.cd <= 0) {
+        const a = b.pickAttack([
+          { id: 'slam', w: d < 130 ? 3 : 0.8 },
+          { id: 'sweep', w: d < 150 ? 2.2 : 0.4 },
+          { id: 'breath', w: d < 200 ? 2 : 0.8 },
+          { id: 'rivets', w: d > 120 ? 2.6 : 1.2 },
+          { id: 'charge', w: 1.8, ok: b.phase > 1 },
+          { id: 'pour', w: 1.8, ok: b.phase > 1 },
+        ]);
+        b.vx = 0; b.n = 0; b.fired = false;
+        if (a === 'slam') { b.setState('raise', 'raise'); b.telegraph(0.7 * fast); Sound.play('charge', { x: b.x, pitch: 0.5 }); }
+        else if (a === 'sweep') { b.setState('sweepW', 'sweepW'); b.telegraph(0.55 * fast); }
+        else if (a === 'breath') { b.setState('breathW', 'breath'); b.telegraph(0.6); Sound.play('charge', { x: b.x, pitch: 0.8 }); }
+        else if (a === 'rivets') b.setState('rivets', 'throw');
+        else if (a === 'charge') { b.setState('chargeW', 'raise'); b.telegraph(0.6); Sound.play('void', { x: b.x, pitch: 0.4 }); }
+        else if (a === 'pour') { b.setState('pour', 'raise'); Sound.play('warn', { x: b.x }); }
+      }
+      break;
+    }
+    case 'raise':
+      b.faceTarget();
+      if (b.stT > 0.7 * fast) {
+        b.setState('slam', 'slam'); heat(28);
+        const fx = b.x + b.face * 50, gy = R.floorBelow(fx, b.y - 20);
+        bossBox(b, [16, -60, 70, 62], b.D.dmg * 1.2, 0.16);
+        FX.shock(fx, gy, col, 70); FX.debris(fx, gy - 2, ['#5a5258', col, '#ffd36a'], 18);
+        Sound.play('stomp', { x: b.x }); Sound.play('explode', { x: fx, pitch: 0.5 }); Cam.shake(0.7);
+        eShockwave(b, fx + 10, gy, 1, 14 * b.dmgMul); eShockwave(b, fx - 10, gy, -1, 14 * b.dmgMul);
+        // the blow shakes slag loose from the ceiling
+        for (let i = 0; i < (b.phase > 1 ? 4 : 2); i++) later(0.3 + i * 0.22, () => { if (!b.dead) slagDrop(b, clamp(p.x + rand(-90, 90), 3 * TILE, R.pw - 3 * TILE)); });
+      }
+      break;
+    case 'slam':
+      if (b.stT > 0.8 * fast) b.setState('recover', 'idle');
+      break;
+    case 'sweepW':
+      b.vx = 0; b.faceTarget();
+      if (b.stT > 0.55 * fast) {
+        // low and wide: jump it
+        b.setState('sweep', 'sweep'); heat(20); b.vx = b.face * 120;
+        bossBox(b, [-20, -40, 120, 30], b.D.dmg, 0.2);
+        FX.slash(b.x + b.face * 30, b.y - 22, { r: 70, a0: 170, a1: 0, th: 12, c: col, f: b.face, dur: 0.25, sy: 0.35 });
+        Sound.play('slashHeavy', { x: b.x, pitch: 0.5 }); Cam.shake(0.3);
+      }
+      break;
+    case 'sweep':
+      b.vx = approach(b.vx, 0, 600 * dt);
+      if (b.stT > 0.6) b.setState('recover', 'idle');
+      break;
+    case 'breathW':
+      b.vx = 0; b.faceTarget();
+      if (b.stT > 0.6) { b.setState('breath', 'breath'); heat(24); b.bdir = b.face; bossBox(b, [10, -60, 130, 40], 9, 1.0, { multi: 0.3 }); Sound.play('fire', { x: b.x, pitch: 0.6 }); }
+      break;
+    case 'breath': {
+      // a roaring cone of furnace fire from the chest; the ground it licks keeps burning
+      b.vx = 0;
+      const ox = b.x + b.bdir * 16, oy = b.y - 48;
+      for (let i = 0; i < 4; i++) FX.add({ k: 'px', x: ox, y: oy, vx: b.bdir * rand(160, 320), vy: rand(-40, 60), life: rand(0.25, 0.45), s: rand(3, 6), c: pick(['#ffd36a', '#ff8a2a', '#ff5a1a', '#ffffff']), glow: true, add: true, shrink: true });
+      Light.add(b.x + b.bdir * 70, b.y - 40, 150, '#ff8a3a', 1);
+      if (b.stT > 1.0) { for (let k = 0; k < 3; k++) { const fx = b.x + b.bdir * (50 + k * 36); firePatch(b, fx, R.floorBelow(fx, b.y - 20)); } b.setState('recover', 'idle'); }
+      break;
+    }
+    case 'rivets':
+      b.vx = 0; b.faceTarget();
+      if (b.n < (b.phase > 1 ? 5 : 3) && b.stT > 0.4 + b.n * 0.18) {
+        b.n++; heat(6);
+        // red-hot rivets lobbed onto you, each leaving burning ground
+        const T = 0.8 + rand(0, 0.15), tx = clamp(p.x + rand(-50, 50), 3 * TILE, R.pw - 3 * TILE), sx = b.x + b.face * 10, sy = b.y - 70;
+        const pr = new Proj({ team: 'e', x: sx, y: sy, kind: 'fireball', r: 3.4, grav: 520, life: 3, dmg: 12 * b.dmgMul, light: 40 });
+        pr.vx = (tx - sx) / T; pr.vy = (R.floorBelow(tx, p.y - 20) - 4 - sy - 0.5 * 520 * T * T) / T;
+        pr.onDie = q => firePatch(b, q.x, R.floorBelow(q.x, q.y - 10));
+        G.projs.push(pr); Sound.play('shoot', { x: b.x, pitch: 0.5 });
+      }
+      if (b.stT > 1.5) b.setState('recover', 'idle');
+      break;
+    case 'chargeW':
+      b.faceTarget(); b.vx = 0;
+      if (b.stT > 0.6) { b.setState('charge', 'slam'); heat(22); b.cx0 = b.x; b.lpx = b.x; b.cbox = bossBox(b, [-10, -66, 60, 66], b.D.dmg, 3); Sound.play('dash', { x: b.x, pitch: 0.4 }); }
+      break;
+    case 'charge':
+      // a steam-driven rush across the hall, leaving burning tracks
+      b.vx = b.face * 400;
+      FX.ghost(b.frame(), b.spr.ox, b.spr.oy, b.x, b.y, b.face < 0, col, 0.25, 0.4);
+      if (Math.abs(b.x - b.lpx) > 44) { b.lpx = b.x; firePatch(b, b.x - b.face * 20, R.floorBelow(b.x, b.y - 20)); }
+      if (b.hitWall || Math.abs(b.x - b.cx0) > 340 || b.stT > 1.3) {
+        if (b.cbox) b.cbox.life = 0;
+        if (b.hitWall) { Cam.shake(0.5); Sound.play('stomp', { x: b.x }); }
+        b.vx = 0; b.setState('recover', 'idle');
+      }
+      break;
+    case 'pour':
+      b.vx = 0;
+      if (b.stT > 0.4 && !b.fired) {
+        b.fired = true; heat(26);
+        // molten metal pours from the gantries: three marked columns, then one on you
+        const xs = [p.x - 90, p.x + 90, p.x - 180 * (Math.sign(dx) || 1), p.x].map(x => clamp(x, 3 * TILE, R.pw - 3 * TILE));
+        xs.forEach((x, i) => later(i * 0.3, () => {
+          if (b.dead) return;
+          const gy = R.floorBelow(x, R.base * TILE - 30);
+          warnMarker(x, gy, 20, col, 0.8); FX.tline(x, gy - 200, x, gy, col, 0.8, 1);
+          later(0.8, () => {
+            FX.add({ k: 'beam', x, y: gy, len: 220, w: 18, ang: -Math.PI / 2, c: '#ff8a2a', life: 0.45 });
+            FX.add({ k: 'beam', x, y: gy, len: 220, w: 6, ang: -Math.PI / 2, c: '#ffe8a0', life: 0.5 });
+            Combat.area('e', x - 10, gy - 220, 20, 220, { dmg: 18 * b.dmgMul }, 0.3, { owner: b });
+            firePatch(b, x, gy); Sound.play('fire', { x }); Cam.shake(0.2);
+          });
+        }));
+      }
+      if (b.stT > 2.2) b.setState('recover', 'idle');
+      break;
+    case 'ventIn':
+      // 过热: steam blasts out around it, then it kneels with the furnace open
+      b.vx = 0;
+      if (!b.fired) {
+        b.fired = true; b.heat = 0;
+        G.bossPhaseText = { t: 1.4, text: '过热' };
+        Sound.play('void', { x: b.x, pitch: 0.4 }); Sound.play('explode', { x: b.x, pitch: 0.4 });
+        Combat.area('e', b.x - 60, b.y - 70, 120, 72, { dmg: 14 * b.dmgMul }, 0.35, { owner: b });
+        for (let i = 0; i < 24; i++) FX.add({ k: 'px', x: b.x + rand(-20, 20), y: b.y - rand(20, 70), vx: rand(-200, 200), vy: rand(-160, 40), life: rand(0.5, 1), s: rand(3, 6), c: pick(['#ffffff', '#e8e0e0', '#c8c0c0']), shrink: true });
+        Cam.shake(0.5);
+      }
+      if (b.stT > 0.5) { b.fired = false; b.setState('vent', 'vent'); FX.text(b.x, b.y - b.h - 12, '炉心敞开', '#ffd36a', { size: 12, life: 1.2 }); }
+      break;
+    case 'vent':
+      b.vx = 0;
+      if (Math.random() < 0.5) FX.add({ k: 'px', x: b.x + rand(-14, 14), y: b.y - rand(50, 80), vx: rand(-20, 20), vy: -rand(40, 90), life: 0.7, s: rand(2, 5), c: pick(['#e8e0e0', '#c8c0c0']), shrink: true });
+      if (b.stT > 3.0) b.setState('recover', 'idle');
+      break;
+    case 'recover':
+      b.vx = approach(b.vx, 0, 800 * dt);
+      if (b.stT > 0.75 * fast) { b.setState('idle', 'idle'); b.cd = rand(0.5, 1.0) * fast; }
+      break;
+    default: b.setState('idle', 'idle');
+  }
+};
+
+Object.assign(BOSS_TRAITS, {
+  // 蟾毒: the tongue (drawn here) and the swell of a swallowed hero
+  toad: {
+    canStagger(b) { return b.state !== 'air' && b.state !== 'swallow'; },
+    draw(b, ctx, gctx, x, y) {
+      if (b.tongue > 0) {
+        const mx = x + b.face * 30, my = y - 32, tx = mx + Math.cos(b.tAim) * b.tongue, ty = my + Math.sin(b.tAim) * b.tongue;
+        ctx.strokeStyle = '#c8506a'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = '#ff9ab0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, my - 1); ctx.lineTo(tx, ty - 1); ctx.stroke();
+        ctx.fillStyle = '#ff9ab0'; ctx.beginPath(); ctx.arc(tx, ty, 4, 0, TAU); ctx.fill();
+      }
+      if (b.state === 'swallow') {
+        ctx.globalAlpha = 0.5 + 0.3 * Math.sin(G.time * 20); ctx.fillStyle = '#e8d8a0';
+        ctx.beginPath(); ctx.ellipse(x + b.face * 18, y - 18, 12, 9, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+      }
+    },
+  },
+  // 流沙: untouchable while tunnelling; a wake of sand shows where she is
+  scorpqueen: {
+    canStagger(b) { return !['dig', 'tunnel', 'surface', 'erupt'].includes(b.state); },
+    draw(b, ctx, gctx, x, y) {
+      if (!b.hidden) return;
+      const k = Math.sin(G.time * 14);
+      ctx.fillStyle = '#c8945c'; ctx.beginPath(); ctx.ellipse(x, y, 26 + k * 2, 6, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#f0c878'; ctx.beginPath(); ctx.ellipse(x - 4, y - 2, 14, 3, 0, Math.PI, 0); ctx.fill();
+      if (b.state === 'surface') { ctx.fillStyle = '#ff5a3a'; ctx.fillRect(Math.round(x - 2), Math.round(y - 10 - Math.abs(k) * 4), 4, 6); }
+    },
+  },
+  // 过热: a heat gauge over its head; when it vents, the open furnace takes +60%
+  colossus: {
+    taken(b) { return b.state === 'vent' ? 1.6 : 1; },
+    canStagger(b) { return !['charge', 'ventIn', 'vent'].includes(b.state); },
+    draw(b, ctx, gctx, x, y) {
+      const hv = b.heat || 0, bw = 36, bx = Math.round(x - bw / 2), by = Math.round(y - b.h - 16);
+      ctx.fillStyle = '#1a0e0a'; ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
+      ctx.fillStyle = hv > 75 ? (Math.floor(G.time * 12) % 2 ? '#ffffff' : '#ff5a1a') : '#ff8a2a';
+      ctx.fillRect(bx, by, Math.round(bw * hv / 100), 2);
+      gctx.globalAlpha = 0.5; gctx.fillStyle = '#ff7a2a'; gctx.fillRect(bx, by - 1, Math.round(bw * hv / 100), 4); gctx.globalAlpha = 1;
+      Light.add(b.x, b.y - 48, b.state === 'vent' ? 160 : 70, b.state === 'vent' ? '#ffd36a' : '#ff7a2a', 0.9);
     },
   },
 });

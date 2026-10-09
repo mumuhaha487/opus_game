@@ -777,12 +777,12 @@ UI.drawHowto = function () {
       ['见切', '在敌人攻击即将命中的瞬间冲刺，触发子弹时间；随后按攻击发动必暴击的反击。'],
       ['武学', '武技 / 技能 / 秘技同属武学。每门有自己的等级上限（1–3 级）和独有的进阶效果，卡牌上写明每一级给什么。'],
       ['武技（方向 + 攻击）', '↑ / ↓ / 冲刺中 + 攻击各有一门武技，升级逐步解锁派生、连段、终式，前一招后继续按攻击接出。'],
-      ['技能（U + 方向）', 'U 是不耗灵力的远程技能，↑ / ↓ / 冲刺 + U 各是另一招，各自冷却；解锁后施放中再按 U 出下一段。'],
+      ['技能（U + 方向）', 'U 是不耗灵力的远程技能，↑ / ↓ / 冲刺 + U 各是另一招，没有冷却，收招即可再放；解锁后施放中再按 U 出下一段，换方向则改出该方向的技能。'],
       ['秘技（I + 方向）', '静止、移动、↑、↓、空中各一招，消耗灵力；↓ + I 是奥义。解锁派生后，施放中再按 I 接出派生招式。'],
-      ['灵力', '蓝条会自然恢复，命中敌人（包括技能命中）、极限闪避也会回复。灵力不足时秘技无法施放。'],
+      ['灵力', '蓝条会自然恢复，命中敌人、极限闪避也会回复（技能命中回得少一些）。灵力不足时秘技无法施放。'],
       ['武器', '出发前用 ↑↓ 选择武器，每把武器改变属性与战斗特性（如散射、落雷、燃烧）。'],
       ['刻印 · 共鸣', '七大印系各有玩法，同一印系拥有 3 种刻印时触发共鸣。'],
-      ['熵晶', '用于天赋强化，失败也会保留——每一次挑战都会让你更强。'],
+      ['熵晶 · 地图', '熵晶用于天赋强化，失败也会保留。每局的每一关会从两三张地图里抽一张，每张图都有专属敌人与首领。'],
     ];
     panel(90, 66, 780, 400, { border: '#3a2f5c' });
     tips.forEach((tp, i) => {
@@ -940,24 +940,20 @@ UI.drawHUD = function () {
       if (S) T(S.name, x + sz / 2, y + sz + 4, { size: 8, color: cur ? '#e8f4ff' : '#8a8ab0', align: 'center' });
       ax += sz + gap;
     }
-    // 技能 slots (U + direction, free, cooldown), left of the 秘技 bar
+    // 技能 slots (U + direction, free, no cooldown), left of the 秘技 bar
     {
-      const usz = 30, ugap = 8, ucur = p.uSlot();
+      const usz = 30, ugap = 8, ucur = p.uSlot(), unx = p.uNext();
       let ux = UW - 14 - order.length * (sz + gap) + gap - 20 - U_SLOTS.length * (usz + ugap) + ugap;
       const uy = ay + (sz - usz);
       for (const sl of U_SLOTS) {
         const x = ux, y = uy, s = p.uskills[sl.id], U = s && USKILLS[s.id], cur = sl.id === ucur;
-        const cd = U ? uCooldown(U) : 1, left = Math.max(0, p.ucd[sl.id] || 0);
-        uctx.fillStyle = cur ? WX_FAM.u.col : '#05030a'; uctx.fillRect(x - 2, y - 2, usz + 4, usz + 4);
+        const chain = U && unx && unx.U === U;
+        uctx.fillStyle = chain && Math.floor(G.time * 10) % 2 ? '#ffffff' : cur ? WX_FAM.u.col : '#05030a'; uctx.fillRect(x - 2, y - 2, usz + 4, usz + 4);
         uctx.fillStyle = '#0e1e1a'; uctx.fillRect(x, y, usz, usz);
         if (U) {
-          uctx.globalAlpha = left > 0 ? 0.45 : 1;
           uctx.drawImage(iconOf(U.icon, WX_FAM.u.col), x + 3, y + 3, 24, 24);
-          uctx.globalAlpha = 1;
-          if (left > 0) {
-            uctx.fillStyle = 'rgba(0,0,0,0.55)'; uctx.fillRect(x, y, usz, Math.round(usz * clamp(left / cd, 0, 1)));
-            T(left.toFixed(1), x + usz / 2, y + 10, { size: 8, color: '#ffffff', align: 'center', outline: '#05030a' });
-          }
+          // the next stage is open: show which one a press would give
+          if (chain) T(['', '二', '三'][unx.stage], x + usz - 6, y + 2, { size: 8, color: '#ffffff', align: 'center', outline: '#05030a' });
           for (let k = 0; k < wxMax(U); k++) { uctx.fillStyle = k < s.lv ? WX_FAM.u.col : '#2a2244'; uctx.fillRect(x + 3 + k * 5, y + usz - 5, 3, 3); }
         }
         T(sl.input, x + usz / 2, y - 12, { size: 8, color: cur ? '#ffffff' : '#7ab8a0', align: 'center' });
@@ -1153,7 +1149,7 @@ UI.drawHUD = function () {
     const y = UH - 150;
     uctx.globalAlpha = a * 0.75; uctx.fillStyle = '#05000a'; uctx.fillRect(cxh - 310, y - 8, 620, 74); uctx.globalAlpha = a;
     for (const [k, n] of hints) { const w = ctrlCap(x, y, k); T(n, x + w + 4, y - 1, { color: '#e8e0ff' }); x += Text.measure(n, 12) + 40; }
-    T('↑ / ↓ / 冲刺 + 攻击：武技 · U / ↑U / ↓U / 冲刺U：技能（不耗灵力，有冷却）', cxh, y + 20, { color: '#c8c0e0', align: 'center' });
+    T('↑ / ↓ / 冲刺 + 攻击：武技 · U / ↑U / ↓U / 冲刺U：技能（不耗灵力，无冷却）', cxh, y + 20, { color: '#c8c0e0', align: 'center' });
     T('I + 方向：秘技（耗灵力，↓ + I 为奥义）· 施放后再按一次：下一段 · 命中瞬间冲刺：见切', cxh, y + 40, { color: '#9a8acb', align: 'center' });
     uctx.globalAlpha = 1;
   }
@@ -1298,12 +1294,12 @@ UI.drawPause = function (o) {
       row(y, A.icon, '#ffc8a8', `[${sl.input}] ${A.name} ${a.lv}/${wxMax(A)}`, names.slice(0, wxAt(A, a.lv).n).join('→') + perkTxt(A, a.lv), nextTxt('art', A, a.lv));
       y += 21;
     }
-    head('技能 · U + 方向（不耗灵力）', y + 2, WX_FAM.u.col); y += 21;
+    head('技能 · U + 方向（不耗灵力 · 无冷却）', y + 2, WX_FAM.u.col); y += 21;
     for (const sl of U_SLOTS) {
       const s = p.uskills[sl.id];
       if (!s) continue;
       const U = USKILLS[s.id];
-      row(y, U.icon, '#c8ffe0', `[${sl.input}] ${U.name} ${s.lv}/${wxMax(U)}`, U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join('→') + ` · ${uCooldown(U).toFixed(1)}秒` + perkTxt(U, s.lv), nextTxt('u', U, s.lv));
+      row(y, U.icon, '#c8ffe0', `[${sl.input}] ${U.name} ${s.lv}/${wxMax(U)}`, U.moves.slice(0, wxAt(U, s.lv).n).map((mn, k) => uLabel(U, k)).join('→') + perkTxt(U, s.lv), nextTxt('u', U, s.lv));
       y += 21;
     }
     head('秘技 · I + 方向（消耗灵力）', y + 2, WX_FAM.sk.col); y += 21;

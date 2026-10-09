@@ -1,6 +1,6 @@
 'use strict';
 // =====================================================================
-//  BOSSES — Oni Warlord, Crystal Empress, Entropy King
+//  BOSSES — Oni Warlord, Crystal Empress, Entropy King (more in bosses2.js)
 // =====================================================================
 // 荒鬼武将 — oni warlord (boss of the first region)
 const WARDEN_LOOK = {
@@ -185,12 +185,14 @@ function bakeBosses() {
   });
 }
 
+// a boss's hp is authored for its home scene (tier); meeting it in another scene rescales it to that scene
+const BOSS_STAGE_HP = [1400, 1750, 2300, 3400];
 const BOSS_DEFS = {
-  warden: { name: '荒鬼武将', en: 'ONI WARLORD', title: '镇守古道的鬼将', hp: 1400, w: 34, h: 66, dmg: 17, gold: [60, 80], spr: 'warden', speed: 70, kb: 0.1, poise: 30,
+  warden: { name: '荒鬼武将', en: 'ONI WARLORD', title: '镇守古道的鬼将', hp: 1400, tier: 0, w: 34, h: 66, dmg: 17, gold: [60, 80], spr: 'warden', speed: 70, kb: 0.1, poise: 30,
     stars: 2, style: '近战猛攻', trait: '鬼怒', traitDesc: '受击积攒怒气，满怒「鬼化」：霸体、加速、增伤；鬼化结束后力竭，受到伤害 +50%', music: 'boss' },
-  empress: { name: '晶核女皇', en: 'CRYSTAL EMPRESS', title: '晶渊深处的歌者', hp: 2300, w: 30, h: 76, dmg: 15, gold: [80, 100], spr: 'empress', speed: 90, kb: 0.1, poise: 28, flying: true,
+  empress: { name: '晶核女皇', en: 'CRYSTAL EMPRESS', title: '晶渊深处的歌者', hp: 2300, tier: 2, w: 30, h: 76, dmg: 15, gold: [80, 100], spr: 'empress', speed: 90, kb: 0.1, poise: 28, flying: true,
     stars: 3, style: '召唤 · 弹幕', trait: '晶壁', traitDesc: '生命降至 66% / 33% 时召唤三座晶柱护体（减伤 90%），击碎全部晶柱可使其失衡', music: 'boss' },
-  king: { name: '熵之王', en: 'ENTROPY KING', title: '万物终结的回响', hp: 3400, w: 32, h: 62, dmg: 18, gold: [0, 0], spr: 'king', speed: 85, kb: 0.1, poise: 34,
+  king: { name: '熵之王', en: 'ENTROPY KING', title: '万物终结的回响', hp: 3400, tier: 3, w: 32, h: 62, dmg: 18, gold: [0, 0], spr: 'king', speed: 85, kb: 0.1, poise: 34,
     stars: 4, style: '全能 · 三阶段', trait: '熵蚀', traitDesc: '终焉形态下，虚空从两侧吞噬战场，站在虚空中会持续受到伤害', music: 'final' },
 };
 
@@ -201,7 +203,9 @@ class Boss extends Enemy {
     this.D = D;
     this.spr = SPR[D.spr];
     const diff = G.run ? G.run.diff : { hp: 1, dmg: 1 };
-    this.maxHp = this.hp = Math.round(D.hp * (0.85 + diff.hp * 0.15) * (G.run ? G.run.bossHpMul : 1));
+    const stage = G.run ? G.run.scene : D.tier, tier = D.tier === undefined ? stage : D.tier;
+    const stageMul = BOSS_STAGE_HP[clamp(stage, 0, 3)] / BOSS_STAGE_HP[clamp(tier, 0, 3)];
+    this.maxHp = this.hp = Math.round(D.hp * stageMul * (0.85 + diff.hp * 0.15) * (G.run ? G.run.bossHpMul : 1));
     this.dmgMul = 0.9 + diff.dmg * 0.1;
     this.phase = 1; this.state = 'intro'; this.cd = 1.2; this.flying = !!D.flying;
     this.last = null; this.stagger = 0;
@@ -230,7 +234,11 @@ class Boss extends Enemy {
       Cam.shake(0.3);
     }
   }
-  canStagger() { return !['jump', 'hover', 'slam', 'tpout', 'tpin', 'roar'].includes(this.state); }
+  canStagger() {
+    const T = BOSS_TRAITS[this.type];
+    if (T && T.canStagger && !T.canStagger(this)) return false;
+    return !['jump', 'hover', 'slam', 'tpout', 'tpin', 'roar'].includes(this.state);
+  }
   die(h) {
     if (this.dead) return;
     this.dead = true; this.hp = 0;
@@ -290,7 +298,8 @@ class Boss extends Enemy {
     const x = this.x - cx, y = this.y - cy;
     const glow = BIOME_GLOW[this.bi];
     Light.add(this.x, this.cy, 130, glow, 0.6);
-    if (this.hidden) return;
+    // a burrowed boss still shows its trait overlay (e.g. the sand wake of 流沙蝎后)
+    if (this.hidden) { if (!this.dead && this.drawExtra) this.drawExtra(ctx, gctx, x, y); return; }
     const fr = this.frame();
     if (!this.flying) {
       ctx.globalAlpha = 0.35; ctx.fillStyle = '#000';
