@@ -352,7 +352,7 @@ test('form navigation, transparent positioning, password handling and file-mode 
   failed.run('Account.hideInputs();'); assert.equal(failed.document.activeElement, null); assert.equal(failed.run('Account.inputs[0].style.display'), 'none');
 });
 
-test('login imports a copy on confirmation and logout defaults to cancel when sync fails', async () => {
+test('login imports a copy on confirmation and failed logout keeps login and dirty progress', async () => {
   const guest = JSON.stringify({ crystals: 42, stats: { runs: 1 } }), storage = new Map([['entropy_blade_save_v1', guest]]);
   const c = client({ storage, fetcher: async (path, options) => path === '/api/login' ? jsonResponse({ user: { name: 'PlayerA' } }) : options.method === 'GET' ? jsonResponse({ rev: 0, updated: 0, data: null }) : jsonResponse({ rev: 1, updated: 1 }) });
   c.run("Account.inputs[0].value = 'PlayerA'; Account.inputs[1].value = 'pass-word-123';");
@@ -362,10 +362,13 @@ test('login imports a copy on confirmation and logout defaults to cancel when sy
   assert.equal(c.run('Save.data.crystals'), 42); assert.equal(storage.get('entropy_blade_save_v1'), guest);
   assert.equal(c.run('Account.message'), '登录成功，已载入云端存档');
   const offline = client(); activate(offline, { crystals: 9 }); offline.run('Save.write();');
-  const logout = offline.run('Account.logout()'); await tick();
-  assert.deepEqual(offline.json('UI.confirm.labels'), ['退出', '取消']); assert.equal(offline.run('UI.confirm.sel'), 1);
-  offline.run('UI.confirm.no(); UI.confirm = null;'); await logout;
-  assert.equal(offline.run('Account.name'), 'PlayerA'); assert.ok(!offline.requests.some(r => r.path === '/api/logout'));
+  await offline.run('Account.logout()');
+  assert.equal(offline.run('UI.confirm'), null);
+  assert.equal(offline.run('Account.name'), 'PlayerA');
+  assert.equal(offline.run('Account.cache.dirty'), true);
+  assert.equal(JSON.parse(offline.storage.get('gameinc_save_entropy-blade_playera_v1')).dirty, true);
+  assert.equal(JSON.parse(offline.storage.get('gameinc_profile_v1')).name, 'PlayerA');
+  assert.ok(offline.requests.some(r => r.path === '/api/logout'));
 });
 
 test('network/429/5xx backoff, online retry and conflict retry bound', async () => {
