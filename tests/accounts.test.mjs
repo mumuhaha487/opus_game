@@ -24,7 +24,7 @@ class MemoryR2 {
     return { etag };
   }
 }
-const environment = () => ({ ACCOUNTS: new MemoryR2(), AUTH_SECRET: 'test-session-secret', PW_PEPPER: 'test-password-pepper' });
+const environment = () => ({ ACCOUNTS: new MemoryR2(), AUTH_SECRET: 'test-session-secret-32-characters-long', PW_PEPPER: 'test-password-pepper-32-characters-long' });
 const password = 'pass-word-123';
 function request(env, path, method = 'GET', data, cookie, options = {}) {
   const headers = { 'Content-Type': 'application/json', Origin: 'https://game.test', 'CF-Connecting-IP': '127.0.0.1', ...options.headers };
@@ -133,6 +133,19 @@ test('CSRF, body bounds, method/path errors, safe exception and all response hea
   assert.equal(failed.status, 500); assert.deepEqual(await failed.json(), { error: 'server_error' }); headersOK(failed);
 });
 
+test('missing or invalid configuration rejects every API route without accessing R2', async () => {
+  for (const invalid of [{ PW_PEPPER: undefined }, { AUTH_SECRET: 'x'.repeat(31) }, { PW_PEPPER: 'x'.repeat(31) }, { AUTH_SECRET: undefined }, { AUTH_SECRET: 123 }, { ACCOUNTS: undefined }]) {
+    let calls = 0;
+    const bucket = Object.fromEntries(['get', 'put', 'head', 'delete'].map(method => [method, () => { calls++; throw new Error('R2 must not be accessed'); }]));
+    const env = { ...environment(), ACCOUNTS: bucket, ...invalid };
+    for (const [path, method] of [['/api/register', 'POST'], ['/api/login', 'POST'], ['/api/logout', 'POST'], ['/api/me', 'GET'], ['/api/save/entropy-blade', 'GET'], ['/api/save/entropy-blade', 'PUT'], ['/api/unknown', 'GET'], ['/api/register', 'GET']]) {
+      const response = await request(env, path, method, {}, null, { headers: { Origin: null } });
+      assert.equal(response.status, 500); assert.deepEqual(await response.json(), { error: 'server_error' }); headersOK(response);
+    }
+    assert.equal(calls, 0);
+  }
+});
+
 test('fixed-window rate limits and hashed keys', async () => {
   const env = environment(); await register(env);
   for (let i = 0; i < 10; i++) assert.equal((await request(env, '/api/login', 'POST', { username: 'PlayerA', password: 'bad' })).status, 401);
@@ -184,11 +197,25 @@ test('real hero, weapon, talent and curse IDs fit schema and collection limits s
   for (const id of ids.talents) assert.match(id, TALENT_ID);
   const cleaned = cleanSave({ talents: Object.fromEntries(Array.from({ length: 80 }, (_, i) => ['t' + i, 1])), heroBest: Object.fromEntries(Array.from({ length: 20 }, (_, i) => ['h' + i, 1])), titles: Array.from({ length: 40 }, (_, i) => 'Title' + i), history: Array.from({ length: 60 }, (_, i) => history(i)) });
   assert.equal(Object.keys(cleaned.talents).length, 64); assert.equal(Object.keys(cleaned.heroBest).length, 16); assert.equal(cleaned.titles.length, 32); assert.equal(cleaned.history.length, 50);
-  const polluted = cleanSave(JSON.parse('{"talents":{"__proto__":2},"stats":{"__proto__":{}}}'));
-  assert.equal({}.polluted, undefined); assert.equal(polluted.talents.__proto__, 2);
 });
 
-function client({ storage = new Map(), fetcher = async () => { throw new Error('offline'); }, file = false } = {}) {
+test('all save maps reject prototype keys while retaining valid IDs', async () => {
+  const numeric = JSON.parse('{"__proto__":2,"constructor":3,"prototype":4,"rin":5}');
+  const weapons = JSON.parse('{"__proto__":"rin_hizakura","constructor":"rin_hizakura","prototype":"rin_hizakura","rin":"rin_hizakura"}');
+  const data = { talents: numeric, heroBest: numeric, trialSel: numeric, lastWeapon: weapons };
+  const cleaned = cleanSave(data);
+  for (const field of ['talents', 'heroBest', 'trialSel', 'lastWeapon']) {
+    for (const key of ['__proto__', 'constructor', 'prototype']) assert.equal(Object.hasOwn(cleaned[field], key), false);
+    assert.ok(Object.hasOwn(cleaned[field], 'rin'));
+  }
+  assert.equal({}.polluted, undefined);
+  const env = environment(), cookie = await register(env);
+  assert.equal((await request(env, '/api/save/entropy-blade', 'PUT', { baseRev: 0, data }, cookie)).status, 200);
+  const saved = await (await request(env, '/api/save/entropy-blade', 'GET', undefined, cookie)).json();
+  for (const field of ['talents', 'heroBest', 'trialSel', 'lastWeapon']) assert.deepEqual(Object.keys(saved.data[field]), ['rin']);
+});
+
+function client({ storage = new Map(), fetcher = async () => { throw new Error('offline'); }, file = false, storageThrows = false } = {}) {
   const listeners = new Map(), timers = new Map(); let timerID = 0;
   const document = { activeElement: null, visibilityState: 'visible', addEventListener: (kind, fn) => listeners.set('document:' + kind, fn), body: { appendChild() {} } };
   document.createElement = tag => {
@@ -196,21 +223,21 @@ function client({ storage = new Map(), fetcher = async () => { throw new Error('
     const node = { tagName: tag.toUpperCase(), style: {}, value: '', readOnly: false, setAttribute() {}, appendChild() {}, addEventListener: (type, fn) => events.set(type, fn), focus() { document.activeElement = node; events.get('focus')?.(); }, blur() { if (document.activeElement === node) document.activeElement = null; }, events };
     return node;
   };
-  const requests = [], drawn = [], rectangles = [];
+  const requests = [], drawn = [], rectangles = [], sounds = [];
   const ctx = new Proxy({ fillRect(...args) { rectangles.push({ args, color: ctx.fillStyle }); } }, { get: (target, key) => key in target ? target[key] : () => {} });
   const context = vm.createContext({ console, AbortController, Date, TextEncoder, location: { protocol: file ? 'file:' : 'https:' }, navigator: {},
     document, window: { addEventListener: (kind, fn) => { const key = 'window:' + kind; const callbacks = listeners.get(key) || []; callbacks.push(fn); listeners.set(key, callbacks); } },
-    localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) },
+    localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { if (storageThrows) throw new Error('storage unavailable'); storage.set(k, v); }, removeItem: k => { if (storageThrows) throw new Error('storage unavailable'); storage.delete(k); } },
     setTimeout: (fn, delay) => { const id = ++timerID; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
     fetch: async (path, options) => { requests.push({ path, ...options }); return fetcher(path, options); },
-    G: { state: 'title', trans: null }, Gfx: { uctx: ctx, artBegin() {}, view: { x: 20, y: 10, w: 1920, h: 1080, dpr: 2 } }, TouchUI: { enabled: false }, Sound: { play() {} }, Text: { measure: s => String(s).length * 8, draw: (ctx, text, x, y, o) => drawn.push({ text, x, y, o }) },
+    G: { state: 'title', trans: null }, Gfx: { uctx: ctx, artBegin() {}, view: { x: 20, y: 10, w: 1920, h: 1080, dpr: 2 } }, TouchUI: { enabled: false }, Sound: { play: name => sounds.push(name) }, Text: { measure: s => String(s).length * 8, draw: (ctx, text, x, y, o) => drawn.push({ text, x, y, o }) },
     HERO_ORDER: ['rin', 'eve', 'gao'], HEROES: { rin: { name: '凛', color: '#ff3b5c' }, eve: { name: '伊芙', color: '#ffd23f' }, gao: { name: '罡', color: '#ff9a3a' } },
   });
   for (const name of ['core', 'syncmerge', 'account', 'ui']) vm.runInContext(src(name), context, { filename: name + '.js' });
   vm.runInContext("UI.screen = 'account';", context);
   const run = code => vm.runInContext(code, context);
   const event = (key, e = {}) => { const fns = listeners.get(key); if (Array.isArray(fns)) for (const fn of fns) fn(e); else fns?.(e); };
-  return { run, storage, requests, timers, document, event, drawn, rectangles, json: code => JSON.parse(JSON.stringify(run(code))) };
+  return { run, storage, requests, timers, document, event, drawn, rectangles, sounds, json: code => JSON.parse(JSON.stringify(run(code))) };
 }
 const jsonResponse = (data, status = 200) => new Response(JSON.stringify(data), { status });
 const tick = async () => { await new Promise(resolve => setImmediate(resolve)); };
@@ -336,6 +363,66 @@ test('hidden/pagehide flush uses keepalive and does not double-count its own win
   assert.equal(c.run('Save.data.crystals'), 15); assert.equal(c.run('Save.data.stats.runs'), 3);
   resolvers[2](jsonResponse({ rev: 3, updated: 2 })); await pending;
   assert.equal(c.run('Account.cache.dirty'), false);
+});
+
+test('storage write/delete failures preserve successful login, progress sync, reset and logout', async () => {
+  let rev = 1;
+  const c = client({ storageThrows: true, fetcher: async (path, options) => {
+    if (path === '/api/login') return jsonResponse({ user: { name: 'PlayerA' } });
+    if (path === '/api/logout') return jsonResponse({ ok: true });
+    if (options.method === 'GET') return jsonResponse({ rev, updated: 1, data: { crystals: 12 } });
+    return jsonResponse({ rev: ++rev, updated: 2 });
+  } });
+  c.run("Account.inputs[0].value = 'PlayerA'; Account.inputs[1].value = 'pass-word-123';");
+  await c.run('Account.submit()');
+  assert.equal(c.run('Account.name'), 'PlayerA'); assert.equal(c.run('Account.status'), 'synced');
+  assert.equal(c.run('Account.message'), '登录成功，已载入云端存档');
+  c.run('Save.data.crystals = 15; Save.write();');
+  assert.equal(c.run('Account.cache.dirty'), true); assert.equal(c.run('Account.status'), 'pending');
+  assert.equal(await c.run('Account.sync()'), true);
+  assert.equal(JSON.parse(c.requests.find(r => r.method === 'PUT').body).data.crystals, 15);
+  c.run('Save.reset();'); assert.equal(await c.run('Account.sync()'), true);
+  assert.equal(c.run('Account.resetVersion'), null); assert.equal(c.run('Save.data.crystals'), 0);
+  await c.run('Account.logout()');
+  assert.equal(c.run('Account.status'), 'guest'); assert.equal(c.run('Account.message'), '已退出，当前使用本机存档');
+});
+
+test('only the executing account button displays busy copy and color', async () => {
+  let resolve;
+  const c = client({ fetcher: async () => new Promise(r => { resolve = r; }) });
+  activate(c, { crystals: 10 }); c.run('Save.write();');
+  const pending = c.run('Account.syncNow()'); await tick();
+  assert.equal(c.run('Account.status'), 'syncing'); assert.equal(c.run('Account.busyRow'), 0);
+  c.run('UI.drawAccount();');
+  assert.ok(c.drawn.some(d => d.y === 252 && d.text === '正在连接…' && d.o.color === '#ffd36a'));
+  assert.ok(c.drawn.some(d => d.y === 300 && d.text === '退出登录' && d.o.color === '#9a8acb'));
+  resolve(jsonResponse({ rev: 2, updated: 1 })); await pending;
+  assert.equal(c.run('Account.busy'), false); assert.equal(c.run('Account.busyRow'), null);
+  c.drawn.length = 0; c.run('Account.row = 1;');
+  const logout = c.run('Account.logout()'); await tick(); c.run('UI.drawAccount();');
+  assert.ok(c.drawn.some(d => d.y === 252 && d.text === '立即同步' && d.o.color === '#9a8acb'));
+  assert.ok(c.drawn.some(d => d.y === 300 && d.text === '正在连接…' && d.o.color === '#ffd36a'));
+  resolve(jsonResponse({ ok: true })); await logout;
+  const background = client({ fetcher: async () => new Promise(r => { resolve = r; }) });
+  activate(background, { crystals: 1 }); background.run('Save.write();');
+  const sync = background.run('Account.sync()'); await tick(); background.run('UI.drawAccount();');
+  assert.ok(background.drawn.some(d => d.y === 252 && d.text === '立即同步' && d.o.color === '#ffffff'));
+  assert.ok(!background.drawn.some(d => d.text === '正在连接…'));
+  resolve(jsonResponse({ rev: 2, updated: 1 })); await sync;
+});
+
+test('account keyboard and hover navigation each play select once per row change', () => {
+  const c = client();
+  c.run("Input.hit = action => action === 'mdown'; UI.updAccount();");
+  assert.equal(c.run('Account.row'), 1); assert.deepEqual(c.sounds, ['select']);
+  c.sounds.length = 0;
+  c.run('Account.inputs[0]').events.get('keydown')({ key: 'ArrowDown', preventDefault() {} });
+  assert.equal(c.run('Account.row'), 2); assert.deepEqual(c.sounds, ['select']);
+  activate(c); c.sounds.length = 0; c.run('Account.row = 0; UI.drawAccount();');
+  c.run('UI.newRegions.find(r => r.y === 288).onHover();');
+  assert.equal(c.run('Account.row'), 1); assert.deepEqual(c.sounds, ['select']);
+  c.run('UI.newRegions.find(r => r.y === 288).onHover();');
+  assert.deepEqual(c.sounds, ['select']);
 });
 
 test('canvas account coordinates, copy, menu index and custom confirm labels', () => {

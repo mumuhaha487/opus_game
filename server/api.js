@@ -29,6 +29,7 @@ async function body(request) {
 }
 export async function handle(request, env) {
   try {
+    if (!env?.ACCOUNTS || typeof env.AUTH_SECRET !== 'string' || env.AUTH_SECRET.length < 32 || typeof env.PW_PEPPER !== 'string' || env.PW_PEPPER.length < 32) return fail(500, 'server_error');
     const url = new URL(request.url), path = url.pathname, method = request.method;
     if (method === 'POST' || method === 'PUT') {
       if ((request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase() !== 'application/json') return fail(415, 'unsupported_media_type');

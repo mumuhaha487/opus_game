@@ -65,13 +65,10 @@ and add its link to the collection page.
 使用 Node 22 执行：
 
 ```powershell
-node --test tests/
+node --test "tests/*.test.*"
 node build.mjs
 npx --yes wrangler@4 pages dev dist --r2 ACCOUNTS
 ```
-
-Windows 上的 Node 把目录测试参数解析为模块路径时，使用显式文件列表：
-`node --test tests/accounts.test.mjs tests/combat-skills.test.cjs tests/difficulty.test.cjs`。
 
 接口通过同源 `/api/*` 访问；POST / PUT 请求带同源 `Origin` 与 JSON 媒体类型。
 密码先经 `PW_PEPPER` 的 HMAC-SHA256，再进行带随机盐的 PBKDF2-SHA256

@@ -303,8 +303,8 @@ const Save = {
     this.data = d;
   },
   write() {
+    try { localStorage.setItem(this.settingsKey, JSON.stringify(this.data.settings)); } catch (e) { /* storage unavailable */ }
     try {
-      localStorage.setItem(this.settingsKey, JSON.stringify(this.data.settings));
       if (this.backend) this.backend.write(this.data);
       else localStorage.setItem(this.key, JSON.stringify(this.data));
       if (this.onWrite) { try { this.onWrite(); } catch (e) { /* hook failed */ } }

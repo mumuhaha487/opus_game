@@ -2,11 +2,12 @@ export const ID = /^[A-Za-z0-9_]{1,24}$/;
 export const TALENT_ID = /^[A-Za-z0-9_]{1,32}$/;
 export const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const number = (v, max, integer = true) => typeof v === 'number' && Number.isFinite(v) && (!integer || Number.isInteger(v)) ? Math.min(max, Math.max(0, v)) : undefined;
+const forbiddenKeys = new Set(['__proto__', 'constructor', 'prototype']);
 function map(value, limit, keyPattern, clean) {
   const out = Object.create(null);
   if (isObject(value)) for (const [k, v] of Object.entries(value)) {
     if (Object.keys(out).length >= limit) break;
-    if (!keyPattern.test(k)) continue;
+    if (forbiddenKeys.has(k) || !keyPattern.test(k)) continue;
     const c = clean(v);
     if (c !== undefined) out[k] = c;
   }

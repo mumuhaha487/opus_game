@@ -742,8 +742,9 @@ UI.updAccount = function () {
   if (typeof Account === 'undefined') return;
   const a = Account;
   if (Input.hit('cancel')) { a.back(); return; }
+  if (a.busy) return;
   const next = navV(a.rows(), a.row);
-  if (next !== a.row) a.selectRow(next);
+  if (next !== a.row) a.selectRow(next, true);
   if (a.formVisible() && a.row === 0 && (Input.hit('mleft') || Input.hit('mright'))) a.changeTab(a.tab ^ 1);
   if (Input.hit('ok')) a.action();
 };
@@ -755,9 +756,10 @@ UI.drawAccount = function () {
   T(a.name ? `已登录 ${a.name} · 存档与战绩保存在云端` : '当前为本机存档。登录后，熵晶、天赋与战绩会同步到云端。', UW / 2, 64, { color: '#9a8acb', align: 'center' });
   panel(60, 92, 400, 380, { border: '#3a2f5c' }); panel(500, 92, 400, 380, { border: '#3a2f5c' });
   const button = (text, y, selected, action, row) => {
+    const busy = a.busy && a.busyRow === row;
     region(80, y, 360, 38, { onHover: () => { if (a.row !== row && !a.busy) a.selectRow(row); }, onClick: () => { if (!a.busy) { a.selectRow(row); action(); } } });
     panel(80, y, 360, 38, { border: selected ? '#ff3b5c' : '#3a2f5c', bg: selected ? '#2a0a18' : '#0b0716' });
-    T(a.busy ? '正在连接…' : text, 260, y + 12, { color: a.busy ? '#ffd36a' : selected ? '#ffffff' : '#9a8acb', align: 'center' });
+    T(busy ? '正在连接…' : text, 260, y + 12, { color: busy ? '#ffd36a' : selected ? '#ffffff' : '#9a8acb', align: 'center' });
   };
   if (form) {
     ['登录', '注册'].forEach((text, i) => {

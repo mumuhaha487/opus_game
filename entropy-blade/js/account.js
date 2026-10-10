@@ -4,8 +4,10 @@ const Account = (() => {
   const cacheKey = name => 'entropy_blade_acct_' + name.toLowerCase() + '_v1';
   const resetKey = name => 'entropy_blade_acct_' + name.toLowerCase() + '_reset_v1';
   const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
+  const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } };
+  const remove = key => { try { localStorage.removeItem(key); } catch { /* storage unavailable */ } };
   const validName = name => typeof name === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(name);
-  const A = { name: null, cache: null, status: 'guest', lastSuccess: 0, busy: false, tab: 0, row: 0, relogin: false, message: '', messageColor: '#ffd36a', file: location.protocol === 'file:', verified: false, pulled: false, needsImport: false, version: 0, resetVersion: null, retry: 0, timer: null, job: null, blurred: false };
+  const A = { name: null, cache: null, status: 'guest', lastSuccess: 0, busy: false, busyRow: null, tab: 0, row: 0, relogin: false, message: '', messageColor: '#ffd36a', file: location.protocol === 'file:', verified: false, pulled: false, needsImport: false, version: 0, resetVersion: null, retry: 0, timer: null, job: null, blurred: false };
   const form = document.createElement('form');
   form.style.cssText = 'position:fixed;opacity:0;z-index:2;border:0;padding:0;margin:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px';
   form.onsubmit = e => { e.preventDefault(); A.submit(); };
@@ -46,9 +48,10 @@ const Account = (() => {
       input.style.width = 360 / UW * v.w / v.dpr + 'px'; input.style.height = 32 / UH * v.h / v.dpr + 'px';
     });
   };
-  A.selectRow = row => {
+  A.selectRow = (row, silent = false) => {
     if (A.busy) return;
-    A.row = row; Sound.play('select');
+    if (A.row !== row && !silent) Sound.play('select');
+    A.row = row;
     A.inputs.forEach(input => input.blur());
     if (A.formVisible() && row > 0 && row < A.rows() - 1 && !A.file) { A.layout(); A.inputs[row - 1].focus(); }
   };
@@ -79,7 +82,7 @@ const Account = (() => {
     } finally { clearTimeout(timer); }
   };
   A.persist = () => {
-    if (A.cache) { A.cache.data = pickProgress(Save.data); localStorage.setItem(cacheKey(A.name), JSON.stringify(A.cache)); }
+    if (A.cache) { A.cache.data = pickProgress(Save.data); write(cacheKey(A.name), A.cache); }
   };
   A.apply = data => {
     const settings = Save.data.settings;
@@ -95,9 +98,9 @@ const Account = (() => {
     A.apply(A.cache.data);
     Save.backend = {
       write() { A.version++; A.cache.dirty = true; A.persist(); },
-      reset() { A.resetVersion = A.version + 1; localStorage.setItem(resetKey(A.name), 'true'); },
+      reset() { A.resetVersion = A.version + 1; write(resetKey(A.name), true); },
     };
-    localStorage.setItem(PROFILE, JSON.stringify({ name }));
+    write(PROFILE, { name });
     A.status = 'pending'; A.verified = false; A.pulled = false; A.retry = 0;
   };
   A.schedule = (delay = 4000) => {
@@ -131,7 +134,7 @@ const Account = (() => {
       try {
         const next = await A.request('/api/save/entropy-blade', 'PUT', { baseRev: A.cache.rev, data: snapshot }, keepalive);
         A.cache.base = snapshot; A.cache.rev = next.rev; A.cache.dirty = A.version !== version;
-        if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; localStorage.removeItem(resetKey(A.name)); }
+        if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(A.name)); }
         A.lastSuccess = Date.now(); A.retry = 0; A.persist();
         return true;
       } catch (e) {
@@ -172,7 +175,7 @@ const Account = (() => {
     else if ([...password].length < 8 || [...password].length > 64) error = '密码需为 8–64 位';
     else if (register && password !== A.inputs[2].value) error = '两次输入的密码不一致';
     if (error) { A.say(error, '#ff5a5a'); Sound.play('error'); return; }
-    A.busy = true; A.say('', '#ffd36a'); A.inputs[1].value = ''; A.inputs[2].value = '';
+    A.busy = true; A.busyRow = A.rows() - 1; A.say('', '#ffd36a'); A.inputs[1].value = ''; A.inputs[2].value = '';
     try {
       if (A.job) await A.job;
       const result = await A.request(register ? '/api/register' : '/api/login', 'POST', { username, password });
@@ -181,11 +184,11 @@ const Account = (() => {
       if (!synced) A.say(A.status === 'expired' ? '登录已过期，请重新登录' : '无法连接服务器，请稍后再试', '#ff5a5a');
       else { A.say(register ? '注册成功，已登录' : '登录成功，已载入云端存档', '#6aff8a'); Sound.play('confirm'); }
     } catch (e) { A.say(A.errorText(e), '#ff5a5a'); Sound.play('error'); }
-    finally { A.busy = false; }
+    finally { A.busy = false; A.busyRow = null; }
   };
   A.logout = async () => {
     if (A.busy || !A.name) return;
-    A.busy = true;
+    A.busy = true; A.busyRow = 1;
     try {
       if (A.job) await A.job;
       if (A.cache.dirty && !await A.sync()) {
@@ -193,18 +196,24 @@ const Account = (() => {
         if (!exit) return;
       }
       await A.request('/api/logout', 'POST', {});
-      clearTimeout(A.timer); localStorage.removeItem(PROFILE); localStorage.removeItem(cacheKey(A.name)); localStorage.removeItem(resetKey(A.name));
+      clearTimeout(A.timer); remove(PROFILE); remove(cacheKey(A.name)); remove(resetKey(A.name));
       Save.backend = null; Save.load(); A.name = null; A.cache = null; A.status = 'guest'; A.relogin = false; A.row = 0;
       UI.weaponSel = null; A.say('已退出，当前使用本机存档', '#6aff8a'); Sound.play('confirm');
     } catch (e) { A.say(A.errorText(e), '#ff5a5a'); Sound.play('error'); }
-    finally { A.busy = false; }
+    finally { A.busy = false; A.busyRow = null; }
+  };
+  A.syncNow = async () => {
+    if (A.busy || !A.name) return;
+    A.busy = true; A.busyRow = 0; Sound.play('confirm');
+    try { await A.sync(); }
+    finally { A.busy = false; A.busyRow = null; }
   };
   A.action = () => {
     if (A.busy) return;
     if (A.formVisible()) { if (A.row === A.rows() - 1) A.submit(); else if (A.row > 0) A.selectRow(A.row); }
     else if (A.row === 1) A.logout();
     else if (A.status === 'expired') { A.relogin = true; A.tab = 0; A.inputs[0].value = A.name; A.selectRow(2); }
-    else { Sound.play('confirm'); A.sync(); }
+    else A.syncNow();
   };
   Save.onWrite = () => {
     if (!A.name) return;
@@ -230,7 +239,7 @@ const Account = (() => {
     flushed.promise = A.request('/api/save/entropy-blade', 'PUT', { baseRev: rev, data: snapshot }, true).then(next => {
       if (A.cache === cache && cache.rev === rev) {
         cache.base = snapshot; cache.rev = next.rev; cache.dirty = A.version !== version;
-        if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; localStorage.removeItem(resetKey(name)); }
+        if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(name)); }
         A.lastSuccess = Date.now(); A.persist();
       }
       return next;
