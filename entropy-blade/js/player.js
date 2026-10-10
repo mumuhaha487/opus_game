@@ -6,6 +6,8 @@
 const JUMP_V = 400, JUMP2_V = 360, MAX_FALL = 470;
 const CHARGE_START = 0.24, CHARGE_L1 = 0.42, CHARGE_L2 = 1.05;
 const FOLLOW_WINDOW = 0.55;
+// 闪避节奏: after a dodge the next one waits this long (a 见切 resets it, so perfect timing can chain dodges forever)
+const DODGE_CD = 0.5, DASH_BUFFER = 0.12;
 const HOOK_NAMES = ['onHit', 'onCrit', 'onKill', 'onDash', 'onDashEnd', 'onSkill', 'onUlt', 'onHurt', 'onRoomStart', 'onRoomClear', 'tick', 'modDmg', 'modHit', 'onPlunge', 'onPerfect', 'onCounter', 'onJump', 'onFinisher', 'onMove', 'onCharge', 'draw'];
 
 class Player extends Ent {
@@ -28,7 +30,7 @@ class Player extends Ent {
     this.hp = this.maxHp;
     this.mana = this.stats.maxMana; this.shield = 0; this.manaFlash = 0;
     this.lastSkill = null; this.lastSkillT = -9;
-    this.dashes = this.stats.dashes; this.dashRegen = 0;
+    this.dashes = this.stats.dashes; this.dashRegen = 0; this.dodgeCD = 0; this.dashBuf = 0;
     this.riseCD = 0;
     this.jumpsLeft = 0; this.coyote = 0; this.jumpBuf = 0; this.jumpHeld = false;
     this.inv = 0; this.hurtT = 0; this.hurtFlash = -1; this.armorT = 0; this.ironT = 0;
@@ -51,7 +53,7 @@ class Player extends Ent {
       maxHp: h.hp + T.hp, atkMul: 1 + T.atk, crit: h.crit + T.crit, critDmg: 1.6, armor: h.armor, speedMul: 1, atkSpeed: 1,
       dashes: 2 + T.dash, dashCD: 0.75, jumps: 2, costMul: 1, manaMul: 1, maxMana: 100, manaRegen: 2.2, skillDmg: 1, ultDmg: 1, chargeDmg: 1, chargeSpeed: 0,
       counterDmg: 1, pdWindow: 0.17, witch: 1.3, airDmg: 1, dmgMul: 1, goldMul: 1 + T.gold, pierce: 0, healMul: 1, comboTime: 2.4,
-      charge2: false, chargeArmor: false, echo: 0, chargeTimeMul: 1, supplyHealMul: 1,
+      charge2: false, chargeArmor: false, echo: 0, chargeTimeMul: 1, supplyHealMul: 1, reachMul: 1,
     };
     s.maxHp += (this.counters && this.counters.bonusHp) || 0;
     this.hooks = {};
@@ -141,7 +143,8 @@ class Player extends Ent {
     if (list) for (const pk of list) if (pk.mods && pk.mods[name] !== undefined) v = name === 'reach' ? v * pk.mods[name] : Math.max(v, +pk.mods[name]);
     return v;
   }
-  reach(wx) { return this.wxMod('reach', wx); }
+  // 刃长 and friends per 武学, times the weapon's own reach (a long spear)
+  reach(wx) { return this.wxMod('reach', wx) * (this.stats.reachMul || 1); }
   // build a hit description; damage = atk * dmg * (skill / art level scaling)
   makeHit(spec) {
     const m = this.move && this.move.m;
@@ -189,6 +192,7 @@ class Player extends Ent {
   update(dt) {
     this.inv -= dt; this.riseCD -= dt; this.hurtFlash -= dt; this.chainT -= dt; this.counterT -= dt; this.postDashT -= dt;
     this.dropT -= dt; this.armorT -= dt; this.landT -= dt; this.wallT -= dt; this.wallLock -= dt;
+    this.dodgeCD = Math.max(0, this.dodgeCD - dt);
     this.squash = Math.max(0, this.squash - dt * 6);
     if (this.ironT > 0) {
       this.ironT -= dt;
@@ -217,6 +221,8 @@ class Player extends Ent {
     this.fire('tick', dt);
     const ix = this.wallLock > 0 ? 0 : Input.axisX();
     if (Input.hit('jump')) this.jumpBuf = 0.13; else this.jumpBuf -= dt;
+    // a dodge pressed a moment before the cooldown ends still comes out
+    if (Input.hit('dash')) this.dashBuf = DASH_BUFFER; else this.dashBuf -= dt;
     // hold-to-charge tracking
     if (Input.hit('attack')) { this.holding = true; this.holdT = 0; }
     if (this.holding) { if (Input.down('attack')) this.holdT += dt; else this.holding = false; }
@@ -228,8 +234,9 @@ class Player extends Ent {
       case 'hurt':
         this.hurtT -= dt;
         this.vx = approach(this.vx, 0, 500 * dt);
-        if (this.tech.recover && !this.hidden && Input.hit('dash') && this.dashes > 0) {
-          this.dashes--; this.state = 'normal'; this.inv = Math.max(this.inv, 0.45); this.vy = Math.min(this.vy, -120);
+        if (this.tech.recover && !this.hidden && this.dashBuf > 0 && this.dashes > 0 && this.dodgeCD <= 0) {
+          this.dashes--; this.dashBuf = 0; this.dodgeCD = DODGE_CD;
+          this.state = 'normal'; this.inv = Math.max(this.inv, 0.45); this.vy = Math.min(this.vy, -120);
           FX.ring(this.x, this.cy, 4, 24, '#ffffff', 0.25, 2); FX.text(this.x, this.y - this.h - 6, '受身', '#ffffff');
           Sound.play('dash', { x: this.x, pitch: 1.3 });
         } else if (this.hurtT <= 0) this.state = 'normal';
@@ -303,7 +310,7 @@ class Player extends Ent {
     if (this.onGround && ix && Math.random() < 0.08) FX.dust(this.x - ix * 4, this.y, 1, -ix);
   }
   tryActions() {
-    if (Input.hit('dash') && this.doDash()) return true;
+    if (this.dashBuf > 0 && this.doDash()) return true;
     if (Input.hit('ult') && this.trySecret()) return true;
     if (Input.hit('skill') && this.trySkill()) return true;
     if (Input.hit('attack')) {
@@ -358,6 +365,8 @@ class Player extends Ent {
     const h = this.hero, M = h.moves, up = Input.down('up'), down = Input.down('down');
     if (this.counterT > 0) { this.counterT = 0; return 'counter'; }
     const cm = chainFrom ? M[chainFrom] : null;
+    // 见切连段: after the counter, attack presses run its own follow-up chain (ground or air, any direction)
+    if (cm && cm.counter && cm.next && M[cm.next]) return cm.next;
     // 武技 chain: 起手 → 派生 → 连段 → 终式; how many links are open is set per art and level
     if (cm && cm.art && cm.next && M[cm.next] && ARTS[cm.art]) {
       const A = ARTS[cm.art], lv = this.artLv(cm.art);
@@ -390,7 +399,7 @@ class Player extends Ent {
     if (this.postDashT > 0) this.dashBrakePending = true;
     if (this.move && this.move.m.onEnd) this.move.m.onEnd(this, this.move);
     const ix = Input.axisX();
-    if (ix && !m.ult && name !== 'counter') this.face = ix;
+    if (ix && !m.ult && !m.counter) this.face = ix;
     this.state = 'move';
     this.move = { name, m, t: 0, ei: 0, hi: 0, buf: null };
     this.anim = name; this.animT = 0;
@@ -442,7 +451,7 @@ class Player extends Ent {
     // roll a held light attack into a charge
     if (m.light && this.holding && this.holdT >= CHARGE_START * this.stats.chargeTimeMul && this.onGround && mv.t >= m.cancel * 0.6) { this.enterCharge(); return; }
     const firstHit = m.hits && m.hits.length ? m.hits[0].t : 0.04;
-    if (Input.hit('dash') && mv.t >= Math.min(m.cancel, firstHit + 0.03) && this.doDash()) return;
+    if (this.dashBuf > 0 && mv.t >= Math.min(m.cancel, firstHit + 0.03) && this.doDash()) return;
     if (mv.t >= m.cancel) {
       if (mv.buf === 'attack') {
         const nm = this.pickAttack(mv.name, false);
@@ -502,7 +511,7 @@ class Player extends Ent {
     if (Math.random() < 0.6) FX.add({ k: 'px', x: this.x + Math.cos(a) * r, y: this.cy + Math.sin(a) * r, vx: -Math.cos(a) * r * 4, vy: -Math.sin(a) * r * 4, life: 0.22, s: this.chargeLv === 2 ? 2 : 1.5, c: this.chargeLv ? this.hero.color : '#ffffff', glow: true, add: true });
     Light.add(this.x, this.cy, 50 + this.chargeLv * 30, this.hero.color, 0.6);
     if (this.stats.chargeArmor) this.armorT = 0.05;
-    if (Input.hit('dash') && this.doDash()) return;
+    if (this.dashBuf > 0 && this.doDash()) return;
     if (Input.hit('jump')) { this.state = 'normal'; this.jumpBuf = 0.13; this.tryJump(); return; }
     if (!this.onGround) { this.state = 'normal'; return; }
     if (!Input.down('attack')) {
@@ -513,9 +522,9 @@ class Player extends Ent {
   }
   // ---------- dash & 见切 ----------
   doDash() {
-    if (this.dashes <= 0 || this.state === 'dash') return false;
+    if (this.dashes <= 0 || this.state === 'dash' || this.dodgeCD > 0) return false;
     if (this.move && this.move.m.onEnd) this.move.m.onEnd(this, this.move);
-    this.dashes--;
+    this.dashes--; this.dashBuf = 0; this.dodgeCD = DODGE_CD;
     const ix = Input.axisX();
     if (ix) this.face = ix;
     this.state = 'dash'; this.dashT = 0.19; this.move = null; this.dashBrakePending = false;
@@ -552,6 +561,9 @@ class Player extends Ent {
     this.pdDone = true;
     this.inv = Math.max(this.inv, 0.5);
     this.counterT = 1.3;
+    // a 见切 hands the dodge straight back: cooldown cleared and the spent charge returned
+    this.dodgeCD = 0;
+    if (this.dashes < this.stats.dashes) this.dashes++;
     G.witchT = Math.max(G.witchT, this.stats.witch);
     this.gainMana(15);
     G.stats.perfects = (G.stats.perfects || 0) + 1;

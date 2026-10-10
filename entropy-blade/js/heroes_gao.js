@@ -35,6 +35,7 @@ HEROES.gao = {
   desc: '下山历练的武僧，铁拳可裂山石。投技、霸体与震地拳法，硬桥硬马。',
   hp: 130, atk: 12, speed: 122, crit: 0.06, armor: 0.15, energyRate: 1.6, procMul: 1.15,
   hurt: [16, 32],
+  range: 0.3, atkIcon: 'fist',
   startSkill: 'gao_charge',
   ultName: '霸王崩拳', ultDesc: '凝聚全身气劲，打出贯穿全屏的巨拳并震撼大地。',
   combo: 'jab', air: 'aatk1',

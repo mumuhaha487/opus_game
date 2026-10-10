@@ -490,4 +490,33 @@ M.ult.dur = 1.95;
   M.sk_iai.ev[0][1] = p => { const x0 = p.x; iai(p); p.counters.iaiPath = { lo: Math.min(x0, p.x) - 10, hi: Math.max(x0, p.x) + 10, y: p.y }; };
   M.sk_meteor.followAt = 0.55;
 }
+
+// ---------- 见切连段: 反击 → 燕追 (chase the launched foe upward) → 残月坠 (crescent dive) ----------
+M.counter.counter = true; M.counter.next = 'counter2';
+M.counter.hits[0].kb = [90, -330];
+Object.assign(M, {
+  counter2: {
+    label: '见切·燕追', dur: 0.42, cancel: 0.26, grav: 0.35, noAtkSpeed: true, counter: true,
+    keys: [[0, { ...R_DRAW, lean: 26 }], [0.06, { ...UP1, lean: -12 }, 'outCubic'], [0.42, UPE]],
+    onStart(p) { p.inv = Math.max(p.inv, 0.3); p.trail = 0.15; const e = nearestEnemy(p.x, p.cy, 170); if (e) p.face = sign(e.x - p.x) || p.face; },
+    vel: [[0.02, 0.12, 260]],
+    hits: [{ t: 0.05, d: 0.1, box: [-6, -70, 48, 74], dmg: 1.5, kb: [50, -340], stun: 0.7, hs: 5, launch: true, critBonus: 0.5, src: 'counter' }],
+    ev: [[0.05, p => {
+      p.vy = Math.min(p.vy, -360);
+      Sound.play('slashHeavy', { x: p.x, pitch: 1.3 });
+      hSlash(p, { x: 4, y: -28, r: 32, a0: 70, a1: -125, th: 9, sy: 1.2 });
+      FX.add({ k: 'streak', x: p.x + p.face * 10, y: p.y - 40, vx: p.face * 300, vy: -2200, life: 0.12, c: '#ffffff', len: 0.03, w: 2 });
+    }]],
+    next: 'counter3',
+  },
+  counter3: Object.assign(diveMove({
+    label: '见切·残月坠', dur: 0.78, cancel: 0.6, hop: -120, vx: 140, fall: 640, hold: 0.28, fallDmg: 0.9,
+    keys: [[0, air({ ...OVER0 })], [0.1, air({ lean: 36, aF: [50, 80], aB: [60, 85], w: 85 }), 'outCubic'], [0.28, air({ lean: 36, aF: [50, 80], aB: [60, 85], w: 85 })], [0.34, { lean: 32, ...OVER1, ...R_CROUCH }, 'outCubic'], [0.78, { lean: 12, aF: [70, 50], w: 40 }]],
+    onDive(p) { Sound.play('slashHeavy', { x: p.x, pitch: 0.85 }); p.trail = 0.3; hSlash(p, { x: 6, y: -20, r: 36, a0: -150, a1: 100, th: 11, dur: 0.26 }); },
+    onLand(p) {
+      counterLand(p, 46, 2.8, RC);
+      for (const d of [-1, 1]) { const f = p.face; p.face = d; waveProj(p, { dmg: 1.0, sp: 400, hh: 18, oy: -14, src: 'counter', c: '#ffffff', life: 0.55 }); p.face = f; }
+    },
+  }), { counter: true }),
+});
 })();

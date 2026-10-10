@@ -403,4 +403,35 @@ M.ult.ev.push([0.95, p => {
 }]);
 M.sk_fists.grav = 0.1;
 M.sk_fists.vel = [[0, 0.66, 35, 0], [0.72, 0.8, 180, 0]];
+
+// ---------- 见切连段: 铁拳 → 追身肘 (dash in, two rising blows) → 坠山拳 (leap and smash) ----------
+M.counter.counter = true; M.counter.next = 'counter2';
+M.counter.hits[0].kb = [140, -330];
+Object.assign(M, {
+  counter2: {
+    label: '见切·追身肘', dur: 0.46, cancel: 0.3, grav: 0.4, armor: true, noAtkSpeed: true, counter: true,
+    keys: [[0, { lean: 4, aF: [80, -60] }], [0.06, { lean: 24, aF: [10, -165], aB: [100, -40], ...G_LUNGE }, 'outCubic'], [0.14, UPC0], [0.2, UPC1, 'outCubic'], [0.46, { gl: 0, lean: 0, aF: [-60, -80], lF: [60, 120], lB: [100, 150] }]],
+    onStart(p) { p.inv = Math.max(p.inv, 0.3); const e = nearestEnemy(p.x, p.cy, 170); if (e) p.face = sign(e.x - p.x) || p.face; },
+    vel: [[0.02, 0.12, 300]],
+    hits: [
+      { t: 0.05, d: 0.07, box: [0, -50, 34, 44], dmg: 1.0, kb: [60, -300], stun: 0.7, hs: 5, launch: true, breakGuard: true, critBonus: 0.5, src: 'counter' },
+      { t: 0.19, d: 0.09, box: [-4, -68, 40, 64], dmg: 1.2, kb: [40, -360], stun: 0.7, hs: 6, launch: true, critBonus: 0.5, src: 'counter' },
+    ],
+    ev: [
+      [0.05, p => { Sound.play('hitHeavy', { x: p.x, pitch: 1.2 }); hPunchFx(p, 18, -30, true); }],
+      [0.19, p => { p.vy = Math.min(p.vy, -320); Sound.play('hitHeavy', { x: p.x, pitch: 0.9 }); hPunchFx(p, 10, -46, true, FL); FX.fire(p.x + p.face * 10, p.y - 44, 4); }],
+    ],
+    next: 'counter3',
+  },
+  counter3: Object.assign(diveMove({
+    label: '见切·坠山拳', dur: 0.8, cancel: 0.62, hop: -150, vx: 90, fall: 700, hold: 0.3, fallDmg: 1.0, armor: true,
+    keys: [[0, air({ ...RAISE })], [0.12, air({ lean: -18, aF: [-120, -95], aB: [-110, -90] })], [0.3, air({ ...SLAM })], [0.36, { ...SLAM, ...G_SQUAT }, 'outCubic'], [0.8, { lean: 12 }]],
+    onDive(p) { Sound.play('charge', { x: p.x, pitch: 0.7 }); FX.ring(p.x, p.y - 40, 20, 4, C, 0.2, 2); },
+    onLand(p) {
+      counterLand(p, 58, 3.2, C, { ky: -340 });
+      pShockwave(p, p.x, p.y, 1, 1.1, C, 'counter'); pShockwave(p, p.x, p.y, -1, 1.1, C, 'counter');
+      FX.debris(p.x, p.y - 2, [C, ROCK, '#ffffff'], 14);
+    },
+  }), { counter: true }),
+});
 })();

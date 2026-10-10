@@ -202,6 +202,9 @@
     .cast .sub { font-size: 12px; transform: scale(0.85); }
     .actions { gap: 10px; }
   }
+  @media (max-width: 420px) {
+    .cast .sub { display: none; }
+  }
   @media (prefers-reduced-motion: reduce) {
     #sky i, .slot i { animation: none; opacity: 0.4; }
     .game, .cover img, .btn { transition: none; }
@@ -240,25 +243,26 @@
     <article class="game frame">
       <div class="media">
         <a class="cover" href="entropy-blade/index.html" aria-label="开始游戏：熵刃">
-          <img src="hub/entropy-blade-cover.png" width="960" height="540" alt="熵刃标题画面：落樱古道中的三名角色">
+          <img src="hub/entropy-blade-cover.png" width="960" height="540" alt="熵刃标题画面：落樱古道中对峙的侠客们">
           <span class="play" aria-hidden="true"><svg viewBox="0 0 18 18" shape-rendering="crispEdges"><path fill="#f2c66d" d="M6 4h2v1h2v1h2v1h2v1h1v2h-1v1h-2v1h-2v1h-2v1H6z"/></svg></span>
         </a>
         <ul class="cast px">
           <li style="--c:#ff3b5c"><span class="pan"><img src="hub/entropy-blade-rin.webp" width="480" height="480" alt="凛的立绘" loading="lazy"></span><b>凛</b><span class="sub">刀 · 均衡近战</span></li>
           <li style="--c:#ffd23f"><span class="pan"><img src="hub/entropy-blade-eve.webp" width="480" height="480" alt="伊芙的立绘" loading="lazy"></span><b>伊芙</b><span class="sub">魔弹枪 · 远程爆发</span></li>
           <li style="--c:#ff9a3a"><span class="pan"><img src="hub/entropy-blade-gao.webp" width="480" height="480" alt="罡的立绘" loading="lazy"></span><b>罡</b><span class="sub">拳法 · 重装近战</span></li>
+          <li style="--c:#3ee0b0"><span class="pan"><img src="hub/entropy-blade-lan.webp" width="480" height="480" alt="澜的立绘" loading="lazy"></span><b>澜</b><span class="sub">长枪 · 中距控场</span></li>
         </ul>
       </div>
       <div class="info">
         <div class="kicker px"><span class="badge">NEW</span><span>No.001</span><span>单人 · 免费</span></div>
         <h2 class="px">熵刃<small>ENTROPY BLADE</small></h2>
         <ul class="tags px"><li>横版动作</li><li>肉鸽</li><li>像素</li><li>东方奇幻</li></ul>
-        <p class="desc">在落樱古道、瘴雨沼泽、苍雪寒山、黄沙废城、晶渊回廊与熔铸炉城之间斩开熵潮——每一局的每一关都从两三张地图里抽一张，每张图都有专属敌人和首领。三名角色各有三把武器；武技、技能与秘技同属武学，每一门都有自己的等级上限和独有的进阶效果，没有两门是一样的。劫难挑战让高手自选劫数，换取更厚的福缘。</p>
+        <p class="desc">在落樱古道、瘴雨沼泽、苍雪寒山、黄沙废城、晶渊回廊与熔铸炉城之间斩开熵潮——每一局的每一关都从两三张地图里抽一张，每张图都有专属敌人和首领。刀、枪、拳、魔弹，每位侠客都有三把武器和自成一派的武学：武技、技能与秘技各有自己的等级上限和独有的进阶效果。看准敌人出手的瞬间闪身触发见切，连按攻击打出见切连段。劫难挑战让高手自选劫数，换取更厚的福缘。</p>
         <dl class="facts px">
-          <div><dt>角色</dt><dd>3</dd></div>
-          <div><dt>招式</dt><dd>210+</dd></div>
-          <div><dt>场景</dt><dd>4</dd></div>
-          <div><dt>首领</dt><dd>4</dd></div>
+          <div><dt>招式</dt><dd>290+</dd></div>
+          <div><dt>武学</dt><dd>80</dd></div>
+          <div><dt>地图</dt><dd>7</dd></div>
+          <div><dt>首领</dt><dd>7</dd></div>
         </dl>
         <div class="plat px">
           <span><svg viewBox="0 0 12 8" shape-rendering="crispEdges"><path fill="#a99cc4" d="M0 0h12v8H0z"/><path fill="#1a1424" d="M1 1h1v1H1zm2 0h1v1H3zm2 0h1v1H5zm2 0h1v1H7zm2 0h2v1H9zM1 3h2v1H1zm3 0h1v1H4zm2 0h1v1H6zm2 0h1v1H8zm2 0h1v1h-1zM2 6h8v1H2z"/></svg>键盘</span>

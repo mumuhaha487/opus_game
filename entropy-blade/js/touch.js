@@ -231,7 +231,7 @@ const TouchUI = (() => {
     const w = img.width * scale, h = img.height * scale;
     ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h / 2), w, h);
   }
-  function attackIcon(p) { return p.heroId === 'eve' ? 'gun' : p.heroId === 'gao' ? 'fist' : 'sword'; }
+  function attackIcon(p) { return p.hero.atkIcon; }
   T.draw = function (ctx) {
     T.portrait = has && window.innerHeight > window.innerWidth * 1.05;
     if (!T.enabled) return;
@@ -275,7 +275,7 @@ const TouchUI = (() => {
       const down = [...T.touches.values()].some(r => r.kind === 'btn' && r.b.id === b.id);
       const accent = b.id === 'attack' ? hc : ACCENT[b.id];
       let state = down ? 'down' : 'up';
-      if ((b.id === 'interact' && !near) || (b.id === 'dash' && p.dashes <= 0) || (b.id === 'ult' && !manaOk)) state = down ? 'down' : 'dim';
+      if ((b.id === 'interact' && !near) || (b.id === 'dash' && (p.dashes <= 0 || p.dodgeCD > 0)) || (b.id === 'ult' && !manaOk)) state = down ? 'down' : 'dim';
       const sink = down ? u : 0;
       blit(ctx, disc(b.d, accent, state), b.x, b.y + sink, u);
       // icon
@@ -304,6 +304,7 @@ const TouchUI = (() => {
         blit(ctx, arc(b.d, p.chargeLv === 2 ? '#ffffff' : hc, p.chargeT / (can2 ? CHARGE_L2 : CHARGE_L1)), b.x, b.y + sink, u);
       }
       if (b.id === 'dash') {
+        if (p.dodgeCD > 0) blit(ctx, arc(b.d, ACCENT.dash, 1 - p.dodgeCD / DODGE_CD), b.x, b.y + sink, u);
         const n = p.stats.dashes;
         for (let k = 0; k < n; k++) {
           const a = Math.PI / 2 + (k - (n - 1) / 2) * 0.32, rr = b.r + 3 * u;

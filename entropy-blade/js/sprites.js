@@ -186,6 +186,23 @@ function katana(x, h, ang, len, c) {
     vLine(x, { x: 2, y: 0.9 }, { x: len - 2, y: 0.9 }, 0.9, c.bladeE);
   });
 }
+// long spear held at the front hand: shaft behind and ahead of the grip, leaf head, a tassel hanging from the collar
+function spear(x, h, ang, c, o = {}) {
+  const fwd = o.fwd || 19, back = o.back || 11, hl = o.headL || 7, a = ang * DEG;
+  local(x, h, ang, () => {
+    vLine(x, { x: -back, y: 0 }, { x: fwd - 2, y: 0 }, o.thick || 1.6, c.shaft);
+    vLine(x, { x: -back + 1, y: -0.5 }, { x: fwd - 3, y: -0.5 }, 0.5, c.shaftH);
+    vRect(x, -back - 1.2, -1.1, 1.8, 2.2, c.cap);
+    if (o.halberd) vPoly(x, [[fwd - 1.5, -1.2], [fwd + 2.5, -1.4], [fwd + 4, -4.6], [fwd + 1.6, -6.2], [fwd + 1, -3.4], [fwd - 1.2, -2.6]], c.head);
+    vPoly(x, [[fwd - 1.4, -1.5], [fwd + 2, -1.8], [fwd + hl, 0], [fwd + 2, 1.8], [fwd - 1.4, 1.5]], c.head);
+    vLine(x, { x: fwd, y: 0 }, { x: fwd + hl - 1, y: 0 }, 0.7, c.headE);
+    vRect(x, fwd - 2.8, -1.5, 1.4, 3, c.collar);
+  });
+  // the tassel hangs straight down from the collar whatever the spear's angle
+  const bx = h.x + Math.cos(a) * (fwd - 2.2), by = h.y + Math.sin(a) * (fwd - 2.2), sw = Math.sin((o.wave || 0) * TAU) * 1.3;
+  vPoly(x, [[bx - 1.1, by], [bx + 1.2, by], [bx + 1.7 + sw, by + 4.4], [bx - 1.5 + sw, by + 4.8]], c.tassel);
+  vRect(x, bx - 0.4 + sw * 0.6, by + 1.2, 1, 2.8, c.tasselD);
+}
 function pistol(x, h, ang, c, big) {
   local(x, h, ang, () => {
     vRect(x, -1, -1.6, big ? 9 : 7, 2.8, c.gun);
@@ -337,6 +354,59 @@ LOOKS.gao = {
   weapon: null,
 };
 LOOKS.gao.col.sleeve = LOOKS.gao.col.skin;
+
+LOOKS.lan = {
+  build: BUILDS.normal,
+  col: {
+    skin: '#f2d4b8', hair: '#1e3c42', hairD: '#0f2328', robe: '#21987f', robeD: '#155f50', inner: '#eef8f2', trim: '#e8c45a',
+    band: '#3ee0b0', pants: '#24303c', boot: '#151a22', bracer: '#4a5a68', eye: '#2ee0b0', sleeve: '#21987f', hand: '#f2d4b8',
+    shaft: '#5a3a28', shaftH: '#8c6444', cap: '#c9a14a', collar: '#c9a14a', head: '#e8f2f8', headE: '#7ff0d0', tassel: '#e8334f', tasselD: '#9a1f36',
+  },
+  foreCol: '#4a5a68',
+  stance: { lean: 6, aF: [45, 15], aB: [75, 35], w: -14, lF: [66, 100], lB: [114, 92], scarf: 160, coat: 112 },
+  runArms: (s) => ({ aF: [100 + 10 * s, 140], aB: [70 - 30 * s, 30 - 20 * s], w: 172 }),
+  airArms: { aF: [20, -30], aB: [140, 110], w: -40 },
+  fallArms: { aF: [-10, -50], aB: [160, 130], w: -70 },
+  dashArms: { aF: [10, 0], aB: [30, 10], w: 0 },
+  back(x, J, B, p) {
+    const c = this.col;
+    // high ponytail and the ends of the jade hair band
+    local(x, J.head, J.headA / DEG, () => {
+      drawScarf(x, { x: -3.5, y: -5.5 }, p.scarf - 8, 13, p.wave, 3.6, c.hair, c.hairD);
+      drawScarf(x, { x: -2.5, y: -4.6 }, p.scarf + 6, 8, p.wave + 0.35, 1.6, c.band);
+    });
+    // robe tails split at the back
+    const t1 = _seg({ x: J.hip.x - 1, y: J.hip.y - 1 }, p.coat, 12), t2 = _seg({ x: J.hip.x - 1, y: J.hip.y - 1 }, p.coat - 16, 10);
+    vPoly(x, [[J.hip.x - 3, J.hip.y - 3], [J.hip.x + 2, J.hip.y - 1], [t1.x + 2, t1.y], [t1.x - 2.5, t1.y - 0.5]], c.robeD);
+    vPoly(x, [[J.hip.x - 2, J.hip.y - 2], [J.hip.x + 1, J.hip.y], [t2.x + 1.5, t2.y], [t2.x - 2, t2.y - 0.4]], c.robe);
+    vLine(x, { x: t1.x - 2.5, y: t1.y - 0.5 }, { x: t1.x + 2, y: t1.y }, 1, c.trim);
+  },
+  torso(x, J, B, p) {
+    const c = this.col, n = J.fw;
+    drawTorsoBase(x, J, B, this, p, c.robe, c.robeD);
+    // white inner robe showing at the crossed collar
+    vPoly(x, [[J.neck.x + n.x * 1.2, J.neck.y + n.y * 1.2 - 0.5], [J.neck.x + n.x * 3.6, J.neck.y + n.y * 3.6], [J.chest.x + n.x * 2.6, J.chest.y + n.y * 2.6]], c.inner);
+    vLine(x, { x: J.neck.x + n.x * 3.4, y: J.neck.y + n.y * 3.4 }, { x: J.chest.x + n.x * 1.4, y: J.chest.y + n.y * 1.4 }, 0.8, c.trim);
+    // gold sash
+    vLine(x, { x: J.hip.x - n.x * 3.4, y: J.hip.y - n.y * 3.4 - 0.5 }, { x: J.hip.x + n.x * 3.4, y: J.hip.y + n.y * 3.4 - 0.5 }, 1.8, c.trim);
+    vRect(x, J.hip.x + n.x * 2 - 0.8, J.hip.y + n.y * 2, 1.6, 3, c.tassel);
+  },
+  head(x, J, B, p) {
+    const c = this.col, r = B.headR;
+    local(x, J.head, J.headA / DEG, () => {
+      vCirc(x, 0, 0, r, c.skin);
+      // swept-back hair, a long side lock in front of the ear, the ponytail's root on top
+      vPoly(x, [[4.8, -1.6], [5.4, -4.2], [2.6, -6.4], [-1.5, -6.9], [-5.2, -5.4], [-6.4, -1.6], [-5.6, 2.4], [-3.4, 4.4], [-2.6, 0.6], [-0.6, -1.8], [1.6, -0.6], [2.8, -2.2], [3.8, 0.6]], c.hair);
+      vPoly(x, [[-1.5, -6.9], [-5.2, -5.4], [-6.4, -1.6], [-4.4, -3.4]], c.hairD);
+      vPoly(x, [[-3.8, -6.6], [-1.2, -8.4], [0.6, -6.8]], c.hair);
+      vLine(x, { x: -4.4, y: -5.6 }, { x: -1.4, y: -7.4 }, 1.2, c.band);
+      vPoly(x, [[4.6, -2.4], [5.6, 1.4], [3.8, -0.4]], c.hair);
+      vRect(x, 2.3, -0.6, 1.4, 2, p.eye ? c.eye : c.skin);
+      vRect(x, 2.1, -1.2, 1.8, 0.7, '#14262a');
+    });
+  },
+  weapon(x, J, B, p) { spear(x, J.hF, p.w, this.col, Object.assign({ wave: p.wave }, this.spearO)); },
+};
 
 // =====================================================================
 //  GENERIC PROCEDURAL ANIMS (idle / run / air / dash / hurt / dead)

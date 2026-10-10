@@ -11,6 +11,7 @@ const PORTRAIT_META = {
   rin: { focus: [0.56, 0.4], face: [0.42, 0.19, 0.36], fx: 'petal' },
   eve: { focus: [0.5, 0.4], face: [0.31, 0.2, 0.38], fx: 'star' },
   gao: { focus: [0.52, 0.38], face: [0.31, 0.16, 0.4], fx: 'ember' },
+  lan: { focus: [0.5, 0.4], face: [0.33, 0.17, 0.36], fx: 'bubble' },
 };
 const Portraits = {
   img: {}, cache: {},
@@ -59,7 +60,7 @@ const Portraits = {
   },
 };
 
-// hero-themed motes drifting over a portrait: petals for 凛, stars for 伊芙, embers for 罡
+// hero-themed motes drifting over a portrait: petals for 凛, stars for 伊芙, embers for 罡, jade bubbles for 澜
 function portraitMotes(c, kind, x0, y0, w, h, t, n = 16, alpha = 1) {
   for (let k = 0; k < n; k++) {
     const r1 = (Math.sin(k * 91.7) * 43758.5) % 1, r2 = (Math.sin(k * 37.3 + 4.1) * 24634.6) % 1;
@@ -84,6 +85,13 @@ function portraitMotes(c, kind, x0, y0, w, h, t, n = 16, alpha = 1) {
       c.fillStyle = k % 4 ? '#ffe7a0' : '#ffffff';
       c.beginPath(); c.moveTo(0, -s * 2); c.lineTo(s * 0.45, -s * 0.45); c.lineTo(s * 2, 0); c.lineTo(s * 0.45, s * 0.45);
       c.lineTo(0, s * 2); c.lineTo(-s * 0.45, s * 0.45); c.lineTo(-s * 2, 0); c.lineTo(-s * 0.45, -s * 0.45); c.closePath(); c.fill();
+    } else if (kind === 'bubble') {
+      // bubbles rising and swaying like water caught in the spear's wake
+      px = x0 + u * w + Math.sin(t * 1.6 + k) * 8; py = y0 + h - ph * h;
+      const s = 1.6 + v * 2.6;
+      c.strokeStyle = k % 3 ? '#7ff0d0' : '#e6fff8'; c.lineWidth = 1;
+      c.beginPath(); c.arc(px, py, s, 0, TAU); c.stroke();
+      c.fillStyle = '#e6fff8'; c.fillRect(px - s * 0.4, py - s * 0.5, 1, 1);
     } else {
       // embers rising and flickering
       px = x0 + u * w + Math.sin(t * 2 + k) * 6; py = y0 + h - ph * h;

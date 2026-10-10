@@ -322,8 +322,18 @@ const Sound = (() => {
       tone({ t, type: 'sine', f: 1500 * p, f2: 200, dur: 0.25, vol: 0.08, pan });
       noise({ t, dur: 0.2, vol: 0.1, type: 'bandpass', f: 4000, f2: 800, pan });
     },
+    // a spear thrust: a narrow, rising hiss with a glint on top
+    thrust(t, p, pan) {
+      noise({ t, dur: 0.09, vol: 0.28, type: 'bandpass', f: 2600 * p, f2: 6200 * p, q: 2.2, pan });
+      tone({ t, type: 'triangle', f: 900 * p, f2: 1700 * p, dur: 0.06, vol: 0.05, pan });
+    },
+    // water bursting up: a falling wash of noise and a few bubbles
+    splash(t, p, pan) {
+      noise({ t, dur: 0.34, vol: 0.3, type: 'lowpass', f: 2600 * p, f2: 420, q: 0.8, pan, rev: 0.25 });
+      for (let i = 0; i < 3; i++) tone({ t: t + 0.03 + i * 0.045, type: 'sine', f: (480 + i * 230) * p, f2: (900 + i * 320) * p, dur: 0.07, vol: 0.06, pan });
+    },
   };
-  const throttle = { hit: 0.035, hitHeavy: 0.05, crit: 0.05, slash: 0.03, shoot: 0.04, enemyDie: 0.05, coin: 0.04, zap: 0.05, fire: 0.12, ice: 0.08, explode: 0.06, thunder: 0.08, swoosh: 0.03, warn: 0.15, land: 0.08, clank: 0.08 };
+  const throttle = { hit: 0.035, hitHeavy: 0.05, crit: 0.05, slash: 0.03, shoot: 0.04, enemyDie: 0.05, coin: 0.04, zap: 0.05, fire: 0.12, ice: 0.08, explode: 0.06, thunder: 0.08, swoosh: 0.03, warn: 0.15, land: 0.08, clank: 0.08, thrust: 0.03, splash: 0.08 };
 
   function play(name, opts = {}) {
     if (!ctx || ctx.state !== 'running') return;

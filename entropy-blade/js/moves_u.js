@@ -491,3 +491,171 @@ function uCuts(p, x0, x1, n, mult, col, id, gap = 0.07) {
     }),
   });
 })();
+
+// ============================== LAN ==============================
+(() => {
+  const M = HEROES.lan.moves, C = LAN_C, FOAM = LAN_FOAM;
+  const air = p => !p.onGround;
+  // a whirlpool that drags foes into its eye and keeps cutting
+  const whirlpool = (p, x, life) => {
+    const id = 'lan_u_down', gy = uFloor(p, x), R = 34 * p.reach();
+    addZone({
+      x, y: gy - 14, life, tick: 0.14,
+      onTick(z) { for (const e of enemiesNear(z.x, z.y, R)) hitEnemy(p, e, p.makeHit({ dmg: 0.32, kx: 0, ky: -60, stun: 0.35, hs: 0, dir: sign(e.x - z.x) || 1, src: 'skill', energy: 0.4, fxc: C, uskill: id })); },
+      upd(z, dt) {
+        for (const e of enemiesNear(z.x, z.y, R * 2.2)) if (!e.boss) e.vx += (z.x - e.x) * 6 * dt;
+        if (Math.random() < 0.6) { const a = rand(0, TAU); FX.add({ k: 'px', x: z.x + Math.cos(a) * R, y: z.y + 8 + Math.sin(a) * R * 0.3, vx: -Math.sin(a) * 80, vy: -20, life: 0.3, s: 1.5, c: pick([C, FOAM]), glow: true, shrink: true }); }
+        Light.add(z.x, z.y, R * 3, C, 0.6);
+      },
+      drawFn(ctx, gctx, x2, y2, z) {
+        const a = Math.min(1, z.life * 3, z.t * 6);
+        ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) {
+          const r = R * (1 - i * 0.22), a0 = z.t * (10 + i * 4) + i;
+          ctx.strokeStyle = rgba(i % 2 ? C : FOAM, 0.7 * a);
+          ctx.beginPath(); ctx.ellipse(x2, y2 + 8, r, r * 0.3, 0, a0, a0 + 4.2); ctx.stroke();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        gctx.fillStyle = C; gctx.globalAlpha = 0.3 * a; gctx.beginPath(); gctx.ellipse(x2, y2 + 8, R, R * 0.35, 0, 0, TAU); gctx.fill(); gctx.globalAlpha = 1;
+      },
+    });
+  };
+  Object.assign(M, {
+    // ---------------- 枪芒 (U) ----------------
+    u_lan_shot1: uStage('lan_u_shot', 0, {
+      label: '枪芒', anim: 'atk1', dur: 0.36, cancel: 0.24,
+      ev: [[0.05, p => {
+        lanNeedle(p, { ang: air(p) ? 14 : 0, dmg: 1.0, sp: 700, len: 34, r: 2.6, life: 0.55, pierce: 3, uskill: 'lan_u_shot' });
+        lanThrustFx(p, { len: 30 }); Sound.play('thrust', { x: p.x });
+      }]],
+    }),
+    u_lan_shot2: uStage('lan_u_shot', 1, {
+      label: '双芒', anim: 'atk3', dur: 0.4, cancel: 0.26,
+      ev: [[0.05, p => {
+        for (const a of [-12, 12]) lanNeedle(p, { ang: a + (air(p) ? 12 : 0), dmg: 0.65, sp: 680, len: 30, r: 2.4, life: 0.6, pierce: 3, uskill: 'lan_u_shot', c: a < 0 ? C : FOAM });
+        Sound.play('thrust', { x: p.x, pitch: 1.2 });
+      }]],
+    }),
+    u_lan_shot3: uStage('lan_u_shot', 2, {
+      label: '苍龙芒', anim: 'charge1', dur: 0.56, cancel: 0.38,
+      ev: [[0.06, p => {
+        // a dragon-shaped needle that weaves up and down as it flies
+        const y0 = p.y - 22;
+        lanNeedle(p, {
+          dmg: 1.8, sp: 420, len: 30, r: 3.4, life: 0.9, pierce: 6, uskill: 'lan_u_shot', trail: 0.8,
+          upd(q) { q.y = y0 + Math.sin(q.t * 18) * 12; if (Math.random() < 0.6) FX.add({ k: 'px', x: q.x, y: q.y, vx: rand(-20, 20), vy: rand(-20, 20), life: 0.3, s: 2, c: pick([C, FOAM]), glow: true, shrink: true }); },
+        });
+        Sound.play('roar', { x: p.x, pitch: 2.0 }); Sound.play('thrust', { x: p.x, pitch: 0.7 }); p.vx = -p.face * 120; Cam.shake(0.2);
+      }]],
+    }),
+    // ---------------- 旋云 (↑U) ----------------
+    u_lan_up1: uStage('lan_u_up', 0, {
+      label: '旋云', anim: 'sk_windmill', dur: 0.46, cancel: 0.3,
+      ev: [[0.05, p => {
+        uLift(p, -200, -120);
+        const R = 30 * p.reach(), f = p.face;
+        Sound.play('swoosh', { x: p.x, pitch: 0.7 });
+        addZone({
+          x: p.x + f * 30, y: p.y - 56, life: 0.8, tick: 0.12,
+          onTick(z) { for (const e of enemiesNear(z.x, z.y, R)) hitEnemy(p, e, p.makeHit({ dmg: 0.38, kx: 0, ky: -160, stun: 0.35, hs: 1, dir: sign(e.x - z.x) || 1, src: 'skill', energy: 0.4, fxc: C, uskill: 'lan_u_up' })); },
+          upd(z, dt) {
+            z.x += f * 24 * dt;
+            for (const e of enemiesNear(z.x, z.y, R * 1.8)) if (!e.boss) { e.vx += (z.x - e.x) * 3 * dt; e.vy += (z.y - e.cy) * 3 * dt; }
+            Light.add(z.x, z.y, R * 3, C, 0.6);
+          },
+          drawFn(ctx, gctx, x2, y2, z) {
+            const a = Math.min(1, z.life * 4, z.t * 8);
+            ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 1.5;
+            for (let i = 0; i < 3; i++) { const a0 = z.t * 16 + i * TAU / 3; ctx.strokeStyle = rgba(i ? C : FOAM, 0.8 * a); ctx.beginPath(); ctx.ellipse(x2, y2 + i * 3 - 3, R * (0.9 - i * 0.2), R * 0.4, 0, a0, a0 + 3.6); ctx.stroke(); }
+            ctx.globalCompositeOperation = 'source-over';
+            gctx.fillStyle = C; gctx.globalAlpha = 0.35 * a; gctx.beginPath(); gctx.ellipse(x2, y2, R, R * 0.5, 0, 0, TAU); gctx.fill(); gctx.globalAlpha = 1;
+          },
+        });
+      }]],
+    }),
+    u_lan_up2: uStage('lan_u_up', 1, {
+      label: '升浪', anim: 'rise', dur: 0.46, cancel: 0.3,
+      ev: [[0.06, p => { lanGeyser(p, p.x + p.face * 52, 1.5, { h: 76, w: 24, src: 'skill', uskill: 'lan_u_up' }); Sound.play('splash', { x: p.x, pitch: 0.8 }); }]],
+    }),
+    u_lan_up3: uStage('lan_u_up', 2, {
+      label: '天枪落', anim: 'sk_rainbow', dur: 0.6, cancel: 0.42,
+      ev: [[0.06, p => {
+        const f = p.face, x0 = p.x, k = p.reach();
+        FX.add({ k: 'beam', x: p.x + f * 4, y: p.y - 30, len: 160, w: 3, ang: -Math.PI / 2, c: C, life: 0.2 });
+        Sound.play('charge', { x: p.x, pitch: 1.7 });
+        [50, 90, 130].forEach((dx, i) => later(0.14 + i * 0.07, () => {
+          const x = x0 + f * dx * k, gy = uFloor(p, x);
+          FX.add({ k: 'beam', x, y: gy, len: 150, w: 5, ang: -Math.PI / 2, c: C, life: 0.22 });
+          FX.add({ k: 'beam', x, y: gy, len: 150, w: 1.5, ang: -Math.PI / 2, c: '#ffffff', life: 0.26 });
+          for (const e of enemiesInRect(x - 12, gy - 150, 24, 152)) hitEnemy(p, e, p.makeHit({ dmg: 1.2, kx: 0, ky: -260, launch: true, stun: 0.6, hs: 3, dir: f, src: 'skill', fxc: C, uskill: 'lan_u_up' }));
+          lanSplash(x, gy - 2, 8); Sound.play('thrust', { x, pitch: 0.8 + i * 0.1 });
+        }));
+      }]],
+    }),
+    // ---------------- 震枪 (↓U) ----------------
+    u_lan_down1: uStage('lan_u_down', 0, {
+      label: '顿枪', anim: 'sk_tide', dur: 0.46, cancel: 0.3,
+      ev: [[0.1, p => {
+        const gy = uFloor(p, p.x);
+        for (const d of [-1, 1]) lanSurge(p, p.x + d * 12, gy, d, 1.1, { src: 'skill', uskill: 'lan_u_down', life: 0.5, h: 20 });
+        FX.shock(p.x, gy, C, 40); Sound.play('stomp', { x: p.x, pitch: 1.2 }); Sound.play('splash', { x: p.x });
+      }]],
+    }),
+    u_lan_down2: uStage('lan_u_down', 1, {
+      label: '枪林', anim: 'ground1', dur: 0.5, cancel: 0.34,
+      ev: [[0.08, p => {
+        const x0 = p.x, f = p.face;
+        for (let i = 0; i < 4; i++) later(i * 0.06, () => groundColumn(p, x0 + f * (32 + i * 26), 0.8, i % 2 ? FOAM : C, { h: 46, w: 14, bw: 4, src: 'skill', uskill: 'lan_u_down', sound: 'thrust' }));
+      }]],
+    }),
+    u_lan_down3: uStage('lan_u_down', 2, {
+      label: '漩涡', anim: 'sk_tide', dur: 0.56, cancel: 0.38,
+      ev: [[0.1, p => { whirlpool(p, p.x + p.face * 56, 1.3); Sound.play('splash', { x: p.x, pitch: 0.6 }); Sound.play('swoosh', { x: p.x, pitch: 0.4 }); }]],
+    }),
+    // ---------------- 游身 (冲刺U) ----------------
+    u_lan_dash1: uStage('lan_u_dash', 0, {
+      label: '掠影', anim: 'dashAtk', dur: 0.38, cancel: 0.24, grav: 0,
+      onStart(p) { p.vx = p.face * 260; p.vy = 0; },
+      ev: [[0.04, p => {
+        const x = p.x, y = p.y, f = p.face, fr = p.frame();
+        pHit(p, [0, -32, 58, 20], { dmg: 0.9, kx: 120, ky: -60, stun: 0.4, hs: 2, src: 'skill', uskill: 'lan_u_dash' }, 0.1);
+        lanThrustFx(p, { len: 50 }); Sound.play('thrust', { x: p.x });
+        // the afterimage left behind thrusts once more
+        addZone({
+          x, y, life: 0.32,
+          drawFn(ctx, gctx, x2, y2, z) { drawFrame(ctx, fr, p.spr.ox, p.spr.oy, x2, y2, f < 0, { tint: C, alpha: 0.6 * Math.min(1, z.life * 5) }); },
+          onEnd(z) {
+            const lo = f > 0 ? z.x : z.x - 58;
+            for (const e of enemiesInRect(lo, z.y - 32, 58, 20)) hitEnemy(p, e, p.makeHit({ dmg: 0.9, kx: 120, ky: -60, stun: 0.4, hs: 2, dir: f, src: 'skill', fxc: C, uskill: 'lan_u_dash' }));
+            FX.add({ k: 'beam', x: lo, y: z.y - 22, len: 58, w: 3, ang: 0, c: C, life: 0.14 });
+            Sound.play('thrust', { x: z.x, pitch: 1.3 });
+          },
+        });
+      }]],
+    }),
+    u_lan_dash2: uStage('lan_u_dash', 1, {
+      label: '回身掷', anim: 'comet1', dur: 0.44, cancel: 0.3, grav: 0.4,
+      onStart(p) { p.vx = -p.face * 200; if (p.onGround) p.vy = -180; },
+      ev: [[0.08, p => {
+        lanNeedle(p, { dmg: 1.2, sp: 720, len: 34, r: 3, life: 0.5, pierce: 4, ang: air(p) ? 10 : 0, uskill: 'lan_u_dash' });
+        Sound.play('swoosh', { x: p.x, pitch: 1.3 }); Sound.play('thrust', { x: p.x, pitch: 0.9 });
+      }]],
+    }),
+    u_lan_dash3: uStage('lan_u_dash', 2, {
+      label: '钻龙', anim: 'rush4', dur: 0.6, cancel: 0.42, grav: 0,
+      onStart(p, mv) {
+        p.vy = 0; p.inv = Math.max(p.inv, 0.3);
+        mv.box = pHit(p, [-6, -38, 50, 34], { dmg: 0.35, kx: 60, ky: -40, stun: 0.4, hs: 0, src: 'skill', energy: 0.4, uskill: 'lan_u_dash' }, 0.46, { multi: 0.07 });
+        Sound.play('dash', { x: p.x, pitch: 0.7 });
+      },
+      vel: [[0, 0.46, 300, 0]],
+      update(p, mv, dt) {
+        if (mv.t > 0.46) return;
+        mv.ft = (mv.ft || 0) - dt;
+        if (mv.ft <= 0) { mv.ft = 0.06; FX.slash(p.x + p.face * 20, p.y - 22, { r: 16, a0: -180, a1: 180, th: 4, c: C, f: p.face, sy: 1, dur: 0.1 }); Sound.play('swoosh', { x: p.x, pitch: rand(1.3, 1.6) }); }
+        for (const e of enemiesNear(p.x + p.face * 30, p.cy, 40)) if (!e.boss) e.vx += (p.x + p.face * 30 - e.x) * 5 * dt;
+      },
+      onEnd(p, mv) { if (mv.box) mv.box.life = 0; },
+    }),
+  });
+})();

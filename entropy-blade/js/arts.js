@@ -141,6 +141,37 @@ SK({ id: 'gao_ult', hero: 'gao', slot: 'down', def: true, ult: true, name: '霸�
 SK({ id: 'gao_mountain', hero: 'gao', slot: 'down', ult: true, name: '镇岳', icon: 'spike', move: 'ult2', cost: 75,
   desc: lv => `跃起擎举山岳虚影砸向大地：落点造成 ${pctL(5, lv)} 伤害，画面内地面敌人受到 ${pctL(2, lv)} 震荡并眩晕${lv >= 3 ? '；落地后升起环形岩刺' : ''}`,
   evo: '落地后升起环形岩刺' });
+// ----------------------------- LAN -----------------------------
+SK({ id: 'lan_hundred', hero: 'lan', slot: 'stand', def: true, name: '百鸟朝凤', icon: 'phoenix', move: 'sk_hundred', cost: 25,
+  desc: lv => `原地连刺 0.6 秒（每段 ${pctL(0.3, lv)}${lv >= 2 ? '，出枪更密' : ''}），最后一记重刺 ${pctL(1.6, lv)}${lv >= 3 ? '；重刺同时射出三道凤翎枪芒' : ''}`,
+  follow: 'f_hundred', fname: '凤鸣', fdesc: '连刺中再按 I：掷出贯穿全场的巨大枪芒', evo: '重刺同时射出三道凤翎枪芒' });
+SK({ id: 'lan_tide', hero: 'lan', slot: 'stand', name: '镇海', icon: 'drop', move: 'sk_tide', cost: 30,
+  desc: lv => `插枪布下 ${lv >= 3 ? 3.2 : 2.4} 秒的潮汐结界：冲散飞入的敌方飞行道具，结界内的敌人减速并持续受伤（每 0.3 秒 ${pctL(0.35, lv)}）`,
+  follow: 'f_tide', fname: '潮涌', fdesc: '布阵后再按 I：结界炸成大浪，冲飞周围敌人', evo: '结界范围扩大、持续 3.2 秒' });
+SK({ id: 'lan_pierce', hero: 'lan', slot: 'move', def: true, name: '破阵', icon: 'spear', move: 'sk_pierce', cost: 20,
+  desc: lv => `霸体挺枪突进，把沿途敌人串在枪尖上带走，最后挑飞（${pctL(2.0, lv)}）${lv >= 3 ? '；挑飞处涌起水柱' : ''}`,
+  follow: 'f_pierce', fname: '拔阵', fdesc: '破阵后再按 I：回身一记横扫，扫飞四周敌人', evo: '挑飞处涌起水柱' });
+SK({ id: 'lan_jiao', hero: 'lan', slot: 'move', name: '蛟龙出海', icon: 'dragon', move: 'sk_jiao', cost: 25,
+  desc: lv => `砸枪唤出贴地奔行的水龙，沿途反复冲撞敌人（每次 ${pctL(0.9, lv)}）${lv >= 2 ? '，水龙更快、更持久' : ''}${lv >= 3 ? '；前后各出一条' : ''}`,
+  follow: 'f_jiao', fname: '龙摆尾', fdesc: '出海后再按 I：水龙掉头回扫，伤害提升', evo: '前后各唤出一条水龙' });
+SK({ id: 'lan_vault', hero: 'lan', slot: 'up', def: true, name: '凌霄', icon: 'wing', move: 'sk_vault', cost: 30,
+  desc: lv => `插枪撑身跃上高空，原地卷起旋风柱挑飞敌人（每段 ${pctL(0.45, lv)}），全程无敌${lv >= 2 ? '；旋风柱更高' : ''}`,
+  follow: 'f_vault', fname: '坠枪', fdesc: '腾空后再按 I：枪尖朝下直坠，落地掀起三道水柱' });
+SK({ id: 'lan_rainbow', hero: 'lan', slot: 'up', name: '长虹贯日', icon: 'meteor', move: 'sk_rainbow', cost: 30,
+  desc: lv => `向天掷出枪芒，片刻后 ${lv >= 3 ? 12 : 8} 道枪芒落向前方（各 ${pctL(0.9, lv)}），插在地上 3 秒`,
+  follow: 'f_rainbow', fname: '虹落', fdesc: '落枪后再按 I：所有插地的枪芒化作水柱爆开', evo: '落下的枪芒增至 12 道' });
+SK({ id: 'lan_dive', hero: 'lan', slot: 'air', def: true, name: '游龙', icon: 'dragon', move: 'sk_dive', cost: 20,
+  desc: lv => `空中斜向俯冲突刺（${pctL(1.5, lv)}），命中敌人即借力弹起${lv >= 2 ? '；俯冲更快' : ''}${lv >= 3 ? '；命中处涌起水柱' : ''}`,
+  follow: 'f_dive', fname: '再游', fdesc: '俯冲后再按 I：调转枪尖，再次刺向最近的敌人', evo: '命中处涌起水柱' });
+SK({ id: 'lan_windmill', hero: 'lan', slot: 'air', name: '风车', icon: 'ring', move: 'sk_windmill', cost: 25,
+  desc: lv => `空中滞留舞枪 ${lv >= 3 ? 1.4 : 1} 秒，切割周围敌人（每段 ${pctL(0.38, lv)}）并打落敌方飞行道具，可移动`,
+  follow: 'f_windmill', fname: '掷轮', fdesc: '舞枪中再按 I：把旋转的长枪掷出，绕回手中', evo: '持续 1.4 秒，范围扩大' });
+SK({ id: 'lan_ult', hero: 'lan', slot: 'down', def: true, ult: true, name: '苍龙破', icon: 'star', move: 'ult', cost: 70,
+  desc: lv => `长枪化作苍龙横贯画面，连续冲撞（每次 ${pctL(0.7, lv)}），最后一声龙吟震荡画面内所有敌人（${pctL(3.2, lv)}）${lv >= 3 ? '；第二条苍龙从另一侧折返' : ''}`,
+  evo: '第二条苍龙从另一侧折返' });
+SK({ id: 'lan_heaven', hero: 'lan', slot: 'down', ult: true, name: '天河倒挂', icon: 'storm', move: 'ult2', cost: 75,
+  desc: lv => `举枪引天河倒灌：${lv >= 3 ? '整个画面' : '前方'}降下枪芒暴雨 1.8 秒（各 ${pctL(0.45, lv)}），最后一杆巨枪贯地（${pctL(3.4, lv)}）`,
+  evo: '枪芒暴雨覆盖整个画面' });
 
 // =====================================================================
 //  技能 USKILLS — U + direction. Free (no 灵力) and no cooldown: each stage's
@@ -178,6 +209,15 @@ USK({ id: 'gao_u_down', hero: 'gao', slot: 'down', name: '震地', icon: 'spike'
   stages: ['重踏地面，向两侧推出冲击波（各 140%）', '岩刺：两侧依次升起岩刺（各 70%）', '地震：周围地面敌人受 160% 伤害并短暂眩晕'] });
 USK({ id: 'gao_u_dash', hero: 'gao', slot: 'dash', name: '猛虎掌', icon: 'fist', moves: ['u_gao_dash1', 'u_gao_dash2', 'u_gao_dash3'],
   stages: ['冲刺中推出虎形掌劲（150%，贯穿）', '双虎掌：更大的第二记掌劲（160%），重击破防', '虎啸：震天咆哮，冲击环眩晕周围（180%）'] });
+// ----------------------------- LAN -----------------------------
+USK({ id: 'lan_u_shot', hero: 'lan', slot: 'shot', name: '枪芒', icon: 'spear', moves: ['u_lan_shot1', 'u_lan_shot2', 'u_lan_shot3'],
+  stages: ['刺出一道贯穿的枪芒（100%）', '双芒：上下两道斜飞的枪芒（各 65%）', '苍龙芒：一条蜿蜒前行的龙形枪芒（180%，贯穿）'] });
+USK({ id: 'lan_u_up', hero: 'lan', slot: 'up', name: '旋云', icon: 'storm', moves: ['u_lan_up1', 'u_lan_up2', 'u_lan_up3'],
+  stages: ['头顶舞枪卷起一团旋云，切割空中敌人', '升浪：前方涌起水柱挑飞敌人（150%）', '天枪落：三道枪芒自天而降（各 120%）'] });
+USK({ id: 'lan_u_down', hero: 'lan', slot: 'down', name: '震枪', icon: 'spike', moves: ['u_lan_down1', 'u_lan_down2', 'u_lan_down3'],
+  stages: ['枪尾顿地，向两侧推出水浪（各 110%）', '枪林：前方依次刺出四道枪尖（各 80%）', '漩涡：身前卷起吸人的漩涡，持续切割'] });
+USK({ id: 'lan_u_dash', hero: 'lan', slot: 'dash', name: '游身', icon: 'feather', moves: ['u_lan_dash1', 'u_lan_dash2', 'u_lan_dash3'],
+  stages: ['冲刺中突刺，留下一道会再刺一次的枪影（各 90%）', '回身掷：后跃并掷出枪芒（120%）', '钻龙：旋枪钻进敌阵，连续绞击'] });
 
 // =====================================================================
 //  武技 ARTS — direction + attack. A 4-move chain (起手 → 派生 → 连段 → 终式);
@@ -225,6 +265,19 @@ ART({ id: 'gao_tiger', hero: 'gao', slot: 'dash', name: '猛虎', icon: 'fist', 
   lv: ['猛虎硬爬山：霸体双拳突进', '虎抱：抓住敌人摔向身后', '虎尾脚：转身后踢', '虎啸：震天咆哮，冲击环眩晕周围'] });
 ART({ id: 'gao_knee', hero: 'gao', slot: 'dash', name: '飞膝', icon: 'wing', moves: ['knee1', 'knee2', 'knee3', 'knee4'],
   lv: ['腾空飞膝，斜向冲上', '双峰贯耳：空中双锤', '落雷踵：俯冲踵落', '地动：落地后前方连环地震'] });
+// ----------------------------- LAN -----------------------------
+ART({ id: 'lan_dragon', hero: 'lan', slot: 'up', name: '游龙升', icon: 'dragon', moves: ['dragon1', 'dragon2', 'dragon3', 'dragon4'],
+  lv: ['龙抬头：挑枪升空，一条小水龙盘旋而上', '云中刺：空中向斜上方三连刺', '盘龙：空中旋枪，卷住周围敌人', '游龙坠：俯冲落地，三道水柱冲天'] });
+ART({ id: 'lan_cloud', hero: 'lan', slot: 'up', name: '凌云', icon: 'wing', moves: ['cloud1', 'cloud2', 'cloud3', 'cloud4'],
+  lv: ['撑杆踢：插枪撑身，腾空飞踢', '倒挂金钩：空中回身钩扫，把敌人拉向自己', '翻身劈枪：空中翻身两记劈落', '落枪阵：落地后前方依次刺出五道枪尖'] });
+ART({ id: 'lan_sweep', hero: 'lan', slot: 'down', name: '扫千军', icon: 'ring', moves: ['sweep1', 'sweep2', 'sweep3', 'sweep4'],
+  lv: ['低扫：贴地横扫挑起敌人，推出一道小浪', '回扫：反手一扫，同时打击前后', '车轮：边进边连续旋扫', '横扫千军：长枪抡满一圈，向两侧推出大浪'] });
+ART({ id: 'lan_ground', hero: 'lan', slot: 'down', name: '地龙', icon: 'drop', moves: ['ground1', 'ground2', 'ground3', 'ground4'],
+  lv: ['刺地：枪尖刺地，前方涌出水柱', '连刺地：水柱向前连涌三道', '掀浪：挑枪掀起奔涌的大浪', '龙吟：地下钻出水龙，沿地面冲杀'] });
+ART({ id: 'lan_rush', hero: 'lan', slot: 'dash', name: '突骑', icon: 'spear', moves: ['rush1', 'rush2', 'rush3', 'rush4'],
+  lv: ['突刺：借冲刺之势的长距离突刺', '再突：更远的第二记突刺', '回马枪：回身刺向身后', '七进七出：在敌阵中来回穿刺七次'] });
+ART({ id: 'lan_comet', hero: 'lan', slot: 'dash', name: '流星枪', icon: 'meteor', moves: ['comet1', 'comet2', 'comet3', 'comet4'],
+  lv: ['掷枪影：掷出贯穿的枪影，插在落点', '踏影：瞬身踏向枪影，落点重击', '分光：扇形掷出三道枪影', '流星雨：跃起向下掷出八道枪影'] });
 
 // =====================================================================
 //  武学 signature effects — each one belongs to exactly one 武学.
@@ -321,6 +374,33 @@ const WX_PERKS = {
     },
   },
   bawang: { name: '霸王余威', desc: '施放奥义后 5 秒内受到的伤害 -40%', cast(p) { p.counters.wxGuardT = G.time + 5 + (p.move ? p.move.m.dur : 0); } },
+  // ---------------- 澜：枪、潮、龙 ----------------
+  longhun: {
+    name: '龙魂', desc: '被这门武技击倒的敌人化作小水龙，冲向最近的敌人（100%）',
+    kill(p, e) {
+      const t = nearestEnemy(e.x, e.cy, 220, x => x !== e);
+      lanDragon(p, { x: e.x, y: e.cy, vx: (t ? sign(t.x - e.x) || p.face : p.face) * 320, life: 0.7, dmg: 1.0, r: 16, size: 0.8, amp: 5, src: 'proc', wx: null });
+    },
+  },
+  chaoxi: { name: '潮汐', desc: '命中回复 1.5 点灵力', hit(p, e, h) { if (!h.dot) p.gainMana(1.5); } },
+  lanjie: {
+    name: '浪印', desc: '命中叠加浪印，满 3 层时敌人脚下涌起水柱（150%）',
+    hit(p, e, h) {
+      if (h.dot || e.dead) return;
+      const st = e.st;
+      st.lanMark = (G.time - (st.lanMarkT || -9) < 4 ? st.lanMark || 0 : 0) + 1; st.lanMarkT = G.time;
+      if (st.lanMark < 3) return;
+      st.lanMark = 0;
+      later(0.05, () => { if (!e.dead) lanGeyser(p, e.x, 1.5, { src: 'proc', wx: null }); });
+    },
+  },
+  huima: { name: '回马', desc: '从敌人身后命中时伤害 +40%', pre(p, e, h) { if (sign(e.x - p.x) === (e.face || 1)) h.dmg *= 1.4; } },
+  chuanyang: { name: '穿杨', desc: '枪芒的贯穿数 +2', mods: { pierce: 2 } },
+  qiangshi: {
+    name: '枪势', desc: '连续命中叠起枪势（最多 10 层，每层伤害 +3%），1.5 秒未命中则散去',
+    pre(p, e, h) { const c = p.counters; if (G.time - (c.qsT || -9) > 1.5) c.qs = 0; h.dmg *= 1 + 0.03 * (c.qs || 0); },
+    hit(p, e, h) { if (h.dot) return; const c = p.counters; c.qs = Math.min(10, (c.qs || 0) + 1); c.qsT = G.time; },
+  },
 };
 
 // =====================================================================
@@ -394,12 +474,34 @@ const WX_LEVELS = {
   gao_fists: [{ t: 1 }, { t: 3 }, { t: 3, f: 1, perk: 'lianhuan' }],
   gao_ult: [{ t: 1 }, { t: 3 }, { t: 3, perk: 'bawang' }],
   gao_mountain: [{ t: 1 }, { t: 3 }],
+  // ---------------- 澜 ----------------
+  lan_dragon: [{ n: 2, pow: 1 }, { n: 3, pow: 1.15 }, { n: 4, pow: 1.35, perk: 'longhun' }],
+  lan_cloud: [{ n: 1, pow: 1 }, { n: 4, pow: 1.3 }],
+  lan_sweep: [{ n: 1, pow: 1 }, { n: 2, pow: 1.1 }, { n: 4, pow: 1.3, perk: 'chaoxi' }],
+  lan_ground: [{ n: 3, pow: 1 }, { n: 4, pow: 1.25, perk: 'lanjie' }],
+  lan_rush: [{ n: 2, pow: 1 }, { n: 4, pow: 1.3, perk: 'huima' }],
+  lan_comet: [{ n: 4, pow: 1 }],
+  lan_u_shot: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3, perk: 'chuanyang' }],
+  lan_u_up: [{ n: 1, pow: 1 }, { n: 3, pow: 1.25 }],
+  lan_u_down: [{ n: 2, pow: 1 }, { n: 3, pow: 1.3, perk: 'qiangshi' }],
+  lan_u_dash: [{ n: 1, pow: 1 }, { n: 2, pow: 1.15 }, { n: 3, pow: 1.3 }],
+  lan_hundred: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1 }],
+  lan_tide: [{ t: 1, f: 1 }, { t: 3, f: 1 }],
+  lan_pierce: [{ t: 1 }, { t: 3, f: 1 }],
+  lan_jiao: [{ t: 1 }, { t: 2, f: 1 }, { t: 3, f: 1 }],
+  lan_vault: [{ t: 2, f: 1 }],
+  lan_rainbow: [{ t: 1 }, { t: 3 }, { t: 3, f: 1 }],
+  lan_dive: [{ t: 1, f: 1 }, { t: 2, f: 1 }, { t: 3, f: 1 }],
+  lan_windmill: [{ t: 1 }, { t: 3, f: 1 }],
+  lan_ult: [{ t: 1 }, { t: 3 }],
+  lan_heaven: [{ t: 1 }, { t: 3 }],
 };
 // what each 秘技's 强化 tier (2) adds, for the cards
 const SK_BOOST = {
   rin_wave: '追加第二道剑气', rin_petal: '刃风持续 3.4 秒',
   eve_turret: '炮台每次双发', eve_backflip: '弹数增加', eve_grenade: '额外投出两枚子母弹', eve_rain: '弹幕更密', eve_missile: '导弹增至 10 枚', eve_kata: '射速提升', eve_mine: '最多可布 3 枚',
   gao_iron: '持续 4.5 秒', gao_ki: '气弹更大、贯穿更多', gao_charge: '爆炸范围扩大', gao_split: '岩刺增至 9 根', gao_kick: '推进更快', gao_fists: '最后一拳打出拳风',
+  lan_hundred: '出枪更密', lan_jiao: '水龙更快、更持久', lan_vault: '旋风柱更高', lan_dive: '俯冲更快',
 };
 for (const reg of [ARTS, USKILLS, SKILLS]) for (const id in reg) {
   reg[id].lvs = WX_LEVELS[id];
@@ -479,6 +581,36 @@ WP({ id: 'gao_ember', hero: 'gao', name: '赤焰', type: '手甲', icon: 'flame'
     s.atkMul += 0.08;
     p.on('onHit', (p, e, h) => { if (h.finisher || h.src === 'charge' || h.src === 'skill' || h.src === 'ult') applyStatus(e, 'burn', 3, 0.25); });
   } });
+// ----------------------------- LAN -----------------------------
+WP({ id: 'lan_canglan', hero: 'lan', name: '沧澜', type: '长枪', icon: 'spear', col: '#3ee0b0',
+  desc: '游龙枪门的传承之枪。攻击范围 +12%；连击每满 10 次，下一击唤出一条水龙（120%）。', look: {},
+  apply(p, s) {
+    s.reachMul *= 1.12;
+    p.on('onHit', (p, e, h) => {
+      if (h.src === 'proc' || h.dot) return;
+      const n = Math.floor(p.combo / 10);
+      if (n < 1) { p.counters.canglanN = 0; return; }
+      if (n === p.counters.canglanN) return;
+      p.counters.canglanN = n;
+      lanDragon(p, { x: p.x, y: p.y - 22, vx: p.face * 340, life: 0.7, dmg: 1.2, r: 18, amp: 7, src: 'proc', wx: null });
+      Sound.play('splash', { x: p.x, pitch: 1.2 });
+    });
+  } });
+WP({ id: 'lan_zhaoye', hero: 'lan', name: '照夜', type: '银枪', icon: 'feather', col: '#d8ecff',
+  desc: '轻灵的银枪。攻速 +12%，移动速度 +8%；见切后 3 秒内暴击率 +25%。',
+  look: { col: { shaft: '#c8d4e0', shaftH: '#ffffff', head: '#ffffff', headE: '#bfe8ff', tassel: '#eef6ff', tasselD: '#9ab0c8', cap: '#9ab0c8', collar: '#d8e4f0' }, spearO: { fwd: 20, back: 10, headL: 8, thick: 1.3 } },
+  apply(p, s) {
+    s.atkSpeed *= 1.12; s.speedMul += 0.08;
+    p.on('onPerfect', p => { p.counters.zhaoyeT = G.time + 3; });
+    p.on('modHit', (p, h) => { if (p.counters.zhaoyeT > G.time) h.critBonus = (h.critBonus || 0) + 0.25; });
+  } });
+WP({ id: 'lan_pojun', hero: 'lan', name: '破军', type: '方天戟', icon: 'spike', col: '#ffd36a',
+  desc: '沉重的方天画戟。攻击 +15%，攻速 -6%；终结技命中后 1.2 秒内霸体，受到的伤害 -40%。',
+  look: { col: { shaft: '#2a2230', shaftH: '#5a4a60', head: '#f0e6d0', headE: '#ffd36a', tassel: '#ffd36a', tasselD: '#b8862f', cap: '#ffd36a', collar: '#ffd36a' }, spearO: { fwd: 18, back: 12, headL: 8, halberd: true, thick: 1.8 } },
+  apply(p, s) {
+    s.atkMul += 0.15; s.atkSpeed *= 0.94;
+    p.on('onFinisher', p => { p.armorT = Math.max(p.armorT, 1.2); });
+  } });
 const heroWeapons = id => Object.values(WEAPONS).filter(w => w.hero === id);
 
 // ---------------- 招式 techniques ----------------
@@ -529,6 +661,12 @@ function wxText(fam, E, lv, h) {
 }
 
 // ---------------- move list (招式表) ----------------
+// the 见切 chain: the counter and every link after it
+function counterChain(M) {
+  const out = [];
+  for (let k = 'counter'; k && M[k] && out.length < 5; k = M[k].counter ? M[k].next : null) out.push(M[k].label);
+  return out;
+}
 function heroMoveList(h, p) {
   const M = h.moves, t = (p && p.tech) || {};
   const chain = [];
@@ -554,7 +692,7 @@ function heroMoveList(h, p) {
     ['长按 攻击', M.charge1.label + (t.charge2 || (p && p.stats.charge2) ? ' / ' + M.charge2.label : '')],
     ['空中 攻击 连按', air.join(' → ')],
     ['空中 ↑ / ↓ + 攻击', M.airRise.label + ' / ' + M.plunge.label],
-    ['极限闪避 → 攻击', M.counter.label],
+    ['极限闪避 → 攻击 连按', counterChain(M).join(' → ')],
   ];
   if (p) for (const sl of U_SLOTS) {
     const s = p.uskills[sl.id];
@@ -695,7 +833,7 @@ function takeArt(p, a, done) {
 }
 
 // ---------------- bake every hero's sprite frames ----------------
-const HERO_ORDER = ['rin', 'eve', 'gao'];
+const HERO_ORDER = ['rin', 'eve', 'gao', 'lan'];
 function heroLook(h, weaponId) {
   const base = LOOKS[h.look];
   const W = WEAPONS[weaponId];
@@ -721,7 +859,8 @@ function bakeHero(id, weaponId) {
   };
   // moves with `anim` reuse another move's frames instead of baking their own
   for (const mn in h.moves) if (!h.moves[mn].anim) defs[mn] = { keys: h.moves[mn].keys, dur: h.moves[mn].dur };
-  const spr = bakeRig(id, L, defs);
+  // a hero with a long weapon bakes on a larger canvas (h.sprBox = [w, h, ox, oy])
+  const spr = bakeRig(id, L, defs, ...(h.sprBox || []));
   for (const mn in h.moves) { const al = h.moves[mn].anim; if (al && spr.anims[al]) spr.anims[mn] = spr.anims[al]; }
   spr.weapon = weaponId || null;
   return spr;

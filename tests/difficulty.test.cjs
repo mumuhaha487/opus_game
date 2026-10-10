@@ -29,7 +29,7 @@ function game(saved) {
     Text: { draw: (ctx, text) => drawn.push(String(text)), wrap: text => [text], measure: text => String(text).length * 8 },
   });
   const run = code => vm.runInContext(code, context);
-  for (const name of ['core', 'sprites', 'heroes', 'heroes_eve', 'heroes_gao', 'arts', 'upgrades', 'trials', 'combat', 'player', 'world', 'enemies', 'enemies2', 'bosses', 'bosses2', 'game', 'ui']) {
+  for (const name of ['core', 'sprites', 'heroes', 'heroes_eve', 'heroes_gao', 'heroes_lan', 'arts', 'upgrades', 'trials', 'combat', 'player', 'world', 'enemies', 'enemies2', 'bosses', 'bosses2', 'game', 'ui']) {
     vm.runInContext(fs.readFileSync(path.join(sourceDir, name + '.js'), 'utf8'), context, { filename: name + '.js' });
   }
   // Replace only expensive raster generation; gameplay and menu handlers are real source.

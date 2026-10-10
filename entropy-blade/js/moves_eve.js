@@ -12,7 +12,7 @@ const RECOIL = (o = {}) => Object.assign({ aF: [-22, -30], aB: [-18, -26], w: -3
 // bullet from an arbitrary point with a world-space angle (degrees)
 function shotFrom(p, x, y, ang, o = {}) {
   const a = ang * DEG, sp = o.sp || 560;
-  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: 0, src: o.src, energy: 0.5, proj: true, fxc: o.c || Y, art: o.art, skill: o.skill, wx: o.wx, status: o.status });
+  const hit = p.makeHit({ dmg: o.dmg || 0.6, kx: o.kx || 50, ky: o.ky || -20, stun: o.stun || 0.2, hs: 0, src: o.src, energy: 0.5, proj: true, fxc: o.c || Y, art: o.art, skill: o.skill, wx: o.wx, status: o.status, critBonus: o.critBonus });
   const pr = new Proj({ team: 'p', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: o.r || 1.6, kind: 'bullet', c: o.c || Y, c2: '#ffffff', life: o.life || 0.6, hit, len: o.len || 11, pierce: (o.pierce || 0) + (p.stats.pierce || 0), light: 26, ghost: !!o.ghost, onDie: o.onDie });
   G.projs.push(pr);
   FX.flash(x, y, 4, '#ffe9a0', 0.06);
@@ -469,4 +469,35 @@ M.sk_grenade.ev[0][1] = p => {
   Sound.play('swoosh', { x: p.x, pitch: 0.7 });
 };
 M.sk_turret.followAt = 0.1;
+
+// ---------- 见切连段: 瞬身连射 → 升空连射 (rise after the kicked foe) → 零距星爆 ----------
+M.counter.counter = true; M.counter.next = 'counter2';
+M.counter.hits[0].kb = [80, -330];
+const faceFoe = (p, r) => { const e = nearestEnemy(p.x, p.cy, r); if (e) p.face = sign(e.x - p.x) || p.face; return e; };
+Object.assign(M, {
+  counter2: {
+    label: '见切·升空连射', dur: 0.46, cancel: 0.28, grav: 0.25, noAtkSpeed: true, counter: true,
+    keys: [[0, air({ lean: -6, ...AIM_UP })], ...altKeys(4, 0.05, air({ lean: -10, ...AIM_UP }), air({ lean: -16, aF: [-60, -64], aB: [-55, -60], w: -64, w2: -60 })).map(([t, k, e]) => [t + 0.04, k, e]), [0.46, air({ lean: 0, ...E_AIM })]],
+    onStart(p) { p.vy = Math.min(p.vy, -300); p.inv = Math.max(p.inv, 0.3); faceFoe(p, 200); Sound.play('jump', { x: p.x, pitch: 1.3 }); },
+    ev: [0.05, 0.1, 0.15, 0.2, 0.25].map((t, i) => [t, p => {
+      const e = nearestEnemy(p.x, p.cy, 220), x = p.x + p.face * 10, y = p.y - 24;
+      const ang = e ? aimAt(x, y, e) : (p.face > 0 ? -40 : -140);
+      shotFrom(p, x, y, ang + rand(-4, 4), { dmg: 0.55, c: B, src: 'counter', critBonus: 0.5, ky: -120, silent: i % 2 === 1, pitch: 1.4 });
+    }]),
+    next: 'counter3',
+  },
+  counter3: {
+    label: '见切·零距星爆', dur: 0.62, cancel: 0.46, grav: 0.6, noAtkSpeed: true, counter: true,
+    keys: [[0, air({ lean: 8, ...E_AIM })], [0.08, RECOIL(Object.assign({}, E_AIR, { lean: -24 })), 'outCubic'], [0.62, { lean: 2 }]],
+    onStart(p) { p.inv = Math.max(p.inv, 0.35); faceFoe(p, 200); },
+    ev: [[0.07, p => {
+      const x = p.x + p.face * 26, y = p.y - 22;
+      pHit(p, [6, -46, 52, 50], { dmg: 2.6, kx: 300, ky: -240, stun: 0.8, hs: 10, heavy: true, launch: true, critBonus: 1, src: 'counter', finisher: true }, 0.1);
+      explodeP(x, y, 40, 1.2, { c: Y, c2: B, src: 'counter', shake: 0.4, noProc: false, pitch: 1.0 });
+      for (let i = 0; i < 8; i++) shotFrom(p, x, y, i * 45, { dmg: 0.35, c: B, src: 'counter', silent: true, sp: 420, life: 0.35 });
+      FX.screenFlash('#ffffff', 0.3, 0.15); Sound.play('shotgun', { x: p.x, pitch: 0.8 }); Sound.play('crit', { x: p.x });
+      p.vx = -p.face * 220; p.vy = Math.min(p.vy, -160);
+    }]],
+  },
+});
 })();

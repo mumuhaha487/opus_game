@@ -8,8 +8,8 @@ const vm = require('node:vm');
 
 const gameDir = path.join(__dirname, '..', 'entropy-blade');
 const logicFiles = new Set([
-  'core', 'sprites', 'world', 'combat', 'heroes', 'heroes_eve', 'heroes_gao',
-  'movekit', 'moves_rin', 'moves_eve', 'moves_gao', 'moves_u', 'arts', 'player',
+  'core', 'sprites', 'world', 'combat', 'heroes', 'heroes_eve', 'heroes_gao', 'heroes_lan',
+  'movekit', 'moves_rin', 'moves_eve', 'moves_gao', 'moves_lan', 'moves_u', 'arts', 'player',
   'enemies', 'enemies2', 'bosses', 'bosses2', 'upgrades', 'trials', 'game', 'ui',
 ]);
 

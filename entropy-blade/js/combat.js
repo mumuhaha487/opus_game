@@ -222,12 +222,15 @@ function hurtPlayer(dmg, srcX, o = {}) {
   if (p.state === 'charge' && p.stats.chargeArmor) dmg *= 0.5;
   if (p.ironT > 0) {
     dmg *= 0.6;
-    if (G.time - (p.counters.ironT || 0) > 0.4) {
-      p.counters.ironT = G.time;
-      explodeP(p.x, p.cy, 46, 1.5 * skMul(p, 'gao_iron'), { c: '#ffd36a', kx: 260, ky: -200, src: 'skill', wx: { fam: 'sk', id: 'gao_iron' }, shake: 0.3, noProc: false });
+    // 金刚身 answers blows: a poison tick is softened like any damage but sets off neither the burst nor 金身
+    if (!o.dot) {
+      if (G.time - (p.counters.ironT || 0) > 0.4) {
+        p.counters.ironT = G.time;
+        explodeP(p.x, p.cy, 46, 1.5 * skMul(p, 'gao_iron'), { c: '#ffd36a', kx: 260, ky: -200, src: 'skill', wx: { fam: 'sk', id: 'gao_iron' }, shake: 0.3, noProc: false });
+      }
+      // 金身 (金刚身's signature): blows taken feed 灵力
+      if ((p.wxPerksOf({ fam: 'sk', id: 'gao_iron' }) || []).includes(WX_PERKS.jinshen)) { p.gainMana(4); FX.text(p.x, p.y - p.h - 6, '+4', '#7fd8ff', { size: 8 }); }
     }
-    // 金身 (金刚身's signature): blows taken feed 灵力
-    if ((p.wxPerksOf({ fam: 'sk', id: 'gao_iron' }) || []).includes(WX_PERKS.jinshen)) { p.gainMana(4); FX.text(p.x, p.y - p.h - 6, '+4', '#7fd8ff', { size: 8 }); }
   }
   if (p.counters.wxGuardT > G.time) dmg *= 0.6;                     // 霸王余威
   dmg = Math.max(1, Math.round(dmg));
@@ -257,7 +260,8 @@ function hurtPlayer(dmg, srcX, o = {}) {
     p.state = 'hurt'; p.hurtT = 0.3; p.move = null;
     p.vx = (sign(p.x - srcX) || -p.face) * 170; p.vy = -200;
   }
-  p.fire('onHurt', dmg);
+  // every loss of health is reported; o tells reactions whether it was a blow or a poison tick
+  p.fire('onHurt', dmg, o);
   if (p.hp <= 0) p.die();
   return true;
 }
@@ -272,9 +276,10 @@ class Proj {
     // signature effects of the 武学 being cast: 刃长 (reach), 星轨 (homing)
     if (this.team === 'p' && G.player && G.player.wxMod) {
       const wx = this.hit && this.hit.wx !== undefined ? this.hit.wx : null;
-      const k = G.player.reach(wx), hm = G.player.wxMod('homing', wx);
+      const k = G.player.reach(wx), hm = G.player.wxMod('homing', wx), pm = G.player.wxMod('pierce', wx);
       if (k > 1) { this.life *= k; this.r *= 1 + (k - 1) * 0.6; if (this.hh) this.hh *= 1 + (k - 1) * 0.6; }
       if (hm) this.homing = Math.max(this.homing || 0, hm);
+      if (pm) this.pierce += pm;                                       // 穿杨
     }
     this.max = this.life;
     // 劫难·箭雨: faster enemy volleys

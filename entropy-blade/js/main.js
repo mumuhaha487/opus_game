@@ -64,7 +64,8 @@ function renderTitleWorld(dt) {
   gctx.clearRect(0, 0, W, H);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   TitleScene.x += dt * 22;
-  const bi = UI.screen === 'select' || UI.screen === 'trial' ? [0, 3, 1][UI.heroSel] : 0;
+  // the select screen shows each hero against a map of their own (澜 in the rain marsh)
+  const bi = UI.screen === 'select' || UI.screen === 'trial' ? [0, 3, 1, 4][UI.heroSel] || 0 : 0;
   drawBackground(ctx, gctx, bi, TitleScene.x, 0, G.rtime, H);
   drawWeather(ctx, gctx, bi, TitleScene.x, 0, G.rtime, dt, false);
   if (UI.screen === 'press' || UI.screen === 'title') {
@@ -80,7 +81,8 @@ function renderTitleWorld(dt) {
       const fr = animFrame(spr, 'idle', G.rtime);
       drawFrame(ctx, fr, spr.ox, spr.oy, 96, 226, false);
       gctx.globalAlpha = 0.25; drawFrame(gctx, fr, spr.ox, spr.oy, 96, 226, false, { tint: '#ff3b5c' }); gctx.globalAlpha = 1;
-      const e = SPR.eve, g = SPR.gao;
+      const e = SPR.eve, g = SPR.gao, l = SPR.lan;
+      if (l) drawFrame(ctx, animFrame(l, 'idle', G.rtime + 1.2), l.ox, l.oy, 340, 226, true, { blend: '#0a0414', blendAmt: 0.45 });
       if (e) drawFrame(ctx, animFrame(e, 'idle', G.rtime + 0.4), e.ox, e.oy, 380, 226, true, { blend: '#0a0414', blendAmt: 0.45 });
       if (g) drawFrame(ctx, animFrame(g, 'idle', G.rtime + 0.8), g.ox, g.oy, 420, 226, true, { blend: '#0a0414', blendAmt: 0.45 });
     }

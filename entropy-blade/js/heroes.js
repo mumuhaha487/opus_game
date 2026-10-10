@@ -192,6 +192,7 @@ HEROES.rin = {
   desc: '游历诸国的流浪剑客，一柄绯刃斩断宿命。连段派生丰富，见切反击凌厉。',
   hp: 100, atk: 10, speed: 136, crit: 0.1, armor: 0, energyRate: 1.4, procMul: 1,
   hurt: [12, 30],
+  range: 0.45, atkIcon: 'sword',
   startSkill: 'rin_shadow',
   ultName: '月华千斩', ultDesc: '化身月影，对画面内所有敌人施加无数斩击，最后一记横断天地。',
   combo: 'atk1', air: 'aatk1',

@@ -46,7 +46,7 @@ const CTRL_ICON = { jump: 'jump', dash: 'dash', skill: 'wave', ult: 'star', inte
 function ctrlCap(x, y, action, col = '#ffffff') {
   if (!TouchUI.enabled) return keyCap(x, y, Input.keyName(action), col);
   let ic = CTRL_ICON[action];
-  if (action === 'attack') ic = G.player && G.player.heroId === 'eve' ? 'gun' : G.player && G.player.heroId === 'gao' ? 'fist' : 'sword';
+  if (action === 'attack') ic = G.player ? G.player.hero.atkIcon : 'sword';
   uctx.fillStyle = '#05030a'; uctx.fillRect(x - 1, y - 3, 18, 18);
   uctx.fillStyle = '#2a2244'; uctx.fillRect(x, y - 2, 16, 16);
   uctx.drawImage(iconOf(ic || 'star', col), x, y - 2);
@@ -229,7 +229,7 @@ UI.updTitle = function (dt) {
       if (Input.hit('cancel')) { this.screen = 'select'; Sound.play('cancel'); }
       break;
     case 'select':
-      this.heroSel = navH(3, this.heroSel);
+      this.heroSel = navH(HERO_ORDER.length, this.heroSel);
       if (Input.hit('mleft') || Input.hit('mright')) this.showcase = { i: 0, t: 0 };
       if (Input.hit('mup')) this.cycleWeapon(-1);
       if (Input.hit('mdown')) this.cycleWeapon(1);
@@ -636,7 +636,7 @@ UI.drawSelect = function () {
   }
   const x0 = 24, by = 440, bw = 912, bh = 80;
   panel(x0, by, bw, bh, { border: h.color, alpha: 0.9 });
-  const stats = [['生命', h.hp / 130], ['攻击', h.atk / 12], ['速度', (h.speed - 100) / 45], ['射程', id === 'eve' ? 1 : id === 'rin' ? 0.45 : 0.3]];
+  const stats = [['生命', h.hp / 130], ['攻击', h.atk / 12], ['速度', (h.speed - 100) / 45], ['射程', h.range]];
   stats.forEach(([nm, v], k) => {
     const sy = by + 6 + k * 17;
     T(nm, x0 + 14, sy, { color: '#8a7aa8' });
@@ -810,7 +810,7 @@ UI.drawAccount = function () {
   });
   T('最高评分', 520, 220, { color: '#ffffff' });
   HERO_ORDER.forEach((id, i) => {
-    const x = 520 + i * 120, hero = HEROES[id], score = Save.data.heroBest[id];
+    const x = 520 + i * Math.floor(360 / HERO_ORDER.length), hero = HEROES[id], score = Save.data.heroBest[id];
     T(hero.name, x, 242, { color: hero.color });
     T(score === undefined ? '—' : String(score), x + Text.measure(hero.name) + 8, 242, { color: score === undefined ? '#5a4f6a' : '#ffd23f' });
   });
@@ -866,7 +866,7 @@ UI.drawHowto = function () {
       ['攻击（连按连段）', 'J   或   X', 'X'],
       ['蓄力攻击', '长按 J', '长按 X'],
       ['武技：上段 / 下段', '↑ + J   /   ↓ + J', '↑ / ↓ + X'],
-      ['冲刺（无敌）· 突进武技', 'L / Shift，冲刺中按 J', 'B / RB，冲刺中 X'],
+      ['冲刺（无敌，每 0.5 秒一次）· 突进武技', 'L / Shift，冲刺中按 J', 'B / RB，冲刺中 X'],
       ['技能（远程攻击）', 'U', 'LB'],
       ['技能：上 / 下 / 冲刺', '↑ + U   /   ↓ + U   /   冲刺中 U', '↑ / ↓ + LB，冲刺中 LB'],
       ['秘技：静止 / 移动 / 空中', 'I   /   ← → + I   /   空中 I', 'Y（同左）'],
@@ -884,7 +884,7 @@ UI.drawHowto = function () {
     });
   } else {
     const tips = [
-      ['见切', '在敌人攻击即将命中的瞬间冲刺，触发子弹时间；随后按攻击发动必暴击的反击。'],
+      ['见切', '在敌人攻击即将命中的瞬间冲刺：触发子弹时间，冲刺立即刷新可以接着闪；随后连按攻击打出三段见切连段，首尾两击必定暴击。'],
       ['武学', '武技 / 技能 / 秘技同属武学。每门有自己的等级上限（1–3 级）和独有的进阶效果，卡牌上写明每一级给什么。'],
       ['武技（方向 + 攻击）', '↑ / ↓ / 冲刺中 + 攻击各有一门武技，升级逐步解锁派生、连段、终式，前一招后继续按攻击接出。'],
       ['技能（U + 方向）', 'U 释放远程技能，↑ / ↓ / 冲刺 + U 各有一招，收招即可再放；解锁后施放中或刚结束时再按 U 接下一段，换方向则改出该方向的技能。'],
@@ -1016,11 +1016,18 @@ UI.drawHUD = function () {
     T(`${Math.floor(p.mana)}`, mx + 4, my - 2, { size: 8, color: '#e8f4ff', outline: '#0a1430' });
   }
   // dashes + weapon
+  const dodgeReady = p.dodgeCD <= 0;
   for (let i = 0; i < p.stats.dashes; i++) {
     const on = i < p.dashes;
     const x = 92 + i * 12, y = 62;
-    uctx.fillStyle = on ? '#7ff0ff' : '#2a2244';
+    uctx.fillStyle = on ? (dodgeReady ? '#7ff0ff' : '#3a7a8a') : '#2a2244';
     uctx.fillRect(x + 2, y, 4, 8); uctx.fillRect(x, y + 2, 8, 4);
+  }
+  // the 0.5 s dodge cooldown refilling under the pips
+  if (!dodgeReady) {
+    const w = p.stats.dashes * 12 - 4;
+    uctx.fillStyle = '#2a2244'; uctx.fillRect(92, 73, w, 2);
+    uctx.fillStyle = '#7ff0ff'; uctx.fillRect(92, 73, Math.round(w * (1 - p.dodgeCD / DODGE_CD)), 2);
   }
   if (p.wpn) { uctx.drawImage(iconOf(p.wpn.icon, p.wpn.col), 232, 58); T(`${p.wpn.name}·${p.wpn.type}`, 314, 61, { size: 8, color: p.wpn.col, align: 'right' }); }
   // ---- 秘技 bar (I + direction), bottom-right ----
@@ -1100,7 +1107,7 @@ UI.drawHUD = function () {
     }
     if (p.counterT > 0 && Math.floor(this.t * 10) % 2) {
       if (TouchUI.enabled) { T('见切！', px - 10, py - 18, { color: '#ffffff', align: 'center', outline: '#2a3a8a' }); ctrlCap(px + 22, py - 16, 'attack', '#ffffff'); }
-      else T(`见切！按 ${Input.keyName('attack')} 反击`, px, py - 18, { color: '#ffffff', align: 'center', outline: '#2a3a8a' });
+      else T(`见切！连按 ${Input.keyName('attack')} 反击`, px, py - 18, { color: '#ffffff', align: 'center', outline: '#2a3a8a' });
     }
   }
   // ---- top-right ----

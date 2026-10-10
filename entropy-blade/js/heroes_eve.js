@@ -31,6 +31,7 @@ HEROES.eve = {
   desc: '浪迹江湖的魔弹术士，以双枪施展星辰之力。速射、魔导弹与机关并用。',
   hp: 85, atk: 9, speed: 142, crit: 0.08, armor: 0, energyRate: 0.8, procMul: 0.6,
   hurt: [12, 30],
+  range: 1, atkIcon: 'gun',
   startSkill: 'eve_missile',
   ultName: '湮灭光炮', ultDesc: '展开魔导炮，向前方释放持续的毁灭光束。',
   combo: 'shot1', air: 'ashot1',

@@ -312,7 +312,7 @@ U({ id: 'guard_counter', school: 'guard', name: '后发制人', rarity: 2, max: 
   } });
 U({ id: 'guard_thorn', school: 'guard', name: '荆棘甲', rarity: 2, max: 1, icon: 'spike',
   desc: () => '受到伤害时，对周围敌人造成 250% 攻击力伤害并将其击退，且无敌时间 +0.5 秒',
-  apply(p) { p.on('onHurt', p => { p.inv += 0.5; sigilBurst(p, p.x, p.cy, 56, 2.5, '#7fb8ff', { kx: 260, ky: -180, sound: 'clank' }); }); } });
+  apply(p) { p.on('onHurt', (p, dmg, o) => { if (o && o.dot) return; p.inv += 0.5; sigilBurst(p, p.x, p.cy, 56, 2.5, '#7fb8ff', { kx: 260, ky: -180, sound: 'clank' }); }); } });
 U({ id: 'guard_endure', school: 'guard', name: '不屈', rarity: 3, max: 1, icon: 'phoenix',
   desc: () => '每个房间一次：受到致命伤害时保留 1 点生命，并获得 2 秒无敌',
   apply(p) {
@@ -561,6 +561,8 @@ function iconOf(key, col) {
     bell: x => { x.poly([[5, 3], [11, 3], [13, 12], [3, 12]], col); x.rect(2, 12, 12, 2, c2); x.circ(8, 14.5, 1.5, w); x.rect(7, 1, 2, 2, c2); },
     scroll: x => { x.rect(4, 2, 8, 12, col); x.rect(3, 2, 10, 2, c2); x.rect(3, 12, 10, 2, c2); x.rect(6, 5, 4, 1, w); x.rect(7.5, 6, 1, 5, w); },
     chain: x => { x.ell(5, 6, 3.5, 2.5, -0.7, col); x.ell(11, 10, 3.5, 2.5, -0.7, col); x.ell(5, 6, 1.6, 0.9, -0.7, '#1a1028'); x.ell(11, 10, 1.6, 0.9, -0.7, '#1a1028'); x.line(6, 8, 10, 8, 1.4, w); },
+    spear: x => { x.line(2, 14, 11, 5, 1.6, c2); x.poly([[10, 6], [11, 3], [15, 1], [13, 5]], col); x.line(11, 5, 14, 2, 0.8, w); x.poly([[9, 6], [11, 8], [8, 10], [7, 8]], col); },
+    dragon: x => { x.circ(3.5, 12.5, 1.5, c2); x.circ(6, 10.5, 2, col); x.circ(9, 10, 2.2, col); x.circ(11, 7.5, 2.4, col); x.ell(12.5, 4.5, 3, 2.2, -0.5, col); x.poly([[10, 3], [8.5, 0], [12, 2.5]], col); x.rect(13, 3.5, 1, 1, w); },
     // ---- control glyphs (touch buttons, menu chrome) ----
     gun: x => { x.rect(2, 5, 11, 4, col); x.rect(13, 5.5, 2, 2, c2); x.rect(3, 9, 4, 5, col); x.rect(7, 9, 3, 2.5, c2); x.rect(3, 6, 8, 1, w); x.rect(4, 11, 2, 1, c2); },
     jump: x => { x.poly([[8, 1], [14, 7], [11, 7], [8, 4], [5, 7], [2, 7]], col); x.poly([[8, 8], [14, 14], [11, 14], [8, 11], [5, 14], [2, 14]], col); x.line(8, 2.5, 12, 6.5, 0.8, w); },

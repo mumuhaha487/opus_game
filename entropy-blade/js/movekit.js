@@ -100,6 +100,16 @@ function landImpact(p, r, mult, col, o = {}) {
   Sound.play('stomp', { x: p.x });
   Cam.shake(o.shake || 0.45);
 }
+// the closing link of a 见切 chain lands: a guaranteed-crit counter impact around the feet
+function counterLand(p, r, mult, col, o = {}) {
+  pHit(p, [-r, -34, r * 2, 36], { dmg: mult, kx: o.kx || 200, ky: o.ky || -300, stun: 0.8, hs: 9, heavy: true, launch: true, radial: true, critBonus: 1, src: 'counter', finisher: true });
+  FX.shock(p.x, p.y, col, r + 14);
+  FX.ring(p.x, p.y - 4, 4, r + 20, '#ffffff', 0.3, 3, 0.35);
+  FX.debris(p.x, p.y - 2, [col, '#c8b8a0', '#ffffff'], 12);
+  FX.screenFlash('#ffffff', 0.3, 0.15);
+  Sound.play('stomp', { x: p.x }); Sound.play('crit', { x: p.x });
+  Cam.shake(0.55);
+}
 function petalPuff(x, y, n = 14, cols = ['#ffb7d0', '#ffffff', '#ff7aa0']) {
   FX.burst(x, y, { n, c: cols, sp: [40, 180], g: 90, life: [0.4, 0.9], s: [1, 2] });
 }
