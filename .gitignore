@@ -19,3 +19,4 @@ Thumbs.db
 /_work/
 .dev.vars*
 .wrangler/
+/tools/.deps/

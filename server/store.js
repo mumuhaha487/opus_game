@@ -2,9 +2,9 @@ import { hex } from './auth.js';
 
 export const absent = () => new Headers({ 'If-None-Match': '*' });
 export const userKey = name => `users/${name.toLowerCase()}.json`;
-export const saveKey = uid => `saves/${uid}/entropy-blade.json`;
-export async function readSave(bucket, uid) {
-  const object = await bucket.get(saveKey(uid));
+export const saveKey = (uid, game) => `saves/${uid}/${game}.json`;
+export async function readSave(bucket, uid, game) {
+  const object = await bucket.get(saveKey(uid, game));
   return object ? { ...(await object.json()), etag: object.etag } : { rev: 0, updated: 0, data: null, etag: null };
 }
 export const publicSave = s => ({ rev: s.rev, updated: s.updated, data: s.data });

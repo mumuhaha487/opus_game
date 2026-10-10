@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { handle } from '../server/api.js';
 import { signSession, passwordHash, b64url, unbase64, equal32, ITERATIONS } from '../server/auth.js';
-import { ID, TALENT_ID, cleanSave } from '../server/save-schema.js';
+import { ID, TALENT_ID, clean as cleanSave } from '../server/games/entropy-blade.js';
 
 class MemoryR2 {
   objects = new Map();
@@ -117,6 +117,39 @@ test('save cleaning, revision conflicts, conditional update, isolation and paths
   assert.equal((await request(env, '/api/save/entropy-blade')).status, 401);
 });
 
+test('registered games and /api/saves expose only the current users existing saves', async () => {
+  const env = environment();
+  env.ACCOUNTS.list = () => { assert.fail('/api/saves must not list R2'); };
+  const anonymous = await request(env, '/api/saves');
+  assert.equal(anonymous.status, 401); headersOK(anonymous);
+  const a = await register(env), b = await register(env, 'PlayerB');
+  assert.deepEqual(await (await request(env, '/api/saves', 'GET', undefined, a)).json(), { games: {} });
+  for (const path of ['/api/save/new-game', '/api/save/ENTROPY-BLADE', '/api/save/constructor']) {
+    const response = await request(env, path, 'GET', undefined, a);
+    assert.equal(response.status, 404); assert.deepEqual(await response.json(), { error: 'unknown_game' }); headersOK(response);
+  }
+  const invalidMethod = await request(env, '/api/saves', 'POST', {}, a);
+  assert.equal(invalidMethod.status, 405); assert.equal(invalidMethod.headers.get('Allow'), 'GET'); headersOK(invalidMethod);
+  assert.equal((await request(env, '/api/save/entropy-blade', 'PUT', { baseRev: 0, data: { crystals: 11 } }, a)).status, 200);
+  assert.deepEqual(await (await request(env, '/api/saves', 'GET', undefined, b)).json(), { games: {} });
+  assert.equal((await request(env, '/api/save/entropy-blade', 'PUT', { baseRev: 0, data: { crystals: 22 } }, b)).status, 200);
+  for (const [cookie, crystals] of [[a, 11], [b, 22]]) {
+    const response = await request(env, '/api/saves', 'GET', undefined, cookie); headersOK(response);
+    const { games } = await response.json();
+    assert.deepEqual(Object.keys(games), ['entropy-blade']);
+    assert.equal(games['entropy-blade'].data.crystals, crystals); assert.equal(games['entropy-blade'].rev, 1);
+    assert.deepEqual(games['entropy-blade'], await (await request(env, '/api/save/entropy-blade', 'GET', undefined, cookie)).json());
+  }
+});
+
+test('/api/saves also rejects missing configuration before reading storage', async () => {
+  let reads = 0;
+  const env = { ...environment(), PW_PEPPER: undefined, ACCOUNTS: { get() { reads++; } } };
+  const response = await request(env, '/api/saves');
+  assert.equal(response.status, 500); assert.deepEqual(await response.json(), { error: 'server_error' });
+  assert.equal(reads, 0); headersOK(response);
+});
+
 test('CSRF, body bounds, method/path errors, safe exception and all response headers', async () => {
   const env = environment();
   for (const headers of [{ Origin: null }, { Origin: 'https://evil.test' }, { 'Sec-Fetch-Site': 'same-site' }]) {
@@ -227,12 +260,13 @@ function client({ storage = new Map(), fetcher = async () => { throw new Error('
   const ctx = new Proxy({ fillRect(...args) { rectangles.push({ args, color: ctx.fillStyle }); } }, { get: (target, key) => key in target ? target[key] : () => {} });
   const context = vm.createContext({ console, AbortController, Date, TextEncoder, location: { protocol: file ? 'file:' : 'https:' }, navigator: {},
     document, window: { addEventListener: (kind, fn) => { const key = 'window:' + kind; const callbacks = listeners.get(key) || []; callbacks.push(fn); listeners.set(key, callbacks); } },
-    localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => { if (storageThrows) throw new Error('storage unavailable'); storage.set(k, v); }, removeItem: k => { if (storageThrows) throw new Error('storage unavailable'); storage.delete(k); } },
+    localStorage: { get length() { return storage.size; }, key: i => [...storage.keys()][i] ?? null, getItem: k => storage.get(k) ?? null, setItem: (k, v) => { if (storageThrows) throw new Error('storage unavailable'); storage.set(k, v); }, removeItem: k => { if (storageThrows) throw new Error('storage unavailable'); storage.delete(k); } },
     setTimeout: (fn, delay) => { const id = ++timerID; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
     fetch: async (path, options) => { requests.push({ path, ...options }); return fetcher(path, options); },
     G: { state: 'title', trans: null }, Gfx: { uctx: ctx, artBegin() {}, view: { x: 20, y: 10, w: 1920, h: 1080, dpr: 2 } }, TouchUI: { enabled: false }, Sound: { play: name => sounds.push(name) }, Text: { measure: s => String(s).length * 8, draw: (ctx, text, x, y, o) => drawn.push({ text, x, y, o }) },
     HERO_ORDER: ['rin', 'eve', 'gao'], HEROES: { rin: { name: '凛', color: '#ff3b5c' }, eve: { name: '伊芙', color: '#ffd23f' }, gao: { name: '罡', color: '#ff9a3a' } },
   });
+  vm.runInContext(readFileSync(new URL('../hub/account-core.js', import.meta.url), 'utf8'), context, { filename: 'account-core.js' });
   for (const name of ['core', 'syncmerge', 'account', 'ui']) vm.runInContext(src(name), context, { filename: name + '.js' });
   vm.runInContext("UI.screen = 'account';", context);
   const run = code => vm.runInContext(code, context);
@@ -251,18 +285,18 @@ test('device settings survive logout, guest bytes stay intact, cached progress h
   activate(c, { crystals: 20 });
   c.run('Save.data.settings.music = 0.2; Save.data.crystals = 30; Save.write();');
   assert.equal(storage.get('entropy_blade_save_v1'), guest);
-  const cache = JSON.parse(storage.get('entropy_blade_acct_playera_v1'));
+  const cache = JSON.parse(storage.get('gameinc_save_entropy-blade_playera_v1'));
   assert.equal(cache.dirty, true); assert.equal(cache.data.settings, undefined); assert.equal(cache.data.crystals, 30);
   assert.ok([...c.timers.values()].some(t => t.delay === 4000));
   await c.run('Account.logout()');
   assert.equal(c.run('Account.status'), 'guest'); assert.equal(c.run('Save.data.crystals'), 12); assert.equal(c.run('Save.data.settings.music'), 0.2);
-  assert.equal(storage.get('entropy_blade_save_v1'), guest); assert.equal(storage.has('entropy_blade_acct_playera_v1'), false); assert.equal(storage.has('entropy_blade_profile_v1'), false);
+  assert.equal(storage.get('entropy_blade_save_v1'), guest); assert.equal(storage.has('gameinc_save_entropy-blade_playera_v1'), false); assert.equal(storage.has('gameinc_profile_v1'), false);
   assert.ok(c.requests.every(r => r.credentials === 'same-origin' && r.headers['Content-Type'] === 'application/json'));
   assert.equal(JSON.parse(c.requests.find(r => r.method === 'PUT').body).data.settings, undefined);
 });
 
 test('startup switches synchronously to profile cache and expired login preserves dirty progress', async () => {
-  const storage = new Map([['entropy_blade_profile_v1', '{"name":"PlayerA"}'], ['entropy_blade_acct_playera_v1', JSON.stringify({ name: 'PlayerA', data: { crystals: 88, stats: { runs: 3 } }, base: { crystals: 60 }, rev: 4, dirty: true })]]);
+  const storage = new Map([['gameinc_profile_v1', '{"name":"PlayerA"}'], ['gameinc_save_entropy-blade_playera_v1', JSON.stringify({ name: 'PlayerA', data: { crystals: 88, stats: { runs: 3 } }, base: { crystals: 60 }, rev: 4, dirty: true })]]);
   const c = client({ storage, fetcher: async () => jsonResponse({ error: 'unauthorized' }, 401) });
   assert.equal(c.run('Save.data.crystals'), 88); await tick(); await c.run('Account.job');
   assert.equal(c.run('Account.status'), 'expired'); assert.equal(c.run('Save.data.crystals'), 88);
@@ -290,7 +324,7 @@ test('push snapshots preserve concurrent local writes; conflict merges local del
 test('account reset overwrites conflicts and survives offline refresh without resurrecting progress', async () => {
   const storage = new Map(), c = client({ storage });
   activate(c, { crystals: 100, stats: { runs: 20 } }); c.run('Save.reset();'); await c.run('Account.sync()');
-  assert.equal(c.run('Save.data.crystals'), 0); assert.equal(storage.get('entropy_blade_acct_playera_reset_v1'), 'true');
+  assert.equal(c.run('Save.data.crystals'), 0); assert.equal(storage.get('gameinc_save_entropy-blade_playera_reset_v1'), 'true');
   let puts = 0;
   const refreshed = client({ storage, fetcher: async (path, opts) => {
     if (path === '/api/me') return jsonResponse({ user: { name: 'PlayerA' } });
@@ -299,7 +333,7 @@ test('account reset overwrites conflicts and survives offline refresh without re
   } });
   await tick(); await refreshed.run('Account.job');
   assert.equal(refreshed.run('Save.data.crystals'), 0); assert.equal(refreshed.run('Save.data.stats.runs'), 0); assert.equal(refreshed.run('Account.cache.rev'), 6);
-  assert.equal(storage.has('entropy_blade_acct_playera_reset_v1'), false);
+  assert.equal(storage.has('gameinc_save_entropy-blade_playera_reset_v1'), false);
 });
 
 test('form navigation, transparent positioning, password handling and file-mode request suppression', async () => {
@@ -438,4 +472,88 @@ test('canvas account coordinates, copy, menu index and custom confirm labels', (
   c.run('Account.back();'); assert.equal(c.run('UI.sel'), 5); assert.equal(c.run('UI.screen'), 'title');
   c.run("UI.confirm = {text:'test', labels:['带入','从零开始'], sel:0, yes(){}}; UI.drawConfirm();");
   assert.ok(c.drawn.some(d => d.text === '带入')); assert.ok(c.drawn.some(d => d.text === '从零开始'));
+});
+
+test('hub profile without a game cache enables import and waits for the title', async () => {
+  const storage = new Map([['entropy_blade_save_v1', JSON.stringify({ crystals: 7, stats: { runs: 1 } })]]);
+  const c = client({ storage, fetcher: async (path, options) => path === '/api/me' ? jsonResponse({ user: { name: 'PlayerA' } }) : options.method === 'GET' ? jsonResponse({ rev: 0, updated: 0, data: null }) : jsonResponse({ rev: 1, updated: 1 }) });
+  c.run("G.state = 'play';");
+  c.event('window:storage', { key: 'gameinc_profile_v1', newValue: '{"name":"PlayerA"}' });
+  assert.equal(c.run('Account.name'), 'PlayerA'); assert.equal(c.run('Account.needsImport'), true);
+  await tick(); await c.run('Account.job');
+  assert.equal(c.run('UI.confirm'), null); assert.equal(c.run('Account.importPending'), true);
+  c.run("G.state = 'title'; Account.checkImport();"); await tick();
+  assert.deepEqual(c.json('UI.confirm.labels'), ['带入', '从零开始']);
+  c.run('UI.confirm.yes(); UI.confirm = null;'); await c.run('Account.job');
+  assert.equal(c.run('Save.data.crystals'), 7); assert.equal(c.run('Account.needsImport'), false);
+});
+
+test('startup with only a hub profile asks at the title; dirty play skips import and merges', async () => {
+  const storage = new Map([['gameinc_profile_v1', '{"name":"PlayerA"}'], ['entropy_blade_save_v1', '{"crystals":9}']]);
+  const fetcher = async (path, options) => path === '/api/me' ? jsonResponse({ user: { name: 'PlayerA' } }) : options.method === 'GET' ? jsonResponse({ rev: 0, updated: 0, data: null }) : jsonResponse({ rev: 1, updated: 1 });
+  const title = client({ storage, fetcher });
+  assert.equal(title.run('Account.needsImport'), true); await tick();
+  assert.deepEqual(title.json('UI.confirm.labels'), ['带入', '从零开始']);
+  title.run('UI.confirm.no(); UI.confirm = null;'); await title.run('Account.job');
+  assert.equal(title.run('Save.data.crystals'), 0); assert.equal(storage.get('entropy_blade_save_v1'), '{"crystals":9}');
+  storage.delete('gameinc_save_entropy-blade_playera_v1');
+  const playing = client({ storage, fetcher }); playing.run("G.state = 'play';"); await tick();
+  assert.equal(playing.run('Account.importPending'), true);
+  playing.run('Save.data.crystals = 4; Save.data.stats.runs = 1; Save.write();');
+  await playing.run('Account.sync()');
+  assert.equal(playing.run('UI.confirm'), null); assert.equal(playing.run('Save.data.crystals'), 4);
+  assert.equal(playing.run('Account.cache.dirty'), false); assert.equal(playing.run('Account.needsImport'), false);
+});
+
+test('cross-tab logout preserves dirty cache and ignores an old in-flight account response', async () => {
+  let resolve;
+  const c = client({ fetcher: async () => new Promise(r => { resolve = r; }) });
+  activate(c, { crystals: 18 }); c.run('Save.write();');
+  const pending = c.run('Account.sync()'); await tick();
+  const cache = c.storage.get('gameinc_save_entropy-blade_playera_v1');
+  c.storage.delete('gameinc_profile_v1'); c.event('window:storage', { key: 'gameinc_profile_v1', newValue: null });
+  assert.equal(c.run('Account.status'), 'guest'); assert.equal(c.run('Save.backend'), null);
+  assert.equal(c.run('Account.message'), '已在其它页面退出登录'); assert.equal(c.run('Account.messageColor'), '#ffd36a');
+  assert.equal(c.storage.get('gameinc_save_entropy-blade_playera_v1'), cache);
+  resolve(jsonResponse({ rev: 2, updated: 1 })); await pending;
+  assert.equal(c.run('Account.name'), null); assert.equal(c.run('Save.data.crystals'), 0);
+  assert.equal(c.storage.get('gameinc_save_entropy-blade_playera_v1'), cache);
+});
+
+test('cross-tab login switches names and the same expired account verifies again', async () => {
+  let expired = false;
+  const c = client({ fetcher: async path => path === '/api/me' ? expired ? jsonResponse({ error: 'unauthorized' }, 401) : jsonResponse({ user: { name: 'PlayerB' } }) : jsonResponse({ rev: 1, updated: 1, data: { crystals: 26 } }) });
+  activate(c, { crystals: 18 }); c.run('Save.write();');
+  c.event('window:storage', { key: 'gameinc_profile_v1', newValue: '{"name":"PlayerB"}' }); await c.run('Account.job');
+  assert.equal(c.run('Account.name'), 'PlayerB'); assert.equal(c.run('Save.data.crystals'), 26);
+  assert.equal(JSON.parse(c.storage.get('gameinc_save_entropy-blade_playera_v1')).dirty, true);
+  expired = true; c.run('Account.verified = false;'); await c.run('Account.sync()');
+  assert.equal(c.run('Account.status'), 'expired');
+  expired = false; c.event('window:storage', { key: 'gameinc_profile_v1', newValue: '{"name":"PlayerB"}' }); await c.run('Account.job');
+  assert.equal(c.run('Account.status'), 'synced');
+});
+
+test('game logout keeps unsynced progress without a confirmation and merges it next login', async () => {
+  let available = false;
+  const c = client({ fetcher: async (path, options) => {
+    if (path === '/api/logout') return jsonResponse({ ok: true });
+    if (!available) throw new Error('offline saves');
+    if (path === '/api/me') return jsonResponse({ user: { name: 'PlayerA' } });
+    return options.method === 'GET' ? jsonResponse({ rev: 2, updated: 1, data: { crystals: 7, stats: { runs: 3 } } }) : jsonResponse({ rev: 3, updated: 2 });
+  } });
+  activate(c, { crystals: 4, stats: { runs: 1 } }); c.run('Save.write();');
+  await c.run('Account.logout()');
+  assert.equal(c.run('UI.confirm'), null); assert.equal(c.run('Account.name'), null);
+  assert.equal(c.run('Account.message'), '已退出。未同步的进度保留在这台设备上，下次登录时自动同步。');
+  assert.equal(c.run('Account.messageColor'), '#ffd36a');
+  assert.equal(JSON.parse(c.storage.get('gameinc_save_entropy-blade_playera_v1')).dirty, true);
+  available = true; c.run("Account.activate('PlayerA');"); await c.run('Account.sync()');
+  assert.equal(c.run('Save.data.crystals'), 11); assert.equal(c.run('Save.data.stats.runs'), 4); assert.equal(c.run('Account.cache.dirty'), false);
+});
+
+test('deferred import respects network backoff after returning to title', async () => {
+  const c = client(); activate(c);
+  c.run("Account.importPending = true; Account.pulled = false; Account.status = 'error'; Account.schedule(15000);");
+  c.run('Account.checkImport(); Account.checkImport();');
+  assert.equal(c.requests.length, 0); assert.ok([...c.timers.values()].some(timer => timer.delay === 15000));
 });

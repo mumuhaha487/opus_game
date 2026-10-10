@@ -64,6 +64,49 @@
   .brand small { display: block; font-size: 12px; line-height: 12px; margin-top: 6px; color: var(--muted); letter-spacing: 2px; }
   .count { font-size: 12px; color: var(--muted); }
   .count b { color: var(--gold); font-weight: normal; }
+  .top-r { display: flex; align-items: center; gap: 18px; }
+  .acct { display: inline-flex; align-items: center; gap: 8px; margin: 2px; padding: 8px 10px; border: 0; font: 12px/12px var(--px); color: var(--ink); background: #2c2240; cursor: pointer;
+          box-shadow: 0 -2px 0 0 #2c2240, 0 2px 0 0 #160f22; }
+  .acct:hover, .acct:focus-visible { outline: 0; background: var(--line); box-shadow: 0 -2px 0 0 var(--line), 0 2px 0 0 #160f22; }
+  .acct i { width: 6px; height: 6px; background: var(--dim); }
+  .acct.on i { background: var(--gold); }
+  .acct.warn i { background: var(--red); }
+
+  [hidden] { display: none !important; }
+  .dlg { width: min(440px, 100% - 40px); max-height: calc(100% - 40px); padding: 0; border: 0; background: transparent; color: var(--ink); overflow: visible; }
+  .dlg::backdrop { background: rgba(8, 5, 14, 0.72); }
+  .dlg-in { padding: 26px 28px 28px; background: linear-gradient(180deg, var(--card2), var(--card)); }
+  .dlg-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .dlg-hd h2 { margin: 0; font-size: 24px; line-height: 24px; font-weight: normal; color: #fff; }
+  .dlg-hd small { display: block; margin-top: 8px; font-size: 12px; line-height: 12px; color: var(--muted); letter-spacing: 2px; }
+  .x { flex: none; width: 28px; height: 28px; padding: 6px; border: 0; background: transparent; cursor: pointer; }
+  .x svg { display: block; width: 16px; height: 16px; } .x path { fill: var(--muted); } .x:hover path, .x:focus-visible path { fill: var(--ink); }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 22px; }
+  .tab { padding: 10px 0 9px; border: 0; font: 12px/12px var(--px); color: var(--muted); background: #140f1d; cursor: pointer; box-shadow: inset 0 -2px 0 0 #140f1d; }
+  .tab[aria-selected="true"] { color: #fff; background: #2c2240; box-shadow: inset 0 -2px 0 0 var(--gold); }
+  .fld { display: block; margin-top: 18px; font-size: 12px; line-height: 12px; color: var(--muted); }
+  .fld input { display: block; width: calc(100% - 4px); margin: 10px 2px 0; padding: 10px 12px; border: 0; border-radius: 0; outline: 0; font: 16px/24px var(--sans); color: var(--ink); background: #140f1d;
+               box-shadow: 0 -2px 0 0 var(--line), 0 2px 0 0 var(--line), -2px 0 0 0 var(--line), 2px 0 0 0 var(--line); }
+  .fld input:focus { box-shadow: 0 -2px 0 0 var(--gold), 0 2px 0 0 var(--gold), -2px 0 0 0 var(--gold), 2px 0 0 0 var(--gold); }
+  .fld input::placeholder { color: var(--dim); }
+  .dlg .btn, .btn2 { width: calc(100% - 8px); justify-content: center; margin: 26px 4px 4px; border: 0; font-family: var(--px); cursor: pointer; }
+  .dlg .btn[aria-busy="true"], .btn2[aria-busy="true"] { pointer-events: none; }
+  .btn2 { display: inline-flex; align-items: center; padding: 12px 22px 14px; font-size: 24px; line-height: 24px; color: var(--ink); background: #2c2240;
+          box-shadow: inset 0 -4px 0 0 #160f22, inset 0 4px 0 0 var(--line-hi), 0 -4px 0 0 #0c0912, 0 4px 0 0 #0c0912, -4px 0 0 0 #0c0912, 4px 0 0 0 #0c0912; }
+  .btn2:hover { background: var(--line); }
+  .msg { margin: 16px 0 0; min-height: 24px; font: 14px/24px var(--sans); color: var(--muted); }
+  .msg.err { color: var(--red); } .msg.ok { color: var(--gold); }
+  .note { margin: 10px 0 0; font-size: 12px; line-height: 16px; color: var(--dim); }
+  .who span { display: block; font-size: 12px; line-height: 12px; color: var(--muted); }
+  .who b { display: block; margin-top: 10px; font-size: 24px; line-height: 24px; font-weight: normal; color: #fff; }
+  .dlg .sec { margin: 26px 0 14px; }
+  .saves { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .gsave { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; padding: 12px 14px; background: #140f1d; text-decoration: none; }
+  .gsave:hover, .gsave:focus-visible { outline: 0; background: var(--card2); }
+  .gname { font-size: 12px; line-height: 12px; color: #fff; }
+  .gstat { font-size: 12px; line-height: 12px; color: var(--muted); text-align: right; }
+  .gstat.warn { color: var(--gold); }
+  .gsum { grid-column: 1 / -1; font: 14px/20px var(--sans); color: #cfc4e6; }
 
   .hero { padding: 40px 0 36px; }
   .hero h1 { margin: 0; font-size: 36px; line-height: 48px; font-weight: normal; color: #fff; text-shadow: 3px 3px 0 var(--red-d); }
@@ -180,12 +223,15 @@
       <img src="hub/favicon.svg" alt="" width="48" height="48">
       <span><b>游戏汇总</b><small>GAME.INC.RE</small></span>
     </a>
-    <div class="count px">已收录 <b>1</b> 款 · 持续更新</div>
+    <div class="top-r">
+      <div class="count px">已收录 <b>1</b> 款 · 持续更新</div>
+      <button class="acct px" id="acct-open" type="button" aria-haspopup="dialog"><i></i><span>登录 / 注册</span></button>
+    </div>
   </header>
 
   <section class="hero">
     <h1 class="px">打开就能玩的独立小游戏</h1>
-    <p>打开网页就能玩，电脑键盘、手柄、手机触屏都支持。进度默认保存在本机浏览器；在游戏里登录账号后，存档与战绩会同步到云端，换台设备也能接着玩。</p>
+    <p>打开网页就能玩，电脑键盘、手柄、手机触屏都支持。进度默认保存在本机浏览器；登录 GAME.INC.RE 账号后，所有游戏的存档与战绩都会同步到云端，换台设备也能接着玩。</p>
   </section>
 
   <main>
@@ -247,6 +293,33 @@
   </footer>
 </div>
 
+<dialog class="dlg" id="acct" aria-labelledby="acct-title">
+  <div class="dlg-in frame">
+    <div class="dlg-hd">
+      <div><h2 class="px" id="acct-title">账号</h2><small class="px">GAME.INC.RE 通用账号</small></div>
+      <button class="x" type="button" aria-label="关闭"><svg viewBox="0 0 8 8" shape-rendering="crispEdges"><path d="M0 0h2v1H0zM6 0h2v1H6zM1 1h2v1H1zM5 1h2v1H5zM2 2h2v1H2zM4 2h2v1H4zM3 3h2v2H3zM2 5h2v1H2zM4 5h2v1H4zM1 6h2v1H1zM5 6h2v1H5zM0 7h2v1H0zM6 7h2v1H6z"/></svg></button>
+    </div>
+    <div id="acct-guest">
+      <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true">登录</button><button class="tab" role="tab" aria-selected="false">注册</button></div>
+      <form novalidate>
+        <label class="fld px">用户名<input name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="16" placeholder="3–16 位字母、数字或下划线"></label>
+        <label class="fld px">密码<input name="password" type="password" maxlength="64" autocomplete="current-password" placeholder="8–64 位"></label>
+        <label class="fld px" hidden>确认密码<input name="confirm" type="password" maxlength="64" autocomplete="new-password" placeholder="再输入一次密码"></label>
+        <button class="btn px" type="submit">登录</button>
+      </form>
+    </div>
+    <div id="acct-user" hidden>
+      <p class="who px"><span>已登录</span><b></b></p>
+      <h3 class="sec px">游戏存档</h3>
+      <ul class="saves"></ul>
+      <button class="btn2 px" type="button">退出登录</button>
+    </div>
+    <p class="msg" role="status" aria-live="polite"></p>
+    <p class="note px"></p>
+  </div>
+</dialog>
+<script src="hub/account-core.js"></script>
+<script src="hub/account-ui.js"></script>
 <script>
   // a few twinkling pixel stars in the upper sky
   (function () {

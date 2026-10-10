@@ -122,6 +122,7 @@ function navH(n, cur) {
   return cur;
 }
 UI.update = function (dt) {
+  if (typeof Account !== 'undefined') Account.checkImport();
   this.t += dt;
   this.regions = this.newRegions; this.newRegions = [];
   const m = Input.mouse;
@@ -785,7 +786,7 @@ UI.drawAccount = function () {
       if (focused && Math.sin(this.t * 8) > 0) { uctx.fillStyle = '#ff3b5c'; uctx.fillRect(92 + Text.measure(shown), y + 10, 2, 14); }
     });
     button(a.tab ? '注册并登录' : '登录', a.tab ? 358 : 296, a.row === a.rows() - 1, () => a.submit(), a.rows() - 1);
-    T('账号凭用户名和密码登录，请妥善保管密码。', 80, 444, { color: '#7a6a98' });
+    T('这是 GAME.INC.RE 的通用账号，所有游戏共用。', 80, 444, { color: '#7a6a98' });
   } else {
     T('已登录', 80, 112, { color: '#9a8acb' }); T(a.name, 80, 132, { scale: 2, color: '#ffffff', outline: '#0a0612' });
     uctx.fillStyle = '#2a2244'; uctx.fillRect(80, 172, 360, 2);

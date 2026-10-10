@@ -1,8 +1,9 @@
 import { ITERATIONS, USERNAME, b64url, unbase64, randomBytes, hex, equal32, passwordHash, passwordValid, signSession, sessionCookie, verifySession } from './auth.js';
 import { absent, userKey, saveKey, readSave, publicSave, rateWindow } from './store.js';
-import { cleanSave, isObject } from './save-schema.js';
+import { GAMES } from './games/index.js';
 
 const MAX = 65536;
+const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
@@ -36,8 +37,10 @@ export async function handle(request, env) {
       const site = request.headers.get('Sec-Fetch-Site');
       if (request.headers.get('Origin') !== url.origin || (site !== null && site !== 'same-origin')) return fail(403, 'forbidden_origin');
     }
-    const routes = { '/api/register': 'POST', '/api/login': 'POST', '/api/logout': 'POST', '/api/me': 'GET', '/api/save/entropy-blade': 'GET, PUT' };
-    const allow = routes[path];
+    const routes = { '/api/register': 'POST', '/api/login': 'POST', '/api/logout': 'POST', '/api/me': 'GET', '/api/saves': 'GET' };
+    const match = /^\/api\/save\/([a-z0-9-]{1,32})$/.exec(path);
+    const game = match && Object.hasOwn(GAMES, match[1]) ? match[1] : null;
+    const allow = game ? 'GET, PUT' : Object.hasOwn(routes, path) ? routes[path] : null;
     if (!allow) return fail(404, path.startsWith('/api/save/') ? 'unknown_game' : 'not_found');
     if (!allow.split(', ').includes(method)) return fail(405, 'method_not_allowed', { Allow: allow });
     const data = method === 'POST' || method === 'PUT' ? await body(request) : null;
@@ -82,18 +85,26 @@ export async function handle(request, env) {
       const headers = session.expires - Date.now() / 1000 < 1296000 ? { 'Set-Cookie': sessionCookie(await signSession(user, env.AUTH_SECRET)) } : {};
       return reply(200, { user: { name: user.name } }, headers);
     }
-    if (method === 'GET') return reply(200, publicSave(await readSave(bucket, user.uid)));
+    if (path === '/api/saves') {
+      const games = {};
+      for (const id of Object.keys(GAMES)) {
+        const saved = await readSave(bucket, user.uid, id);
+        if (saved.rev > 0) games[id] = publicSave(saved);
+      }
+      return reply(200, { games });
+    }
+    if (method === 'GET') return reply(200, publicSave(await readSave(bucket, user.uid, game)));
     if (!Number.isSafeInteger(data.baseRev) || data.baseRev < 0) return fail(400, 'bad_save');
-    const clean = cleanSave(data.data);
+    const clean = GAMES[game].clean(data.data);
     if (!clean) return fail(400, 'bad_save');
     if (new TextEncoder().encode(JSON.stringify(clean)).length > MAX) return fail(413, 'too_large');
     const wait = await rateWindow(bucket, 'save-uid', user.uid, 600, 60, true);
     if (wait) return limited(wait);
-    const current = await readSave(bucket, user.uid);
+    const current = await readSave(bucket, user.uid, game);
     if (current.rev !== data.baseRev) return reply(409, { error: 'conflict', ...publicSave(current) });
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };
-    const written = await bucket.put(saveKey(user.uid), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
-    if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid)) });
+    const written = await bucket.put(saveKey(user.uid, game), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
+    if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
     return reply(200, { rev: next.rev, updated: next.updated });
   } catch (e) {
     if (e?.code === 'bad_request' || e?.code === 'too_large') return fail(e.status, e.code);

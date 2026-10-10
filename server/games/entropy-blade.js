@@ -25,7 +25,7 @@ function historyRow(v) {
   }
   return out;
 }
-export function cleanSave(value) {
+export function clean(value) {
   if (!isObject(value)) return null;
   const out = {};
   const assignNumber = (k, max) => { const v = number(value[k], max); if (v !== undefined) out[k] = v; };

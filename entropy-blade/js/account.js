@@ -1,13 +1,12 @@
 'use strict';
 const Account = (() => {
-  const PROFILE = 'entropy_blade_profile_v1';
-  const cacheKey = name => 'entropy_blade_acct_' + name.toLowerCase() + '_v1';
-  const resetKey = name => 'entropy_blade_acct_' + name.toLowerCase() + '_reset_v1';
+  const cacheKey = name => GameAccount.cacheKey('entropy-blade', name);
+  const resetKey = name => GameAccount.resetKey('entropy-blade', name);
   const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
   const write = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ } };
   const remove = key => { try { localStorage.removeItem(key); } catch { /* storage unavailable */ } };
-  const validName = name => typeof name === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(name);
-  const A = { name: null, cache: null, status: 'guest', lastSuccess: 0, busy: false, busyRow: null, tab: 0, row: 0, relogin: false, message: '', messageColor: '#ffd36a', file: location.protocol === 'file:', verified: false, pulled: false, needsImport: false, version: 0, resetVersion: null, retry: 0, timer: null, job: null, blurred: false };
+  const validName = GameAccount.validName;
+  const A = { name: null, cache: null, status: 'guest', lastSuccess: 0, busy: false, busyRow: null, tab: 0, row: 0, relogin: false, message: '', messageColor: '#ffd36a', file: GameAccount.file, verified: false, pulled: false, needsImport: false, importPending: false, version: 0, resetVersion: null, retry: 0, timer: null, job: null, blurred: false };
   const form = document.createElement('form');
   form.style.cssText = 'position:fixed;opacity:0;z-index:2;border:0;padding:0;margin:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px';
   form.onsubmit = e => { e.preventDefault(); A.submit(); };
@@ -60,27 +59,9 @@ const Account = (() => {
     A.tab = tab; A.row = 0; A.inputs[1].value = ''; A.inputs[2].value = ''; A.message = ''; A.hideInputs(); Sound.play('select');
   };
   A.back = () => { A.hideInputs(); UI.screen = 'title'; UI.sel = 5; A.relogin = false; Sound.play('cancel'); };
-  A.errorText = e => {
-    const code = e.data?.error;
-    if (code === 'bad_username') return '用户名需为 3–16 位字母、数字或下划线';
-    if (code === 'bad_password') return '密码需为 8–64 位';
-    if (code === 'name_taken') return '这个用户名已被注册';
-    if (code === 'bad_credentials') return '用户名或密码错误';
-    if (code === 'rate_limited') return `尝试次数过多，请 ${Math.ceil((e.data.retryAfter || 60) / 60)} 分钟后再试`;
-    if (code === 'unauthorized') return '登录已过期，请重新登录';
-    return e.status ? '服务器出了点问题，请稍后再试' : '无法连接服务器，请稍后再试';
-  };
+  A.errorText = GameAccount.errorText;
   A.say = (text, color) => { A.message = text; A.messageColor = color; };
-  A.request = async (path, method = 'GET', data, keepalive = false) => {
-    if (A.file) throw new Error('file');
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
-    try {
-      const response = await fetch(path, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal, keepalive });
-      const value = await response.json();
-      if (!response.ok) throw { status: response.status, data: value };
-      return value;
-    } finally { clearTimeout(timer); }
-  };
+  A.request = GameAccount.request;
   A.persist = () => {
     if (A.cache) { A.cache.data = pickProgress(Save.data); write(cacheKey(A.name), A.cache); }
   };
@@ -90,17 +71,19 @@ const Account = (() => {
     if (typeof UI !== 'undefined') UI.weaponSel = null;
   };
   A.activate = name => {
+    clearTimeout(A.timer); A.job = null; A.cancelChoice();
     A.name = name;
     const cached = read(cacheKey(name));
     A.cache = cached && validName(cached.name) && cached.name.toLowerCase() === name.toLowerCase() && cached.data && Number.isSafeInteger(cached.rev) && cached.rev >= 0 ? cached : { name, data: pickProgress(Save.defaults()), base: null, rev: 0, dirty: false };
     A.cache.name = name;
+    A.needsImport = !cached; A.importPending = false;
     A.version = 0; A.resetVersion = read(resetKey(name)) ? 0 : null;
     A.apply(A.cache.data);
     Save.backend = {
       write() { A.version++; A.cache.dirty = true; A.persist(); },
       reset() { A.resetVersion = A.version + 1; write(resetKey(A.name), true); },
     };
-    write(PROFILE, { name });
+    GameAccount.setProfile(name);
     A.status = 'pending'; A.verified = false; A.pulled = false; A.retry = 0;
   };
   A.schedule = (delay = 4000) => {
@@ -113,34 +96,51 @@ const Account = (() => {
   };
   A.choose = (text, labels, sel) => new Promise(resolve => {
     A.hideInputs();
-    UI.confirm = { text, labels, sel, yes: () => resolve(true), no: () => resolve(false), cancel: () => resolve(false) };
+    const finish = answer => { A.choice = null; resolve(answer); };
+    const confirm = { text, labels, sel, yes: () => finish(true), no: () => finish(false), cancel: () => finish(false) };
+    A.choice = { confirm, resolve: finish }; UI.confirm = confirm;
   });
+  A.cancelChoice = () => {
+    if (!A.choice) return;
+    if (UI.confirm === A.choice.confirm) UI.confirm = null;
+    A.choice.resolve(false);
+  };
   A.pull = async () => {
+    const cache = A.cache;
     const remote = await A.request('/api/save/entropy-blade');
+    if (A.cache !== cache) return false;
     if (A.cache.dirty) {
       if (A.resetVersion === null) A.apply(mergeProgress(A.cache.base, Save.data, remote.data));
     } else if (A.needsImport && remote.data === null && remote.rev === 0 && hasProgress(A.guestProgress())) {
+      if (G.state !== 'title' || UI.confirm) { A.importPending = true; return false; }
       const imported = await A.choose('把本机存档（熵晶、天赋、战绩）带入这个账号？', ['带入', '从零开始'], 0);
-      A.apply(imported ? A.guestProgress() : pickProgress(Save.defaults()));
+      if (A.cache !== cache) return false;
+      if (A.cache.dirty) A.apply(mergeProgress(A.cache.base, Save.data, remote.data));
+      else A.apply(imported ? A.guestProgress() : pickProgress(Save.defaults()));
       A.cache.dirty = true; A.version++;
     } else A.apply(remote.data);
     A.cache.base = pickProgress(remote.data || Save.defaults()); A.cache.rev = remote.rev;
-    A.needsImport = false; A.pulled = true; A.persist();
+    A.needsImport = false; A.importPending = false; A.pulled = true; A.persist();
+    return true;
   };
   A.push = async keepalive => {
+    const cache = A.cache;
     if (!A.cache.dirty) return true;
     for (let conflicts = 0; conflicts <= 3; conflicts++) {
       const snapshot = pickProgress(Save.data), version = A.version;
       try {
         const next = await A.request('/api/save/entropy-blade', 'PUT', { baseRev: A.cache.rev, data: snapshot }, keepalive);
+        if (A.cache !== cache) return false;
         A.cache.base = snapshot; A.cache.rev = next.rev; A.cache.dirty = A.version !== version;
         if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(A.name)); }
         A.lastSuccess = Date.now(); A.retry = 0; A.persist();
         return true;
       } catch (e) {
+        if (A.cache !== cache) return false;
         if (e.status !== 409) throw e;
         const flushed = A.flushJob;
         const result = flushed ? await flushed.promise : null;
+        if (A.cache !== cache) return false;
         const base = result && flushed.cache === A.cache && result.rev <= e.data.rev ? flushed.snapshot : A.cache.base;
         if (A.resetVersion === null) A.apply(mergeProgress(base, Save.data, e.data.data));
         A.cache.base = pickProgress(e.data.data || Save.defaults()); A.cache.rev = e.data.rev; A.persist();
@@ -152,17 +152,19 @@ const Account = (() => {
   A.sync = (keepalive = false) => {
     if (!A.name || A.file || A.status === 'expired') return Promise.resolve(false);
     if (A.job) return A.job;
+    const cache = A.cache;
     clearTimeout(A.timer); A.timer = null; A.status = 'syncing';
     A.job = (async () => {
       try {
-        if (!A.verified) { await A.request('/api/me'); A.verified = true; }
-        if (!A.pulled) await A.pull();
+        if (!A.verified) { await GameAccount.me(); if (A.cache !== cache) return false; A.verified = true; }
+        if (!A.pulled && !await A.pull()) { if (A.cache === cache) A.status = 'pending'; return false; }
         await A.push(keepalive);
+        if (A.cache !== cache) return false;
         A.lastSuccess = Date.now(); A.retry = 0; A.status = A.cache.dirty ? 'pending' : 'synced';
         if (A.cache.dirty) A.schedule();
         return !A.cache.dirty;
-      } catch (e) { A.failed(e); return false; }
-      finally { A.job = null; }
+      } catch (e) { if (A.cache === cache) A.failed(e); return false; }
+      finally { if (A.cache === cache) A.job = null; }
     })();
     return A.job;
   };
@@ -172,14 +174,14 @@ const Account = (() => {
     const username = A.inputs[0].value.trim(), password = A.inputs[1].value, register = A.tab === 1;
     let error = '';
     if (!validName(username)) error = '用户名需为 3–16 位字母、数字或下划线';
-    else if ([...password].length < 8 || [...password].length > 64) error = '密码需为 8–64 位';
+    else if (!GameAccount.validPassword(password)) error = '密码需为 8–64 位';
     else if (register && password !== A.inputs[2].value) error = '两次输入的密码不一致';
     if (error) { A.say(error, '#ff5a5a'); Sound.play('error'); return; }
     A.busy = true; A.busyRow = A.rows() - 1; A.say('', '#ffd36a'); A.inputs[1].value = ''; A.inputs[2].value = '';
     try {
       if (A.job) await A.job;
-      const result = await A.request(register ? '/api/register' : '/api/login', 'POST', { username, password });
-      clearTimeout(A.timer); A.activate(result.user.name); A.verified = true; A.needsImport = true; A.relogin = false; A.row = 0;
+      const result = await (register ? GameAccount.register(username, password) : GameAccount.login(username, password));
+      clearTimeout(A.timer); A.activate(result.name); A.verified = true; A.relogin = false; A.row = 0;
       const synced = await A.sync();
       if (!synced) A.say(A.status === 'expired' ? '登录已过期，请重新登录' : '无法连接服务器，请稍后再试', '#ff5a5a');
       else { A.say(register ? '注册成功，已登录' : '登录成功，已载入云端存档', '#6aff8a'); Sound.play('confirm'); }
@@ -190,15 +192,15 @@ const Account = (() => {
     if (A.busy || !A.name) return;
     A.busy = true; A.busyRow = 1;
     try {
-      if (A.job) await A.job;
-      if (A.cache.dirty && !await A.sync()) {
-        const exit = await A.choose('还有进度没同步到云端，现在退出会丢失这部分进度。仍要退出？', ['退出', '取消'], 1);
-        if (!exit) return;
-      }
-      await A.request('/api/logout', 'POST', {});
-      clearTimeout(A.timer); remove(PROFILE); remove(cacheKey(A.name)); remove(resetKey(A.name));
-      Save.backend = null; Save.load(); A.name = null; A.cache = null; A.status = 'guest'; A.relogin = false; A.row = 0;
-      UI.weaponSel = null; A.say('已退出，当前使用本机存档', '#6aff8a'); Sound.play('confirm');
+      const result = await GameAccount.logout({ flush: async () => {
+        if (A.job) await A.job;
+        if (A.cache?.dirty) await A.sync();
+      } });
+      const name = A.name;
+      // Cache persistence can fail while the in-memory sync still succeeds.
+      if (!result.kept.includes('entropy-blade') && name) remove(resetKey(name));
+      A.deactivate();
+      A.say(result.kept.length ? '已退出。未同步的进度保留在这台设备上，下次登录时自动同步。' : '已退出，当前使用本机存档', result.kept.length ? '#ffd36a' : '#6aff8a'); Sound.play('confirm');
     } catch (e) { A.say(A.errorText(e), '#ff5a5a'); Sound.play('error'); }
     finally { A.busy = false; A.busyRow = null; }
   };
@@ -219,7 +221,24 @@ const Account = (() => {
     if (!A.name) return;
     if (A.status !== 'expired' && A.status !== 'error') { A.status = 'pending'; A.schedule(); }
   };
-  const profile = read(PROFILE);
+  A.deactivate = () => {
+    clearTimeout(A.timer); A.cancelChoice(); A.hideInputs();
+    Save.backend = null; Save.load(); A.name = null; A.cache = null; A.status = 'guest'; A.relogin = false; A.row = 0;
+    A.job = null; A.needsImport = false; A.importPending = false; UI.weaponSel = null;
+  };
+  A.checkImport = () => {
+    if (A.importPending && A.status === 'pending' && G.state === 'title' && !UI.confirm && !A.job) A.sync();
+  };
+  GameAccount.onProfileChange(profile => {
+    if (A.file) return;
+    if (!profile) {
+      A.deactivate();
+      if (UI.screen === 'account') A.say('已在其它页面退出登录', '#ffd36a');
+    } else if (A.name?.toLowerCase() !== profile.name.toLowerCase()) {
+      A.activate(profile.name); A.sync();
+    } else if (A.status === 'expired') { A.verified = false; A.pulled = false; A.status = 'pending'; A.sync(); }
+  });
+  const profile = GameAccount.profile();
   if (!A.file && validName(profile?.name)) {
     try { A.activate(profile.name); } catch { /* keep the loaded local progress */ }
     Promise.resolve().then(() => A.sync());

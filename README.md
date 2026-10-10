@@ -17,7 +17,7 @@ No ZIP upload or Cloudflare credential is needed for routine updates.
 
 ```powershell
 node build.mjs
-git add -- index.html hub entropy-blade functions server _routes.json tests _headers build.mjs deploy.ps1 README.md .gitignore
+git add -- index.html hub entropy-blade functions server _routes.json tests tools _headers build.mjs deploy.ps1 README.md .gitignore
 git commit -m "Update game"
 git push origin main
 ```
@@ -43,11 +43,22 @@ and add its link to the collection page.
 
 ## 账号与云存档
 
-熵刃的账号接口由同站点 Pages Functions 提供：`functions/` 是入口，
-`server/` 实现认证、请求校验和存档清洗。R2 绑定名为 `ACCOUNTS`，
+GAME.INC.RE 的账号在所有游戏通用。在汇总页的账号对话框或熵刃标题菜单
+「账号战绩」里注册、登录和退出。`hub/account-core.js` 提供共享的认证请求、
+账号指针、缓存键、旧键迁移和退出流程；`hub/account-ui.js` 显示账号与游戏存档。
+未登录时各游戏使用浏览器本地存档，登录后各游戏通过同一账号访问各自的云存档。
+
+账号接口由同站点 Pages Functions 提供：`functions/` 是入口，
+`server/` 实现认证和请求校验，`server/games/` 的 `GAMES` 注册表按游戏选择
+白名单清洗函数。`GET /api/saves` 逐个读取已注册游戏，返回当前用户已有的云端存档。
+R2 绑定名为 `ACCOUNTS`，
 生产桶为 `game-inc-accounts`，预览桶为 `game-inc-accounts-preview`。
 `_routes.json` 把 Functions 调用限定在 `/api/*`，静态资源由 Pages 直接提供。
 进度与战绩存到私有 R2 桶，设置留在设备上。游客与每个账号的本机缓存分别保存。
+全站账号指针是 `gameinc_profile_v1`，游戏缓存使用
+`gameinc_save_<game>_<小写用户名>_v1`。其它标签页登录或退出时通过 `storage`
+事件同步账号状态。退出会尝试上传脏缓存，仍未同步的进度留在这台设备上，
+下次登录同一账号后由对应游戏合并上传。
 
 从零搭建：
 
@@ -77,3 +88,28 @@ npx --yes wrangler@4 pages dev dist --r2 ACCOUNTS
 注册与存档使用 R2 条件写入，限流键经过 SHA256，`rl/` 临时计数一天后清理。
 存档读写使用验证过的会话身份，上传数据按白名单清洗；桶保持私有。
 第一阶段只进行本地联调；Workers 免费计划的密码哈希 CPU 验证在部署后执行。
+
+### 接入新游戏
+
+1. 在 `server/games/` 添加导出 `clean` 的清洗模块，在 `index.js` 的 `GAMES` 中登记游戏 id。
+2. 游戏页面加载 `../hub/account-core.js`，使用 `GameAccount.cacheKey(game, name)`
+   和 `GameAccount.resetKey(game, name)` 保存本机账号缓存，按游戏实现同步与冲突合并。
+3. 在 `hub/account-ui.js` 的 `HUB_GAMES` 中添加游戏名、链接、游客存档键和进度摘要函数。
+
+### 汇总页字体
+
+修改汇总页或 `hub/*.js` 的文字后，重新生成像素字体子集并运行回归测试。
+工具会比较源字体和当前子集的 family、subfamily、version、unitsPerEm 与共同字形步进宽度，
+版本一致时使用熵刃内嵌的 `fp12`；其它版本可以传入同版本的源 WOFF2 路径。
+字符收集覆盖 `index.html`、`hub/*.js` 的可显示字符和全部可打印 ASCII。
+生成工具的依赖只安装在被忽略的 `tools/.deps/`，站点构建保持零依赖。
+
+```powershell
+npm install --no-save --prefix tools/.deps subset-font
+node tools/hub-font.mjs
+node --test "tests/*.test.*"
+node build.mjs
+```
+
+`tests/hub-font.test.mjs` 使用 Node Brotli 解压 WOFF2 表数据，解析 cmap 格式 4/12
+检查字符覆盖。`tools/` 与工具依赖留在源码工作区，`dist` 只包含站点文件。

@@ -1,0 +1,23 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { embeddedFont, fontInfo, collectHubCharacters, woff2Tables, cmapGlyph } from './font-data.mjs';
+import subsetFont from './.deps/node_modules/subset-font/index.js';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const target = path.join(root, 'hub/fusion-pixel-12.woff2');
+const source = process.argv[2] ? readFileSync(path.resolve(process.argv[2])) : embeddedFont(root);
+const existing = fontInfo(readFileSync(target)), info = fontInfo(source);
+for (const key of ['family', 'subfamily', 'version', 'unitsPerEm']) assert.equal(info[key], existing[key], 'Font version mismatch: ' + key);
+for (const [char, width] of Object.entries(existing.widths)) if (width !== null) assert.equal(info.widths[char], width, 'Advance width mismatch: ' + char);
+console.log('Font source: ' + (process.argv[2] || 'entropy-blade/js/fontdata.js fp12'));
+console.log(JSON.stringify({ existing, source: info }));
+const text = collectHubCharacters(root), cmap = woff2Tables(source)('cmap');
+const missing = [...text].filter(char => !cmapGlyph(cmap, char.codePointAt(0)));
+assert.equal(missing.length, 0, 'Source font lacks: ' + missing.join(''));
+const output = await subsetFont(source, text, { targetFormat: 'woff2' });
+const outCmap = woff2Tables(output)('cmap');
+assert.ok([...text].every(char => cmapGlyph(outCmap, char.codePointAt(0))), 'Subset coverage');
+writeFileSync(target, output);
+console.log(`Hub font: ${[...text].length} characters, ${output.length} bytes.`);
