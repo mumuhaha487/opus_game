@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#181425">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>悬赏怪物猎人 · TBMH</title>
+<meta name="description" content="像素风挂机放置 RPG：赏金猎人自动出征，四个难度、九大地域、三百六十关，开宝箱刷十级品质装备，用魔方合成镶嵌，点亮符文树，六种武器流派任你切换。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="悬赏怪物猎人 · The Bounty Monster Hunter">
+<meta property="og:description" content="像素风挂机放置 RPG，打开即玩。">
+<meta property="og:url" content="https://game.inc.re/tbmh/">
+<meta property="og:image" content="https://game.inc.re/hub/tbmh-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="icon-64.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #181425; overflow: hidden; overscroll-behavior: none; }
+  body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; font: 12px/1.4 TB12, monospace; color: #ead4aa; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: radial-gradient(#262b44 1px, transparent 1px) 0 0 / 8px 8px, #181425; }
+  #screen { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; box-shadow: 0 0 0 2px #3a4466, 0 12px 0 0 rgba(0, 0, 0, 0.35); }
+  #boot { position: fixed; inset: 0; display: grid; place-items: center; color: #feae34; font: 24px monospace; letter-spacing: 4px; }
+  dialog { width: min(360px, 100% - 32px); padding: 0; border: 0; background: transparent; color: #ead4aa; font: 12px/18px TB12, monospace; }
+  dialog::backdrop { background: rgba(24, 20, 37, 0.75); }
+  .box { padding: 16px 18px 18px; background: #262b44; box-shadow: 0 -2px 0 #733e39, 0 2px 0 #733e39, -2px 0 0 #733e39, 2px 0 0 #733e39, 0 0 0 4px #3e2731; }
+  .hd { display: flex; justify-content: space-between; align-items: center; }
+  h2 { margin: 0; font: 12px/12px TB12, monospace; color: #fee761; }
+  .x { width: 20px; height: 20px; border: 0; background: #3a4466; color: #ead4aa; font: 12px TB12, monospace; cursor: pointer; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 12px; }
+  .tab { padding: 6px 0; border: 0; background: #181425; color: #8b9bb4; font: 12px TB12, monospace; cursor: pointer; }
+  .tab[aria-selected="true"] { background: #3a4466; color: #fee761; box-shadow: inset 0 -2px 0 #feae34; }
+  label { display: block; margin-top: 10px; color: #8b9bb4; }
+  input, textarea { box-sizing: border-box; display: block; width: 100%; margin-top: 4px; padding: 6px 8px; border: 0; outline: 0; background: #181425; color: #ffffff; font: 16px/20px monospace; box-shadow: inset 0 0 0 2px #3a4466; -webkit-user-select: text; user-select: text; }
+  input:focus, textarea:focus { box-shadow: inset 0 0 0 2px #feae34; }
+  textarea { height: 96px; font-size: 12px; line-height: 14px; resize: none; word-break: break-all; }
+  .go { display: block; width: 100%; margin-top: 14px; padding: 7px 0; border: 0; background: #feae34; color: #3e2731; font: 12px TB12, monospace; cursor: pointer; box-shadow: inset 0 -2px 0 #be4a2f, inset 0 2px 0 #fee761; }
+  .msg { min-height: 18px; margin: 8px 0 0; color: #f6757a; }
+  p { margin: 10px 0 0; color: #c0cbdc; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="screen" width="640" height="360" aria-label="悬赏怪物猎人游戏画面"></canvas></div>
+<div id="boot">TBMH</div>
+
+<dialog id="login" aria-labelledby="login-title">
+  <div class="box">
+    <div class="hd"><h2 id="login-title">GAME.INC.RE 账号</h2><button class="x" type="button" aria-label="关闭">×</button></div>
+    <div class="tabs" role="tablist"><button class="tab" type="button" role="tab" aria-selected="true">登录</button><button class="tab" type="button" role="tab" aria-selected="false">注册</button></div>
+    <form novalidate>
+      <label>用户名<input name="username" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="16" placeholder="3–16 位字母、数字或下划线"></label>
+      <label>密码<input name="password" type="password" maxlength="64" autocomplete="current-password" placeholder="8–64 位"></label>
+      <label hidden>确认密码<input name="confirm" type="password" maxlength="64" autocomplete="new-password"></label>
+      <button class="go" type="submit">登录</button>
+    </form>
+    <p class="msg" role="status" aria-live="polite"></p>
+  </div>
+</dialog>
+<dialog id="code" aria-labelledby="code-title">
+  <div class="box">
+    <div class="hd"><h2 id="code-title">存档码</h2><button class="x" type="button" aria-label="关闭">×</button></div>
+    <p></p>
+    <textarea spellcheck="false"></textarea>
+    <button class="go ok" type="button">复制</button>
+    <p class="msg" role="status" aria-live="polite"></p>
+  </div>
+</dialog>
+
+<script src="js/font.js"></script>
+<script src="js/portraits.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/loot.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/art.js"></script>
+<script src="js/art-monsters.js"></script>
+<script src="js/art-items.js"></script>
+<script src="js/pixel.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/view.js"></script>
+<script src="../hub/account-core.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

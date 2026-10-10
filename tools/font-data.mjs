@@ -77,17 +77,25 @@ export function fontInfo(font, sample = '游戏汇总 ABCabc0123') {
   }
   return { ...names, unitsPerEm: table('head').readUInt16BE(18), widths };
 }
-export function embeddedFont(root) {
+export function embeddedFont(root, key = 'fp12') {
   const context = { window: {} };
   vm.runInNewContext(readFileSync(path.join(root, 'entropy-blade/js/fontdata.js'), 'utf8'), context);
-  return Buffer.from(context.window.FONT_DATA.fp12, 'base64');
+  return Buffer.from(context.window.FONT_DATA[key], 'base64');
 }
-export function collectHubCharacters(root) {
-  const files = [path.join(root, 'index.html'), ...readdirSync(path.join(root, 'hub')).filter(name => name.endsWith('.js')).sort().map(name => path.join(root, 'hub', name))];
+// every visible character in the given files plus printable ASCII, sorted
+export function collectCharacters(files) {
   const chars = new Set(Array.from({ length: 95 }, (_, i) => String.fromCodePoint(0x20 + i)));
   for (const file of files) for (const char of readFileSync(file, 'utf8')) {
     // Source formatting and control characters have no visible glyph.
     if (!/[\p{Cc}\p{Cf}]/u.test(char)) chars.add(char);
   }
   return [...chars].sort((a, b) => a.codePointAt(0) - b.codePointAt(0)).join('');
+}
+export function collectHubCharacters(root) {
+  return collectCharacters([path.join(root, 'index.html'), ...readdirSync(path.join(root, 'hub')).filter(name => name.endsWith('.js')).sort().map(name => path.join(root, 'hub', name))]);
+}
+// characters a font subset is missing (empty when it covers everything)
+export function missingGlyphs(font, text) {
+  const cmap = woff2Tables(font)('cmap');
+  return [...text].filter(char => !cmapGlyph(cmap, char.codePointAt(0)));
 }

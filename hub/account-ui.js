@@ -3,6 +3,12 @@ const HUB_GAMES = [{
   id: 'entropy-blade', name: '熵刃', href: 'entropy-blade/index.html', guestKey: 'entropy_blade_save_v1',
   summary: data => `挑战 ${data.stats?.runs || 0} 次 · 通关 ${data.stats?.wins || 0} 次 · 熵晶 ${data.crystals || 0}`,
   guestHasProgress: data => (data?.stats?.runs || 0) > 0 || (data?.crystals || 0) > 0,
+}, {
+  id: 'tbmh', name: '悬赏怪物猎人', href: 'tbmh/index.html', guestKey: 'tbmh_save_v2',
+  summary: data => data.v === 2
+    ? `${['普通', '噩梦', '地狱', '折磨'][data.prog?.d || 0]} ${data.prog?.a || 1}-${data.prog?.s || 1} · 猎人 ${data.hero?.lv || 1} 级 · 通关 ${(data.prog?.best || []).reduce((a, x) => a + (x || 0), 0)} 关`
+    : '第一版存档 · 进入游戏开始 2.0 的旅程',
+  guestHasProgress: data => (data?.prog?.best?.[0] || 0) > 0 || (data?.stats?.kills || 0) > 0,
 }];
 (() => {
   const C = GameAccount, opener = document.getElementById('acct-open'), dialog = document.getElementById('acct');

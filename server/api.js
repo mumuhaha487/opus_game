@@ -1,8 +1,10 @@
 import { ITERATIONS, USERNAME, b64url, unbase64, randomBytes, hex, equal32, passwordHash, passwordValid, signSession, sessionCookie, verifySession } from './auth.js';
 import { absent, userKey, saveKey, readSave, publicSave, rateWindow } from './store.js';
 import { GAMES } from './games/index.js';
+import { likeable, getLikes, addLike } from './likes.js';
 
-const MAX = 65536;
+// request bodies stay small; a game module may allow a larger cleaned save (export MAX)
+const MAX = 196608, SAVE_MAX = 65536;
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -37,15 +39,26 @@ export async function handle(request, env) {
       const site = request.headers.get('Sec-Fetch-Site');
       if (request.headers.get('Origin') !== url.origin || (site !== null && site !== 'same-origin')) return fail(403, 'forbidden_origin');
     }
-    const routes = { '/api/register': 'POST', '/api/login': 'POST', '/api/logout': 'POST', '/api/me': 'GET', '/api/saves': 'GET' };
+    const routes = { '/api/register': 'POST', '/api/login': 'POST', '/api/logout': 'POST', '/api/me': 'GET', '/api/saves': 'GET', '/api/likes': 'GET' };
     const match = /^\/api\/save\/([a-z0-9-]{1,32})$/.exec(path);
     const game = match && Object.hasOwn(GAMES, match[1]) ? match[1] : null;
-    const allow = game ? 'GET, PUT' : Object.hasOwn(routes, path) ? routes[path] : null;
-    if (!allow) return fail(404, path.startsWith('/api/save/') ? 'unknown_game' : 'not_found');
+    const likeMatch = /^\/api\/like\/([a-z0-9-]{1,32})$/.exec(path);
+    const liked = likeMatch && likeable(likeMatch[1]) ? likeMatch[1] : null;
+    const allow = game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;
+    if (!allow) return fail(404, path.startsWith('/api/save/') || path.startsWith('/api/like/') ? 'unknown_game' : 'not_found');
     if (!allow.split(', ').includes(method)) return fail(405, 'method_not_allowed', { Allow: allow });
     const data = method === 'POST' || method === 'PUT' ? await body(request) : null;
     const bucket = env.ACCOUNTS, ip = request.headers.get('CF-Connecting-IP') || '';
     if (path === '/api/logout') return reply(200, { ok: true }, { 'Set-Cookie': sessionCookie('', true) });
+    // likes work signed in or not: a valid session counts against the account, otherwise against the network
+    if (path === '/api/likes' || liked) {
+      const session = (request.headers.get('Cookie') || '').includes('__Host-gsid=') ? await verifySession(request, env) : null;
+      if (!liked) return reply(200, await getLikes(bucket, request, env, session));
+      const wait = await rateWindow(bucket, 'like-ip', ip, 600, 40, true);
+      if (wait) return limited(wait);
+      const result = await addLike(bucket, request, env, session, liked);
+      return reply(result.status, result.body);
+    }
     if (path === '/api/register' || path === '/api/login') {
       const registering = path === '/api/register';
       if (registering) { const wait = await rateWindow(bucket, 'register-ip', ip, 3600, 5, true); if (wait) return limited(wait); }
@@ -97,7 +110,7 @@ export async function handle(request, env) {
     if (!Number.isSafeInteger(data.baseRev) || data.baseRev < 0) return fail(400, 'bad_save');
     const clean = GAMES[game].clean(data.data);
     if (!clean) return fail(400, 'bad_save');
-    if (new TextEncoder().encode(JSON.stringify(clean)).length > MAX) return fail(413, 'too_large');
+    if (new TextEncoder().encode(JSON.stringify(clean)).length > (GAMES[game].MAX || SAVE_MAX)) return fail(413, 'too_large');
     const wait = await rateWindow(bucket, 'save-uid', user.uid, 600, 60, true);
     if (wait) return limited(wait);
     const current = await readSave(bucket, user.uid, game);
