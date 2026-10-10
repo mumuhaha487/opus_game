@@ -52,6 +52,7 @@ const ROOM_INFO = {
 // =====================================================================
 function newStats() { return { kills: 0, dmgTaken: 0, gold: 0, maxCombo: 0, rooms: 0, blessings: 0, skills: 0, ults: 0, bosses: 0 }; }
 function startRun(heroId, weaponId, trialSel, mode = 'normal') {
+  if (typeof Account !== 'undefined') Account.hideInputs();
   const T = Talents.values();
   if (!WEAPONS[weaponId] || WEAPONS[weaponId].hero !== heroId) weaponId = heroWeapons(heroId)[0].id;
   if (!SPR[heroId] || SPR[heroId].weapon !== weaponId) bakeHero(heroId, weaponId);
@@ -97,6 +98,8 @@ function endRun(win) {
     Save.data.titles.push('劫主');
     titleAwarded = '劫主';
   }
+  Save.data.history.unshift({ t: Date.now(), hero: r.heroId, weapon: r.weaponId, mode: r.hard ? 'trial' : r.mode, pts: r.hard ? r.hard.pts : 0, win: !!win, score, time: Math.round(r.time), kills: G.stats.kills, scene: r.scene, depth: r.depth, bosses: G.stats.bosses });
+  Save.data.history.length = Math.min(50, Save.data.history.length);
   Save.write();
   G.state = win ? 'victory' : 'gameover';
   G.overlay = null;

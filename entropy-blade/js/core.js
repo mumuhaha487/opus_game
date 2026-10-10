@@ -152,6 +152,7 @@ const Input = (() => {
   let onFirstInput = null;
 
   window.addEventListener('keydown', e => {
+    if (e.target && e.target.tagName === 'INPUT') return;
     if (preventKeys.has(e.code)) e.preventDefault();
     if (!e.repeat) { pressed.add(e.code); anyPressed = true; }
     held.add(e.code);
@@ -258,6 +259,9 @@ const Input = (() => {
 // =====================================================================
 const Save = {
   key: 'entropy_blade_save_v1',
+  settingsKey: 'entropy_blade_settings_v1',
+  backend: null,
+  onWrite: null,
   data: null,
   defaults() {
     return {
@@ -271,27 +275,46 @@ const Save = {
       heroBest: {},
       trialSel: {},
       titles: [],
+      history: [],
       seenTutorial: false,
     };
   },
-  load() {
+  normalize(s = {}) {
+    if (!s || typeof s !== 'object' || Array.isArray(s)) s = {};
     const d = this.defaults();
-    try {
-      const raw = localStorage.getItem(this.key);
-      if (raw) {
-        const s = JSON.parse(raw);
-        Object.assign(d, s);
-        d.settings = Object.assign(this.defaults().settings, s.settings || {});
-        d.stats = Object.assign(this.defaults().stats, s.stats || {});
-        d.talents = s.talents || {};
-      }
-    } catch (e) { /* ignore corrupt saves */ }
+    Object.assign(d, s);
+    d.settings = Object.assign(this.defaults().settings, s.settings || {});
+    d.stats = Object.assign(this.defaults().stats, s.stats || {});
+    d.talents = s.talents || {};
     d.lastMode = d.lastMode === 'hard' ? 'hard' : 'normal';
     d.titles = Array.isArray(d.titles) ? [...new Set(d.titles.filter(t => typeof t === 'string'))] : [];
+    d.history = Array.isArray(d.history) ? d.history : [];
     if (d.stats.bestTrial >= 40 && !d.titles.includes('劫主')) d.titles.push('劫主');
+    return d;
+  },
+  load() {
+    let s = {};
+    try {
+      const raw = localStorage.getItem(this.key);
+      if (raw) s = JSON.parse(raw);
+    } catch (e) { /* ignore corrupt saves */ }
+    const d = this.normalize(s);
+    try { const st = JSON.parse(localStorage.getItem(this.settingsKey)); if (st) Object.assign(d.settings, st); } catch (e) { /* storage unavailable */ }
     this.data = d;
   },
-  write() { try { localStorage.setItem(this.key, JSON.stringify(this.data)); } catch (e) { /* storage unavailable */ } },
-  reset() { this.data = this.defaults(); this.write(); },
+  write() {
+    try {
+      localStorage.setItem(this.settingsKey, JSON.stringify(this.data.settings));
+      if (this.backend) this.backend.write(this.data);
+      else localStorage.setItem(this.key, JSON.stringify(this.data));
+      if (this.onWrite) { try { this.onWrite(); } catch (e) { /* hook failed */ } }
+    } catch (e) { /* storage unavailable */ }
+  },
+  reset() {
+    const settings = this.data.settings;
+    this.data = this.defaults();
+    if (this.backend) { this.data.settings = settings; this.backend.reset(); }
+    this.write();
+  },
 };
 Save.load();

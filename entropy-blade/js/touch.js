@@ -159,6 +159,7 @@ const TouchUI = (() => {
 
   // ---------- events ----------
   function onStart(e) {
+    if (e.target && e.target.tagName === 'INPUT') return;
     if (!T.enabled) { T.enabled = true; document.body.classList.add('touch'); }
     e.preventDefault();
     layout();
@@ -178,6 +179,7 @@ const TouchUI = (() => {
     }
   }
   function onMove(e) {
+    if (e.target && e.target.tagName === 'INPUT') return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       const rec = T.touches.get(t.identifier);
@@ -197,6 +199,7 @@ const TouchUI = (() => {
     }
   }
   function onEnd(e) {
+    if (e.target && e.target.tagName === 'INPUT') return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       const rec = T.touches.get(t.identifier);

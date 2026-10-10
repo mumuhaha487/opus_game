@@ -98,7 +98,7 @@ function scoreDigits(v, x, y, s, col, alpha = 1, align = 'left') {
 // =====================================================================
 //  INPUT HANDLING PER SCREEN
 // =====================================================================
-const TITLE_ITEMS = ['开始游戏', '劫难挑战', '熵能天赋', '操作说明', '游戏设置'];
+const TITLE_ITEMS = ['开始游戏', '劫难挑战', '熵能天赋', '操作说明', '游戏设置', '账号战绩'];
 const SETTINGS = [
   { id: 'music', name: '音乐音量', type: 'slider' },
   { id: 'sfx', name: '音效音量', type: 'slider' },
@@ -135,7 +135,10 @@ UI.update = function (dt) {
   else if (G.state === 'play' && G.overlay) this.updOverlay(dt);
   else if (G.state === 'gameover' || G.state === 'victory') this.updEnd(dt);
 };
-UI.go = function (screen) { this.screen = screen; this.sel = 0; Sound.play('confirm'); };
+UI.go = function (screen) {
+  if (typeof Account !== 'undefined') Account.hideInputs();
+  this.screen = screen; this.sel = 0; Sound.play('confirm');
+};
 UI.titleAction = function (i) {
   if (i === 0 || i === 1) {
     this.screen = 'select'; this.hardMode = i === 1; this.modeId = Save.data.lastMode; this.modeSel = this.modeId === 'hard' ? 1 : 0;
@@ -145,6 +148,7 @@ UI.titleAction = function (i) {
   else if (i === 2) this.go('talents');
   else if (i === 3) { this.go('howto'); this.howPage = 0; }
   else if (i === 4) { this.go('settings'); this.setSel = 0; }
+  else if (i === 5) this.go('account');
 };
 UI.selectMode = function (i) {
   this.modeSel = i; this.modeId = i === 1 ? 'hard' : 'normal'; this.hardMode = false;
@@ -197,7 +201,8 @@ UI.settingAction = function (s, dir) {
     try { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); } catch (e) { /* not allowed */ }
     Sound.play('confirm');
   } else if (s.id === 'reset') {
-    this.confirm = { text: '确定要清除全部存档（熵晶、天赋、记录）吗？', yes: () => { Save.reset(); Sound.play('cancel'); }, sel: 1 };
+    const account = typeof Account !== 'undefined' && Account.name;
+    this.confirm = { text: account ? '确定要清除这个账号的全部存档（熵晶、天赋、记录）吗？' : '确定要清除全部存档（熵晶、天赋、记录）吗？', yes: () => { Save.reset(); if (account) Account.sync(); Sound.play('cancel'); }, sel: 1 };
   } else if (s.id === 'back') { this.backFromSettings(); }
   Sound.applyVolumes();
   Save.write();
@@ -258,6 +263,9 @@ UI.updTitle = function (dt) {
     case 'settings':
       this.updSettings();
       break;
+    case 'account':
+      this.updAccount();
+      break;
   }
 };
 UI.updSettings = function () {
@@ -275,8 +283,8 @@ UI.buyTalent = function (t) {
 UI.updConfirm = function () {
   const c = this.confirm;
   if (Input.hit('mleft') || Input.hit('mright') || Input.hit('mup') || Input.hit('mdown')) { c.sel ^= 1; Sound.play('select'); }
-  if (Input.hit('ok')) { const yes = c.sel === 0; this.confirm = null; if (yes) c.yes(); else Sound.play('cancel'); }
-  else if (Input.hit('cancel')) { this.confirm = null; Sound.play('cancel'); }
+  if (Input.hit('ok')) { const yes = c.sel === 0; this.confirm = null; if (yes) c.yes(); else { if (c.no) c.no(); Sound.play('cancel'); } }
+  else if (Input.hit('cancel')) { this.confirm = null; if (c.cancel) c.cancel(); Sound.play('cancel'); }
 };
 UI.pauseItems = () => ['继续游戏', '游戏设置', '放弃本局', '返回标题'];
 UI.pauseAction = function (i) {
@@ -366,6 +374,7 @@ UI.endAction = function (i) {
 //  DRAW
 // =====================================================================
 UI.draw = function () {
+  if (typeof Account !== 'undefined') Account.layout();
   uctx.setTransform(1, 0, 0, 1, 0, 0);
   uctx.clearRect(0, 0, UW, UH);
   Gfx.artBegin();
@@ -379,6 +388,7 @@ UI.draw = function () {
     else if (this.screen === 'talents') this.drawTalents();
     else if (this.screen === 'howto') this.drawHowto();
     else if (this.screen === 'settings') this.drawSettings();
+    else if (this.screen === 'account') this.drawAccount();
   } else if (G.state === 'play') {
     this.drawHUD();
     if (G.overlay) this.drawOverlay();
@@ -432,7 +442,7 @@ UI.drawTitle = function () {
     T('按任意键开始', UW / 2, 400, { scale: 2, color: '#ffffff', align: 'center', alpha: a, outline: '#12081c' });
     T('PRESS ANY KEY', UW / 2, 432, { color: '#9a8acb', align: 'center', alpha: a });
   } else {
-    const x = UW / 2, y0 = 290;
+    const x = UW / 2, y0 = 266;
     TITLE_ITEMS.forEach((it, i) => {
       const sel = this.sel === i;
       const y = y0 + i * 40;
@@ -444,6 +454,14 @@ UI.drawTitle = function () {
       }
       T(it, x, y + 2, { scale: 2, color: sel ? '#ffffff' : '#8a7aa8', align: 'center', outline: '#0a0612' });
     });
+    const a = typeof Account !== 'undefined' ? Account : null;
+    const state = a && a.name ? a.status : 'guest';
+    const labels = { synced: '已同步', pending: '同步中', syncing: '同步中', error: '同步失败', expired: '登录已过期' };
+    const text = state === 'guest' ? '本机存档' : a.name + ' · ' + labels[state];
+    const color = state === 'guest' ? '#7a6a98' : state === 'synced' ? '#6aff8a' : ['pending', 'syncing'].includes(state) ? '#ffd36a' : '#ff5a5a';
+    T(text, UW - 16, 12, { align: 'right', color });
+    const width = Text.measure(text);
+    region(UW - 16 - width - 8, 4, width + 16, 28, { onClick: () => this.go('account') });
   }
   // footer
   uctx.fillStyle = 'rgba(5,3,10,0.7)'; uctx.fillRect(0, UH - 30, UW, 30);
@@ -719,6 +737,95 @@ UI.drawTrial = function () {
   T('↑↓ 选择   ←→ / ENTER 调整劫数   选「出发」或按 R 开始   ESC 返回', UW / 2, UH - 14, { color: '#7a6a98', align: 'center' });
 };
 
+// ---------- ACCOUNT ----------
+UI.updAccount = function () {
+  if (typeof Account === 'undefined') return;
+  const a = Account;
+  if (Input.hit('cancel')) { a.back(); return; }
+  const next = navV(a.rows(), a.row);
+  if (next !== a.row) a.selectRow(next);
+  if (a.formVisible() && a.row === 0 && (Input.hit('mleft') || Input.hit('mright'))) a.changeTab(a.tab ^ 1);
+  if (Input.hit('ok')) a.action();
+};
+UI.drawAccount = function () {
+  if (typeof Account === 'undefined') return;
+  const a = Account, form = a.formVisible();
+  uctx.fillStyle = 'rgba(5,2,12,0.82)'; uctx.fillRect(0, 0, UW, UH);
+  T('账号战绩', UW / 2, 30, { scale: 2, color: '#ffffff', align: 'center', outline: '#12081c' });
+  T(a.name ? `已登录 ${a.name} · 存档与战绩保存在云端` : '当前为本机存档。登录后，熵晶、天赋与战绩会同步到云端。', UW / 2, 64, { color: '#9a8acb', align: 'center' });
+  panel(60, 92, 400, 380, { border: '#3a2f5c' }); panel(500, 92, 400, 380, { border: '#3a2f5c' });
+  const button = (text, y, selected, action, row) => {
+    region(80, y, 360, 38, { onHover: () => { if (a.row !== row && !a.busy) a.selectRow(row); }, onClick: () => { if (!a.busy) { a.selectRow(row); action(); } } });
+    panel(80, y, 360, 38, { border: selected ? '#ff3b5c' : '#3a2f5c', bg: selected ? '#2a0a18' : '#0b0716' });
+    T(a.busy ? '正在连接…' : text, 260, y + 12, { color: a.busy ? '#ffd36a' : selected ? '#ffffff' : '#9a8acb', align: 'center' });
+  };
+  if (form) {
+    ['登录', '注册'].forEach((text, i) => {
+      const x = i ? 264 : 80, selected = a.tab === i;
+      panel(x, 108, 176, 32, { border: selected ? '#ff3b5c' : '#3a2f5c', bg: selected ? '#2a0a18' : '#0b0716' });
+      T(text, x + 88, 117, { color: selected ? '#ffffff' : '#9a8acb', align: 'center' });
+      region(x, 108, 176, 32, { onHover: () => { if (!a.busy && a.row !== 0) a.selectRow(0); }, onClick: () => a.changeTab(i) });
+    });
+    const placeholders = ['3–16 位字母、数字或下划线', '8–64 位', '再输入一次密码'];
+    ['用户名', '密码', '确认密码'].slice(0, a.tab ? 3 : 2).forEach((text, i) => {
+      const y = 178 + i * 62, input = a.inputs[i], focused = document.activeElement === input;
+      T(text, 80, y - 18, { color: a.row === i + 1 ? '#ffffff' : '#9a8acb' });
+      uctx.fillStyle = '#05030a'; uctx.fillRect(80, y, 360, 32);
+      uctx.fillStyle = focused ? '#ff3b5c' : '#3a2f5c';
+      uctx.fillRect(80, y, 360, 2); uctx.fillRect(80, y + 30, 360, 2); uctx.fillRect(80, y, 2, 32); uctx.fillRect(438, y, 2, 32);
+      let shown = i ? '•'.repeat([...input.value].length) : input.value;
+      if (Text.measure(shown) > 336) {
+        let tail = [...shown];
+        while (tail.length && Text.measure('…' + tail.join('')) > 336) tail.shift();
+        shown = '…' + tail.join('');
+      }
+      T(shown || placeholders[i], 92, y + 10, { color: shown ? '#ffffff' : '#5a4f6a' });
+      if (focused && Math.sin(this.t * 8) > 0) { uctx.fillStyle = '#ff3b5c'; uctx.fillRect(92 + Text.measure(shown), y + 10, 2, 14); }
+    });
+    button(a.tab ? '注册并登录' : '登录', a.tab ? 358 : 296, a.row === a.rows() - 1, () => a.submit(), a.rows() - 1);
+    T('账号凭用户名和密码登录，请妥善保管密码。', 80, 444, { color: '#7a6a98' });
+  } else {
+    T('已登录', 80, 112, { color: '#9a8acb' }); T(a.name, 80, 132, { scale: 2, color: '#ffffff', outline: '#0a0612' });
+    uctx.fillStyle = '#2a2244'; uctx.fillRect(80, 172, 360, 2);
+    T('云端同步', 80, 188, { color: '#9a8acb' });
+    const tm = new Date(a.lastSuccess), hhmm = String(tm.getHours()).padStart(2, '0') + ':' + String(tm.getMinutes()).padStart(2, '0');
+    const states = { synced: '已同步 · ' + hhmm, pending: '等待同步', syncing: '同步中…', error: '同步失败，稍后自动重试', expired: '登录已过期' };
+    const color = a.status === 'synced' ? '#6aff8a' : ['pending', 'syncing'].includes(a.status) ? '#ffd36a' : '#ff5a5a';
+    T(states[a.status], 440, 188, { color, align: 'right' });
+    button(a.status === 'expired' ? '重新登录' : '立即同步', 240, a.row === 0, () => a.action(), 0);
+    button('退出登录', 288, a.row === 1, () => a.logout(), 1);
+    T('退出后回到本机存档，账号数据保留在云端。', 80, 444, { color: '#7a6a98' });
+  }
+  T(a.file ? '本地文件模式下只能使用本机存档' : a.message, 260, 416, { color: a.file ? '#ffd36a' : a.messageColor, align: 'center' });
+  const st = Save.data.stats;
+  T('战绩', 520, 108, { color: '#ff3b5c' }); T(a.name ? '云端' : '本机', 880, 108, { color: '#7a6a98', align: 'right' });
+  const rows = [['挑战次数', st.runs, '通关次数', st.wins], ['最快通关', st.bestTime ? `${Math.floor(st.bestTime / 60)}分${Math.floor(st.bestTime % 60)}秒` : '—', '累计击杀', st.kills], ['击败首领', st.bossKills, '最高劫难值', st.bestTrial || '—']];
+  rows.forEach(([left, lv, right, rv], i) => {
+    const y = 134 + i * 26;
+    T(left, 520, y, { color: '#9a8acb' }); T(String(lv), 690, y, { color: '#ffffff', align: 'right' });
+    T(right, 710, y, { color: '#9a8acb' }); T(String(rv), 880, y, { color: '#ffffff', align: 'right' });
+  });
+  T('最高评分', 520, 220, { color: '#ffffff' });
+  HERO_ORDER.forEach((id, i) => {
+    const x = 520 + i * 120, hero = HEROES[id], score = Save.data.heroBest[id];
+    T(hero.name, x, 242, { color: hero.color });
+    T(score === undefined ? '—' : String(score), x + Text.measure(hero.name) + 8, 242, { color: score === undefined ? '#5a4f6a' : '#ffd23f' });
+  });
+  uctx.fillStyle = '#2a2244'; uctx.fillRect(520, 268, 360, 2);
+  T('最近战绩', 520, 280, { color: '#ffffff' });
+  if (!Save.data.history.length) T('还没有战绩，开始一局吧。', 520, 304, { color: '#7a6a98' });
+  Save.data.history.slice(0, 7).forEach((row, i) => {
+    const y = 304 + i * 22, date = new Date(row.t), hero = HEROES[row.hero];
+    if (i % 2 === 0) { uctx.fillStyle = 'rgba(255,255,255,0.03)'; uctx.fillRect(512, y - 5, 376, 22); }
+    T(String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'), 520, y, { color: '#7a6a98' });
+    T(hero ? hero.name : '—', 572, y, { color: hero ? hero.color : '#5a4f6a' });
+    T(row.mode === 'trial' ? '劫 ' + row.pts : row.mode === 'hard' ? '困难' : '普通', 626, y, { color: '#9a8acb' });
+    T(row.win ? '通关' : '陨落', 700, y, { color: row.win ? '#ffd23f' : '#ff3048' });
+    T(String(row.score), 880, y, { color: '#ffffff', align: 'right' });
+  });
+  T(TouchUI.enabled ? '点按输入框输入，点按按钮确认' : form ? '↑↓ 选择   ←→ 切换登录 / 注册   ENTER 确认   ESC 返回' : '↑↓ 选择   ENTER 确认   ESC 返回', UW / 2, UH - 22, { color: '#7a6a98', align: 'center' });
+};
+
 // ---------- TALENTS ----------
 UI.drawTalents = function () {
   uctx.fillStyle = 'rgba(5,2,12,0.7)'; uctx.fillRect(0, 0, UW, UH);
@@ -824,10 +931,10 @@ UI.drawConfirm = function () {
   uctx.fillStyle = 'rgba(0,0,0,0.6)'; uctx.fillRect(0, 0, UW, UH);
   panel(UW / 2 - 240, UH / 2 - 70, 480, 140, { border: '#ff3b5c', corner: '#ffffff' });
   T(c.text, UW / 2, UH / 2 - 44, { color: '#ffffff', align: 'center' });
-  ['确定', '取消'].forEach((s, i) => {
+  (c.labels || ['确定', '取消']).forEach((s, i) => {
     const x = UW / 2 - 110 + i * 120, y = UH / 2 + 10;
     const sel = c.sel === i;
-    region(x, y, 100, 32, { onHover: () => { c.sel = i; }, onClick: () => { this.confirm = null; if (i === 0) c.yes(); else Sound.play('cancel'); } });
+    region(x, y, 100, 32, { onHover: () => { c.sel = i; }, onClick: () => { this.confirm = null; if (i === 0) c.yes(); else { if (c.no) c.no(); Sound.play('cancel'); } } });
     panel(x, y, 100, 32, { border: sel ? '#ff3b5c' : '#3a2f5c', bg: sel ? '#2a0a18' : '#0b0716' });
     T(s, x + 50, y + 9, { color: sel ? '#ffffff' : '#9a8acb', align: 'center' });
   });

@@ -13,3 +13,9 @@ Thumbs.db
 
 # Local trailer workspace; excluded from repository uploads.
 /promo/
+# Trailer project for 熵刃 (scripts, captures, audio, renders) — the whole folder stays local.
+/entropy-blade/promo/
+# Local work notes and delegation specs — never uploaded.
+/_work/
+.dev.vars*
+.wrangler/

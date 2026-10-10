@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade'];
+const siteFiles = ['index.html', '_headers', '_routes.json', 'hub', 'entropy-blade'];
+// local-only work folders inside the site tree (git-ignored, e.g. the trailer project) never ship
+const localOnly = [path.join(root, 'entropy-blade', 'promo')];
+const shipped = src => !localOnly.some(dir => src === dir || src.startsWith(dir + path.sep));
 
 function filesIn(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
@@ -16,7 +19,7 @@ function filesIn(dir) {
 
 rmSync(out, { recursive: true, force: true });
 for (const name of siteFiles) {
-  cpSync(path.join(root, name), path.join(out, name), { recursive: true });
+  cpSync(path.join(root, name), path.join(out, name), { recursive: true, filter: shipped });
 }
 
 // Hash the staged site so unchanged builds keep the same asset URLs.
