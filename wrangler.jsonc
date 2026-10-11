@@ -1,0 +1,21 @@
+{
+  // GAME.INC.RE Worker. Build first (node build.mjs → dist/), then `npx wrangler deploy`.
+  // Secrets AUTH_SECRET and PW_PEPPER are set on the Worker, never in this file.
+  "name": "inc-games",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-08",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "r2_buckets": [
+    { "binding": "ACCOUNTS", "bucket_name": "game-inc-accounts", "preview_bucket_name": "game-inc-accounts-preview" }
+  ],
+  "routes": [
+    { "pattern": "game.inc.re", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "observability": { "enabled": true }
+}

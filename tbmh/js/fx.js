@@ -6,7 +6,7 @@
 const FX = (() => {
   const parts = [], nums = [], coins = [], beams = [], arcs = [], rings = [], bolts = [], meteors = [], banners = [], sparks = [], icons = [], chests = [], zaps = [], rains = [];
   const st = { shake: 0, hitstop: 0, flash: 0, flashColor: PAL.white, goldPulse: 0, expPulse: 0, chestPulse: 0, poster: null, pending: [] };
-  const ELEM_COL = { fire: PAL.orange, ice: PAL.cyan, light: PAL.yellow, poison: PAL.green, holy: PAL.cream };
+  const ELEM_COL = { fire: PAL.orange, cold: PAL.cyan, lightning: PAL.yellow, chaos: PAL.magenta };
   let opts = { shake: 1, nums: 1, fx: 1 };
   const R = Math.random;
   const cap = (list, n) => { if (list.length > n) list.splice(0, list.length - n); };
@@ -63,7 +63,7 @@ const FX = (() => {
     filt(chests, c => !c.done);
     for (const z of zaps) z.t += dt;
     filt(zaps, z => z.t < z.life);
-    for (const r of rains) { r.t += dt; r.drop -= dt; if (r.drop <= 0 && r.t < r.life) { r.drop = 0.05; r.list.push({ x: r.x + (R() - 0.5) * 100, y: -6, v: 260 + R() * 80 }); } for (const d of r.list) d.y += d.v * dt; r.list = r.list.filter(d => d.y < GY); }
+    for (const r of rains) { r.t += dt; r.drop -= dt; if (r.drop <= 0 && r.t < r.life) { r.drop = 0.05; r.list.push({ x: r.x + (R() - 0.5) * r.w, y: -6, v: 260 + R() * 80, c: r.c }); } for (const d of r.list) { d.y += d.v * dt; if (r.snow) d.x -= 40 * dt; } r.list = r.list.filter(d => d.y < GY); }
     filt(rains, r => r.t < r.life + 0.6);
     for (const p of parts) {
       p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
@@ -120,7 +120,10 @@ const FX = (() => {
       ctx.globalAlpha = 1;
     }
     for (const c of chests) Spr.draw(ctx, Spr.get('chest', 0, String(c.k)), c.x, c.y);
-    for (const r of rains) for (const d of r.list) { ctx.fillStyle = PAL.cream; ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, 5); ctx.fillStyle = PAL.mist; ctx.fillRect(Math.round(d.x), Math.round(d.y) + 5, 1, 2); }
+    for (const r of rains) for (const d of r.list) {
+      if (r.snow) { ctx.fillStyle = PAL.white; ctx.fillRect(Math.round(d.x), Math.round(d.y), 2, 2); continue; }
+      ctx.fillStyle = PAL.cream; ctx.fillRect(Math.round(d.x), Math.round(d.y), 1, 5); ctx.fillStyle = PAL.mist; ctx.fillRect(Math.round(d.x), Math.round(d.y) + 5, 1, 2);
+    }
     for (const z of meteors) {
       if (z.t < z.delay) continue;
       const k = (z.t - z.delay) / 0.34, mx = z.x + 60 * (1 - k), my = -10 + (GY - 6 + 10) * k;
@@ -169,14 +172,15 @@ const FX = (() => {
       ctx.globalAlpha = 1;
     }
     for (const n of nums) {
-      const a = n.life < 0.2 ? n.life / 0.2 : 1, s = n.t < 0.08 ? 1 : 1;
+      const a = n.life < 0.2 ? n.life / 0.2 : 1;
       ctx.globalAlpha = a;
-      Digits.draw(ctx, n.text, n.x, n.y, { color: n.color, big: n.big, shade: n.shade, outline: n.outline });
+      if (n.word) Text.draw(ctx, n.text, n.x, n.y - 6, { align: 'center', color: n.color, outline: PAL.ink });
+      else Digits.draw(ctx, n.text, n.x, n.y, { color: n.color, big: n.big, shade: n.shade, outline: n.outline });
       ctx.globalAlpha = 1;
     }
   }
   function drawArc(ctx, a) {
-    // pixel crescent sweeping from top to bottom in front of the hunter
+    // pixel crescent sweeping from top to bottom in front of the hero
     const k = a.t / a.life, col = RARITY[a.r || 0].glow, edge = RARITY[a.r || 0].color;
     const rad = a.big ? 34 : 18, sweep = Math.min(1, k * 2.2);
     const from = -1.2, to = from + 2.4 * sweep;
@@ -195,13 +199,13 @@ const FX = (() => {
   // banners and the WANTED poster draw in screen space (after the shake offset is removed)
   function drawHud(ctx, w, t) {
     if (st.flash > 0) { ctx.fillStyle = rgba(st.flashColor, Math.min(0.5, st.flash * 0.5)); ctx.fillRect(0, 0, w, SH); }
-    let stack = 40;
-    banners.forEach((b, i) => {
+    let stack = 32;
+    banners.forEach(b => {
       const k = b.t / b.life, inn = Math.min(1, b.t / 0.2), out = k > 0.8 ? 1 - (k - 0.8) / 0.2 : 1;
       const y = stack - (1 - Ease.outBack(inn)) * 10;
-      stack += (b.sub ? 34 : 20) + 4;
+      stack += (b.sub ? 32 : 20) + 2;
       ctx.globalAlpha = out;
-      const tw = Math.max(Text.width(b.text, 12), b.sub ? Text.width(b.sub, 12) : 0) + 24, h = b.sub ? 34 : 20;
+      const tw = Math.max(Text.width(b.text, 12), b.sub ? Text.width(b.sub, 12) : 0) + 24, h = b.sub ? 32 : 20;
       const bx = Math.round(w / 2 - tw / 2);
       ctx.fillStyle = rgba(PAL.ink, 0.82); ctx.fillRect(bx, y - 4, tw, h);
       ctx.fillStyle = b.color; ctx.fillRect(bx, y - 4, tw, 1); ctx.fillRect(bx, y - 5 + h, tw, 1);
@@ -215,13 +219,16 @@ const FX = (() => {
   function attach(b, view) {
     const ev = b.ev;
     const sx = m => view.hx + m.x, sy = m => GY - (m.y || 0) - (m.boss ? 22 : 10);
+    // a hero's spot on the strip
+    const hxOf = h => view.hx + (h ? h.x : 0);
+    const nameOf = h => CLASSES[h.cls || h].hero;
     ev.on('hit', (m, dmg, crit, kind, elem) => {
       const x = sx(m), y = sy(m) - 6;
-      if (kind === 'burn') { number(x, y, fmt(dmg), { color: PAL.orange }); return; }
+      if (kind === 'burn' || kind === 'bleed') { number(x, y, fmt(dmg), { color: kind === 'burn' ? PAL.orange : PAL.red }); return; }
       const col = ELEM_COL[elem] || (kind === 'thorns' ? PAL.green : kind === 'skill' ? PAL.cyan : kind === 'ember' ? PAL.orange : kind === 'proc' ? PAL.mist : PAL.white);
       if (crit) {
         number(x, y - 4, fmt(dmg) + '!', { color: PAL.yellow, shade: PAL.orange, outline: PAL.wine, big: true });
-        st.shake = Math.min(1, st.shake + 0.35); st.hitstop = 0.05;
+        st.shake = Math.min(1, st.shake + 0.3); st.hitstop = 0.04;
         burst(x, y + 4, 10, [PAL.white, PAL.yellow, PAL.orange], { speed: 110, life: 0.35 });
       } else {
         number(x, y, fmt(dmg), { color: col });
@@ -243,7 +250,7 @@ const FX = (() => {
     ev.on('chestDrop', (ch, m) => {
       const x = sx(m);
       chests.push({ x, y: GY - (m.y || 0) - 10, vx: -20 + R() * 50, vy: -150, t: 0, k: ch.k, state: 0, tx: 150 });
-      beams.push({ x, r: [1, 3, 4][ch.k], t: 0, life: 1.2 });
+      beams.push({ x, r: [1, 2, 4][ch.k], t: 0, life: 1.2 });
       Sound.chest(ch.k);
     });
     // what came out of an opened chest
@@ -252,94 +259,117 @@ const FX = (() => {
       if (top >= 5) { st.flash = 1; st.flashColor = GRADES[top].color; const it = res.items.find(x => x.it.g === top).it; banner(GRADES[top].name + '装备', { sub: Loot.name(it) + (it.lg ? ' · ' + LEGENDS[it.lg].name : ''), color: GRADES[top].color, life: 2.4 }); }
       Sound.drop(top);
     });
-    ev.on('swing', (n, fam) => {
-      if (fam && !FAMS[fam].melee) { Sound.play(fam === 'staff' ? 'zap' : 'bow'); return; }
-      st.pending.push({ t: 0.06, fn: () => { arcs.push({ x: view.hx + 10, y: GY - 12, t: 0, life: 0.18, r: b.s.eq.main ? Math.min(4, b.s.eq.main.g) : 0 }); Sound.play('swing'); } });
+    ev.on('autoOpen', res => {
+      const top = res.items.reduce((a, x) => Math.max(a, x.it.g), 0);
+      st.chestPulse = 1;
+      if (top >= 5) banner(GRADES[top].name + '装备', { sub: '自动开箱 · ' + Loot.name(res.items.find(x => x.it.g === top).it), color: GRADES[top].color, life: 2.2 });
     });
-    ev.on('block', () => { rings.push({ x: view.hx - 4, y: GY - 12, r: 3, vr: 50, t: 0, life: 0.25, color: PAL.cyan }); Sound.play('block'); });
-    ev.on('levelUp', lv => { st.expPulse = 1; banner('升级', { sub: `猎人等级 ${lv} · 技能点 +1`, color: PAL.cyan, life: 1.8 }); rings.push({ x: view.hx, y: GY - 12, r: 4, vr: 90, t: 0, life: 0.6, color: PAL.cyan }); burst(view.hx, GY - 14, 20, [PAL.cyan, PAL.white, PAL.blue], { speed: 90, g: -60, life: 0.7 }); Sound.play('level'); });
-    ev.on('champ', m => banner(m.champ.name, { sub: `头目 · ${AURAS[m.champ.aura].name}：${AURAS[m.champ.aura].text}`, color: View.AURA_COLOR[m.champ.aura] || PAL.amber, life: 2.2 }));
+    ev.on('swing', h => {
+      const S = h.S;
+      if (!S.melee) { Sound.play(h.cls === 'sorcerer' ? 'zap' : 'bow'); return; }
+      const w = b.s.heroes[h.cls] && b.s.heroes[h.cls].eq.weapon;
+      st.pending.push({ t: 0.06, fn: () => { arcs.push({ x: view.hx + b.frontX() + 10, y: GY - 12, t: 0, life: 0.18, r: w ? Math.min(4, w.g) : 0 }); Sound.play('swing'); } });
+    });
+    ev.on('block', h => { rings.push({ x: hxOf(h) - 4, y: GY - 12, r: 3, vr: 50, t: 0, life: 0.25, color: PAL.cyan }); Sound.play('block'); });
+    ev.on('dodge', h => { nums.push({ x: hxOf(h), y: GY - 30, vx: 0, vy: -40, life: 0.6, t: 0, text: '闪避', color: PAL.cyan, word: true }); cap(nums, 60); });
+    ev.on('levelUp', (cls, lv) => {
+      const h = b.heroById(cls);
+      st.expPulse = 1;
+      banner(`${CLASSES[cls].hero} 升级`, { sub: `${CLASSES[cls].name} Lv.${lv} · 技能点 +1`, color: PAL.cyan, life: 1.8 });
+      rings.push({ x: hxOf(h), y: GY - 12, r: 4, vr: 90, t: 0, life: 0.6, color: PAL.cyan });
+      burst(hxOf(h), GY - 14, 20, [PAL.cyan, PAL.white, PAL.blue], { speed: 90, g: -60, life: 0.7 });
+      Sound.play('level');
+    });
+    ev.on('champ', m => banner(m.champ.name, { sub: `关卡首领 · ${AURAS[m.champ.aura].name}：${AURAS[m.champ.aura].text}`, color: View.AURA_COLOR[m.champ.aura] || PAL.amber, life: 2.2 }));
+    ev.on('stageBoss', m => { banner(m.d.name, { sub: `关卡首领 · ${m.d.title}`, color: PAL.amber, life: 2.2 }); Sound.play('boss'); });
     ev.on('pet', id => { banner('新宠物', { sub: PETS[id].name, color: PAL.pink, life: 2.2 }); Sound.play('rune'); });
     ev.on('ach', a => { banner('成就达成', { sub: a.name, color: PAL.yellow, life: 2.2 }); Sound.play('rune'); });
+    ev.on('heroUnlock', cls => { st.flash = 0.8; st.flashColor = PAL.yellow; banner('新英雄可以招募', { sub: `${CLASSES[cls].name} ${CLASSES[cls].hero} · 在「队伍」页上阵`, color: PAL.yellow, life: 3 }); Sound.play('fanfare'); });
     ev.on('cubeLv', lv => { const f = CUBE_FUNCS.find(x => x.lv === lv); banner('魔方升级', { sub: f ? `${lv} 级 · 解锁「${f.name}」` : `${lv} 级`, color: PAL.magenta, life: 1.8 }); });
-    ev.on('needWanted', d => banner('缺少通缉令', { sub: `刷第 9 关攒${DIFFS[d].name}通缉令`, color: PAL.amber, life: 2.2 }));
-    ev.on('newDiff', d => { st.flash = 1; st.flashColor = DIFFS[d].color; banner(`${DIFFS[d].name}难度`, { sub: '同样的九个地域，更强的怪物与更好的掉落', color: DIFFS[d].color, life: 3 }); });
-    ev.on('hurt', (dmg, src, kind) => {
-      number(view.hx, GY - 30, '-' + fmt(dmg), { color: PAL.red, shade: PAL.wine });
-      burst(view.hx + 4, GY - 12, 5, [PAL.red, PAL.wine], { speed: 60 });
+    ev.on('needStone', d => banner('缺少通缉令', { sub: `在第 9 关打首领宝箱，攒${DIFFS[d].name}通缉令`, color: PAL.amber, life: 2.4 }));
+    ev.on('stoneGift', d => banner(`获得${DIFFS[d].name}通缉令`, { sub: '下一关的悬赏首领，打赢才会消耗', color: DIFFS[d].color, life: 2.4 }));
+    ev.on('newDiff', d => { st.flash = 1; st.flashColor = DIFFS[d].color; banner(`${DIFFS[d].name}难度`, { sub: '同样的三幕，更强的怪物与更好的掉落', color: DIFFS[d].color, life: 3 }); });
+    ev.on('hurt', (h, dmg, src, kind) => {
+      const x = hxOf(h);
+      number(x, GY - 30, '-' + fmt(dmg), { color: PAL.red, shade: PAL.wine });
+      burst(x + 4, GY - 12, 5, [PAL.red, PAL.wine], { speed: 60 });
       if (kind === 'slam' || kind === 'bolt') { st.shake = Math.min(1, st.shake + 0.6); Sound.play('slam'); } else Sound.play('hurt');
     });
-    ev.on('cast', (id, echo) => {
-      if (opts.nums) icons.push({ x: view.hx, y: GY - 34, r: echo ? 3 : 2, img: Spr.get(SKILLS[id].icon), t: 0, life: 0.7 });
+    ev.on('cast', (h, id) => {
+      if (opts.nums) icons.push({ x: hxOf(h), y: GY - 34, r: 2, img: Spr.get(ACTIVES[id].icon), t: 0, life: 0.7 });
       Sound.cast(id);
     });
     ev.on('fx', (kind, d) => {
-      const hx = view.hx;
+      const hx = view.hx, fx0 = view.hx + b.frontX();
+      const at = h => hxOf(h);
       switch (kind) {
-        case 'cleave': arcs.push({ x: hx + 14, y: GY - 14, t: 0, life: 0.28, r: 2, big: true }); st.shake = Math.min(1, st.shake + 0.3); burst(hx + 40, GY, 18, [PAL.tan, PAL.brown, PAL.white], { dir: -Math.PI / 2, spread: 1.4, speed: 120 }); break;
-        case 'thunder': bolts.push({ x: hx + d.x, y: GY - (d.y || 0) - 6, t: 0, life: 0.35, seed: (Math.random() * 1e9) | 0 }); st.flash = 0.6; st.flashColor = PAL.yellow; st.shake = Math.min(1, st.shake + 0.5); break;
+        case 'thrust': arcs.push({ x: fx0 + 16, y: GY - 13, t: 0, life: 0.25, r: 2, big: true }); parts.push({ x: fx0 + 8, y: GY - 13, vx: 600, vy: 0, g: 0, life: 0.18, max: 0.18, c: PAL.white, sz: 2, ground: false }); st.shake = Math.min(1, st.shake + 0.2); break;
+        case 'blade': rings.push({ x: at(d), y: GY - 14, r: 4, vr: 70, t: 0, life: 0.4, color: PAL.yellow }); burst(at(d), GY - 20, 12, [PAL.yellow, PAL.white], { speed: 50, g: -40 }); break;
+        case 'thunder': bolts.push({ x: hx + d.x, y: GY - (d.y || 0) - 6, t: 0, life: 0.35, seed: (Math.random() * 1e9) | 0 }); st.flash = Math.max(st.flash, 0.3); st.flashColor = PAL.yellow; st.shake = Math.min(1, st.shake + 0.3); break;
         case 'zap': zaps.push({ x0: hx + d.from, y0: GY - 14, x1: hx + d.to, y1: GY - 12, t: 0, life: 0.22, color: PAL.yellow, seed: (R() * 1e9) | 0 }); Sound.play('zap'); break;
         case 'split': zaps.push({ x0: hx + d.from, y0: GY - 12, x1: hx + d.to, y1: GY - 12, t: 0, life: 0.15, color: PAL.cream, seed: (R() * 1e9) | 0 }); break;
-        case 'spin': rings.push({ x: hx, y: GY - 10, r: d.r * 0.6, vr: 30, t: 0, life: d.t, color: PAL.mist, flat: true }); Sound.play('swing'); break;
-        case 'rain': rains.push({ x: hx + d.x, t: 0, life: d.t, drop: 0, list: [] }); break;
+        case 'spin': rings.push({ x: fx0, y: GY - 10, r: d.r * 0.6, vr: 30, t: 0, life: d.t, color: PAL.mist, flat: true }); Sound.play('swing'); break;
+        case 'rain': rains.push({ x: hx + d.x, w: 100, t: 0, life: d.t, drop: 0, list: [] }); break;
+        case 'storm': rains.push({ x: hx + d.x, w: 140, t: 0, life: d.t, drop: 0, list: [], snow: true }); st.flash = 0.3; st.flashColor = PAL.cyan; break;
+        case 'orb': rings.push({ x: at(d) + 16, y: GY - 10, r: 3, vr: 30, t: 0, life: 0.3, color: PAL.cyan }); break;
+        case 'frost': rings.push({ x: hx + d.x, y: GY - 10, r: 4, vr: 120, t: 0, life: 0.3, color: PAL.cyan, thorn: true }); burst(hx + d.x, GY - 10, 14, [PAL.white, PAL.cyan, PAL.blue], { speed: 100 }); Sound.play('boom'); break;
         case 'blast': rings.push({ x: hx + d.x, y: GY - 8, r: 4, vr: 140, t: 0, life: 0.3, color: PAL.orange }); burst(hx + d.x, GY - 8, 14, [PAL.yellow, PAL.orange, PAL.red], { speed: 110 }); st.shake = Math.min(1, st.shake + 0.25); Sound.play('boom'); break;
         case 'boom': rings.push({ x: hx + d.x, y: GY - 10, r: 3, vr: 110, t: 0, life: 0.22, color: PAL.yellow }); break;
-        case 'snipe': rings.push({ x: hx + d.x, y: GY - 14, r: 14, vr: -50, t: 0, life: 0.3, color: PAL.red }); break;
-        case 'beamArrow': beams.push({ x: hx + 120, r: 2, t: 0, life: 0.4 }); parts.push({ x: hx + 10, y: GY - 13, vx: 900, vy: 0, g: 0, life: 0.5, max: 0.5, c: PAL.white, sz: 2, ground: false }); break;
+        case 'beamArrow': beams.push({ x: at(d) + 120, r: 2, t: 0, life: 0.4 }); parts.push({ x: at(d) + 10, y: GY - 13, vx: 900, vy: 0, g: 0, life: 0.5, max: 0.5, c: PAL.white, sz: 2, ground: false }); break;
         case 'wave': arcs.push({ x: hx + d.x + 14, y: GY - 12, t: 0, life: 0.25, r: 2 }); break;
         case 'bash': rings.push({ x: hx + d.x, y: GY - 12, r: 3, vr: 80, t: 0, life: 0.25, color: PAL.cyan }); st.shake = Math.min(1, st.shake + 0.3); break;
-        case 'throwaxe': for (let i = 0; i < 6; i++) parts.push({ x: hx + 10 + i * (d.x / 6), y: GY - 16 - Math.sin(i / 5 * Math.PI) * 10, vx: 0, vy: 0, g: 0, life: 0.25 + i * 0.03, max: 0.4, c: PAL.cyan, sz: 1, ground: false }); break;
-        case 'rage': rings.push({ x: hx, y: GY - 12, r: 4, vr: 60, t: 0, life: 0.4, color: PAL.red }); break;
-        case 'hydra': burst(hx - 16, GY - 8, 14, [PAL.orange, PAL.yellow], { speed: 60 }); break;
-        case 'prayer': burst(hx, GY - 20, 14, [PAL.cream, PAL.yellow, PAL.white], { speed: 40, g: -50, life: 0.8 }); break;
-        case 'aegis': rings.push({ x: hx, y: GY - 12, r: 6, vr: 40, t: 0, life: 0.5, color: PAL.cyan }); break;
-        case 'smite': bolts.push({ x: hx + d.x, y: GY - 8, t: 0, life: 0.3, seed: (R() * 1e9) | 0, color: PAL.cream }); st.flash = 0.4; st.flashColor = PAL.cream; break;
-        case 'warcry': rings.push({ x: hx, y: GY - 16, r: 4, vr: 120, t: 0, life: 0.4, color: PAL.red }); break;
+        case 'quake': rings.push({ x: hx + d.x, y: GY - 2, r: 6, vr: 160, t: 0, life: 0.35, color: PAL.tan, flat: true }); burst(hx + d.x, GY, 18, [PAL.tan, PAL.brown, PAL.white], { speed: 120, dir: -Math.PI / 2, spread: 2 }); st.shake = Math.min(1, st.shake + 0.4); Sound.play('slam'); break;
+        case 'rage': rings.push({ x: at(d), y: GY - 12, r: 4, vr: 60, t: 0, life: 0.4, color: PAL.red }); burst(at(d), GY - 14, 10, [PAL.red, PAL.wine], { speed: 50 }); break;
+        case 'hydra': burst(at(d) - 16, GY - 8, 14, [PAL.orange, PAL.yellow], { speed: 60 }); break;
+        case 'turret': burst(at(d) + 10, GY - 4, 10, [PAL.steel, PAL.white], { speed: 50 }); break;
+        case 'heal': burst(at(d), GY - 18, 14, [PAL.green, PAL.white, PAL.yellow], { speed: 40, g: -60, life: 0.8 }); rings.push({ x: at(d), y: GY - 12, r: 3, vr: 40, t: 0, life: 0.4, color: PAL.green }); break;
+        case 'sanct': for (const h of b.living()) burst(at(h), GY - 20, 8, [PAL.cream, PAL.yellow, PAL.white], { speed: 30, g: -50, life: 0.9 }); rings.push({ x: fx0 - 22, y: GY - 2, r: 30, vr: 20, t: 0, life: 0.6, color: PAL.yellow, flat: true }); break;
+        case 'wrath': rings.push({ x: at(d), y: GY - 24, r: 4, vr: 50, t: 0, life: 0.4, color: PAL.yellow }); break;
+        case 'aegis': for (const h of b.living()) rings.push({ x: at(h), y: GY - 12, r: 6, vr: 40, t: 0, life: 0.5, color: PAL.cyan }); break;
+        case 'will': st.flash = 0.8; st.flashColor = PAL.amber; banner('不屈意志', { sub: nameOf(d) + '站了起来', color: PAL.amber, life: 1.4 }); break;
+        case 'warcry': rings.push({ x: at(d), y: GY - 16, r: 4, vr: 120, t: 0, life: 0.4, color: PAL.red }); Sound.play('howl'); break;
         case 'mobBlock': rings.push({ x: hx + d.x, y: GY - 14, r: 2, vr: 30, t: 0, life: 0.2, color: PAL.steel }); break;
         case 'mobHeal': burst(hx + d.x, GY - 16, 8, [PAL.green, PAL.white], { speed: 30, g: -60 }); break;
         case 'arcane': rings.push({ x: hx + d.x, y: GY - 14, r: 6, vr: 220, t: 0, life: 0.45, color: PAL.magenta }); st.shake = Math.min(1, st.shake + 0.4); break;
-        case 'rift': st.shake = 1; st.flash = 0.8; st.flashColor = PAL.magenta; rings.push({ x: hx, y: GY - 10, r: 30, vr: -60, t: 0, life: 0.4, color: PAL.magenta }); break;
-        case 'darkbeam': beams.push({ x: hx + 40, r: 6, t: 0, life: 1.6 }); zaps.push({ x0: hx + d.x - 20, y0: GY - 40, x1: hx + 4, y1: GY - 12, t: 0, life: 1.4, color: PAL.magenta, seed: 7 }); break;
-        case 'bolt': bolts.push({ x: hx + 2, y: GY - 6, t: 0, life: 0.4, seed: (Math.random() * 1e9) | 0, color: PAL.cyan }); st.flash = 0.7; st.flashColor = PAL.cyan; break;
+        case 'rift': st.shake = 1; st.flash = 0.8; st.flashColor = PAL.magenta; rings.push({ x: fx0 - 22, y: GY - 10, r: 40, vr: -60, t: 0, life: 0.4, color: PAL.magenta }); break;
+        case 'darkbeam': if (d.h) { beams.push({ x: at(d.h) + 20, r: 6, t: 0, life: 1.6 }); zaps.push({ x0: hx + d.m.x - 20, y0: GY - 40, x1: at(d.h) + 4, y1: GY - 12, t: 0, life: 1.4, color: PAL.magenta, seed: 7 }); } break;
+        case 'bolt': if (d) { bolts.push({ x: at(d) + 2, y: GY - 6, t: 0, life: 0.4, seed: (Math.random() * 1e9) | 0, color: PAL.cyan }); st.flash = 0.7; st.flashColor = PAL.cyan; } break;
         case 'meteor': meteors.push({ x: hx + d.x, t: 0, delay: d.delay }); break;
         case 'meteorHit': rings.push({ x: hx + d.x, y: GY - 2, r: 4, vr: 120, t: 0, life: 0.3, color: PAL.orange, flat: true }); burst(hx + d.x, GY - 4, 16, [PAL.yellow, PAL.orange, PAL.red], { speed: 120, dir: -Math.PI / 2, spread: 2 }); st.shake = Math.min(1, st.shake + 0.35); Sound.play('boom'); break;
-        case 'bastion': rings.push({ x: hx, y: GY - 12, r: 6, vr: 40, t: 0, life: 0.5, color: PAL.cyan }); break;
-        case 'nova': { const c1 = d && d.color === 'ice' ? PAL.cyan : d && d.color === 'holy' ? PAL.cream : PAL.green; rings.push({ x: hx, y: GY - 10, r: 6, vr: 260, t: 0, life: 0.45, color: c1, thorn: true }); rings.push({ x: hx, y: GY - 10, r: 2, vr: 180, t: 0, life: 0.45, color: PAL.white, thorn: true }); st.shake = Math.min(1, st.shake + 0.3); break; }
-        case 'gale': for (let i = 0; i < 6; i++) parts.push({ x: hx - 10 - i * 4, y: GY - 8 - i * 3, vx: -80, vy: 0, g: 0, life: 0.4, max: 0.4, c: PAL.cyan, sz: 1, ground: false }); break;
-        case 'soul': burst(hx + d.x, GY - 14, 14, [PAL.magenta, PAL.pink, PAL.plum], { speed: 90 }); for (let i = 0; i < 8; i++) parts.push({ x: hx + d.x, y: GY - 14, vx: -(hx + d.x - hx) * 2 * (0.6 + Math.random() * 0.6), vy: -40 + Math.random() * 30, g: 40, life: 0.5, max: 0.5, c: PAL.pink, sz: 2, ground: false }); break;
-        case 'snare': case 'snap': burst(hx + (d ? d.x : 40), GY - 2, 8, [PAL.steel, PAL.white], { speed: 60, dir: -Math.PI / 2, spread: 1.6 }); if (kind === 'snap') Sound.play('snap'); break;
-        case 'storm': for (let i = 0; i < 10; i++) coinBurst(hx + 20, GY - 30, 1, hx, GY); break;
-        case 'execute': arcs.push({ x: hx + d.x - 6, y: GY - 20, t: 0, life: 0.3, r: 4, big: true }); st.flash = 0.5; st.flashColor = PAL.red; st.shake = Math.min(1, st.shake + 0.5); break;
-        case 'stab': burst(hx + d.x, GY - 12, 3, [PAL.white, PAL.cyan], { speed: 90, dir: 0, spread: 0.6 }); Sound.play('stab'); break;
+        case 'gale': for (let i = 0; i < 6; i++) parts.push({ x: at(d) - 10 - i * 4, y: GY - 8 - i * 3, vx: -80, vy: 0, g: 0, life: 0.4, max: 0.4, c: PAL.cyan, sz: 1, ground: false }); break;
+        case 'snare': case 'snap': burst(hx + (d ? d.x : 40), GY - 2, 8, [PAL.steel, PAL.yellow], { speed: 60, dir: -Math.PI / 2, spread: 1.6 }); if (kind === 'snap') { rings.push({ x: hx + d.x, y: GY - 4, r: 3, vr: 90, t: 0, life: 0.25, color: PAL.yellow }); Sound.play('snap'); } break;
+        case 'execute': arcs.push({ x: hx + d.x - 6, y: GY - 20, t: 0, life: 0.3, r: 4, big: true }); st.shake = Math.min(1, st.shake + 0.3); break;
         case 'pierce': burst(hx + d.x + 12, GY - 12, 6, [PAL.white, PAL.cyan], { speed: 160, dir: 0, spread: 0.3 }); break;
         case 'crush': st.shake = Math.min(1, st.shake + 0.4); rings.push({ x: hx + d.x, y: GY - 12, r: 4, vr: 90, t: 0, life: 0.25, color: PAL.red }); break;
-        case 'stun': rings.push({ x: hx + d.x, y: GY - 30, r: 4, vr: 16, t: 0, life: 0.4, color: PAL.yellow, flat: true }); break;
         case 'ember': rings.push({ x: hx + d.x, y: GY - 10, r: 4, vr: 160, t: 0, life: 0.35, color: PAL.orange }); burst(hx + d.x, GY - 10, 14, [PAL.yellow, PAL.orange, PAL.rust], { speed: 120 }); break;
-        case 'slam': case 'dive': case 'spike': st.shake = 1; burst(hx + 6, GY, 18, [PAL.tan, PAL.brown, PAL.white], { speed: 130, dir: -Math.PI / 2, spread: 2 }); break;
-        case 'erupt': break;
-        case 'roots': case 'web': burst(hx, GY - 4, 10, kind === 'web' ? [PAL.white, PAL.mist] : [PAL.leaf, PAL.bark], { speed: 50 }); break;
+        case 'slam': case 'spike': st.shake = 1; burst(fx0 + 6, GY, 18, [PAL.tan, PAL.brown, PAL.white], { speed: 130, dir: -Math.PI / 2, spread: 2 }); break;
+        case 'dive': st.shake = 1; burst(d ? at(d) : fx0, GY, 18, [PAL.tan, PAL.yellow, PAL.white], { speed: 130, dir: -Math.PI / 2, spread: 2 }); break;
+        case 'roots': case 'web': for (const h of b.living()) burst(at(h), GY - 4, 8, kind === 'web' ? [PAL.white, PAL.mist] : [PAL.leaf, PAL.bark], { speed: 50 }); break;
         case 'howl': rings.push({ x: hx + d.x, y: GY - 24, r: 6, vr: 200, t: 0, life: 0.5, color: PAL.cyan }); Sound.play('howl'); break;
-        case 'curse': rings.push({ x: hx, y: GY - 14, r: 20, vr: -40, t: 0, life: 0.4, color: PAL.magenta }); break;
+        case 'curse': rings.push({ x: fx0 - 22, y: GY - 14, r: 30, vr: -40, t: 0, life: 0.4, color: PAL.magenta }); break;
         case 'harden': rings.push({ x: hx + d.x, y: GY - 24, r: 30, vr: -60, t: 0, life: 0.4, color: PAL.orange }); break;
         case 'drain': burst(hx + d.x, GY - 30, 10, [PAL.green, PAL.yellow], { speed: 40, g: -40 }); break;
         case 'summon': burst(hx + d.x, GY - 20, 16, [PAL.magenta, PAL.pink], { speed: 100 }); break;
       }
     });
-    ev.on('telegraph', (m, k) => { rings.push({ x: view.hx + m.x, y: GY - 2, r: 30, vr: -40, t: 0, life: 0.6, color: PAL.red, flat: true }); Sound.play('warn'); });
+    ev.on('telegraph', m => { rings.push({ x: view.hx + m.x, y: GY - 2, r: 30, vr: -40, t: 0, life: 0.6, color: PAL.red, flat: true }); Sound.play('warn'); });
     ev.on('bossIntro', (m, bounty) => { st.poster = { m, bounty, t: 0, leaving: false }; Sound.play('boss'); });
     ev.on('bossStart', () => { if (st.poster) { st.poster.leaving = true; st.poster.t = 0; } });
-    ev.on('bossKill', (m, time) => { banner('悬赏完成', { sub: `${m.d.name} · ${time.toFixed(1)} 秒`, color: PAL.yellow }); Sound.play('fanfare'); });
-    ev.on('bossFail', reason => { st.poster = null; banner(reason === 'time' ? '悬赏超时' : '狩猎失败', { sub: b.mode.kind === 'main' ? '退回第 9 关刷关，变强了再来' : '', color: PAL.red }); Sound.play('fail'); });
+    ev.on('bossKill', (m, time) => {
+      if (m.bossKind === 'act') { banner('悬赏完成', { sub: `${m.d.name} · ${time.toFixed(1)} 秒`, color: PAL.yellow }); Sound.play('fanfare'); }
+      else banner('关卡首领倒下', { sub: m.d.name, color: PAL.amber, life: 1.6 });
+    });
+    ev.on('bossFail', reason => { st.poster = null; banner(reason === 'time' ? '悬赏超时' : '狩猎失败', { sub: '退回第 9 关刷关，变强了再来', color: PAL.red }); Sound.play('fail'); });
+    ev.on('stall', () => banner('久攻不下', { sub: '整队后重新挑战这一关', color: PAL.orange, life: 1.8 }));
     // boss stages are announced by the WANTED poster instead
-    ev.on('stage', (d, a, s) => { if (b.mode.kind !== 'main' || s === STAGES) return; banner(`${DIFFS[d].name} ${a}-${s}`, { sub: s === 1 ? '进入 ' + ACTS[a - 1].name : ACTS[a - 1].name, color: PAL.cream, life: 1.6 }); });
-    ev.on('record', (d, a, s) => { if (s === STAGES) banner(`${ACTS[a - 1].name}通关`, { sub: a === ACT_COUNT ? `${DIFFS[d].name}难度全部通关` :'下一个地域开放了', color: PAL.yellow, life: 2.4 }); });
-    ev.on('down', () => { banner('猎人倒下了', { color: PAL.red, life: 1.6 }); Sound.play('down'); });
-    ev.on('revive', () => { st.flash = 1; st.flashColor = PAL.yellow; banner('不灭', { color: PAL.yellow, life: 1.2 }); });
-    ev.on('undying', () => { st.flash = 0.8; st.flashColor = PAL.amber; banner('不屈', { color: PAL.amber, life: 1.2 }); });
+    ev.on('stage', (d, a, s) => { if (s === STAGES) return; banner(`${DIFFS[d].name} ${a}-${s}`, { sub: stageDef(a, s).name + (s === 1 ? ' · ' + ACTS[a - 1].name : ''), color: PAL.cream, life: 1.6 }); });
+    ev.on('record', (d, a, s) => { if (s === STAGES) banner(`第 ${a} 幕通关`, { sub: a === ACT_COUNT ? `${DIFFS[d].name}难度全部通关` : `${ACTS[a].name}开放了`, color: PAL.yellow, life: 2.4 }); });
+    ev.on('down', h => { banner(`${nameOf(h)}倒下了`, { sub: b.living().length ? '下一波开始时归队' : '', color: PAL.red, life: 1.4 }); Sound.play('down'); });
+    ev.on('wipe', () => banner('全队倒下', { sub: '重整旗鼓', color: PAL.red, life: 1.6 }));
+    ev.on('revive', (h, why) => { if (why) { st.flash = 0.6; st.flashColor = PAL.yellow; banner(why === 'rez' ? '复活术' : '涅槃', { sub: nameOf(h) + '回到战斗', color: PAL.yellow, life: 1.2 }); } burst(hxOf(h), GY - 12, 10, [PAL.yellow, PAL.white], { speed: 50, g: -40 }); });
+    ev.on('undying', h => { st.flash = 0.8; st.flashColor = PAL.amber; banner('不屈', { sub: nameOf(h), color: PAL.amber, life: 1.2 }); });
     ev.on('autoRetry', () => banner('重整旗鼓', { sub: '重新向前推进', color: PAL.magenta, life: 1.6 }));
     ev.on('retreat', () => banner('暂避锋芒', { sub: '退回上一关刷装备', color: PAL.orange, life: 1.8 }));
-    ev.on('modeStart', k => banner(MODES[k].name, { color: PAL.yellow, life: 1.6 }));
-    ev.on('elite', () => {});
   }
   function tickPending(dt) { for (const p of st.pending) { p.t -= dt; if (p.t <= 0) p.fn(); } filt(st.pending, p => p.t > 0); }
   function clear() { for (const l of [parts, nums, coins, beams, arcs, rings, bolts, meteors, banners, sparks, icons, chests, zaps, rains]) l.length = 0; st.poster = null; st.pending.length = 0; }

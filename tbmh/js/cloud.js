@@ -1,28 +1,31 @@
 'use strict';
 // =====================================================================
-//  CLOUD — GAME.INC.RE account sync for TBMH. Guests keep tbmh_save_v2;
-//  a signed-in hunter keeps an account cache { name, rev, dirty, data }
+//  CLOUD — GAME.INC.RE account sync for TBMH. Guests keep tbmh_save_v3;
+//  a signed-in player keeps an account cache { name, rev, dirty, data }
 //  that the hub can see and flush. Conflicts keep the deeper progress.
 // =====================================================================
-const GUEST_KEY = 'tbmh_save_v2', GUEST_KEY_V1 = 'tbmh_save_v1';
+const GUEST_KEY = 'tbmh_save_v3', GUEST_KEY_V2 = 'tbmh_save_v2', GUEST_KEY_V1 = 'tbmh_save_v1';
 const Cloud = (() => {
   // GameAccount is a top-level const in hub/account-core.js, not a window property
   const C = typeof GameAccount !== 'undefined' ? GameAccount : null;
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
   const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, pulled: false, file: !C || C.file };
-  // deeper progress wins a conflict: stages cleared across difficulties, then hunter level, then play time
+  // deeper progress wins a conflict: stages cleared across difficulties, then the best hero level, then play time;
+  // a second-edition save counts by its own scale (90 stages per difficulty) so it is never preferred over a third-edition one
   const score = d => {
     if (!d) return -1;
-    if (d.v !== SAVE_VERSION) return (d.stats?.play || 0) / 3600 / 1e6;
+    const play = (d.stats?.play || 0) / 3600;
+    if (d.v !== SAVE_VERSION) return d.v === 2 && Array.isArray(d.prog?.best) ? d.prog.best.reduce((a, x) => a + (+x || 0), 0) / 3 * 1e6 * 0.999 + play : play / 1e6;
     const best = Array.isArray(d.prog?.best) ? d.prog.best.reduce((a, x) => a + (+x || 0), 0) : 0;
-    return best * 1e6 + (d.hero?.lv || 0) * 1e3 + (d.stats?.play || 0) / 3600;
+    const lv = d.heroes && typeof d.heroes === 'object' ? Math.max(0, ...Object.values(d.heroes).map(h => +h?.lv || 0)) : 0;
+    return best * 1e6 + lv * 1e3 + play;
   };
   const cacheKey = name => C.cacheKey('tbmh', name);
 
-  // the save to start with: account cache when signed in, else the guest slot
-  // a first-edition guest save becomes the starting point of the new world once
-  const guest = () => read(GUEST_KEY) || read(GUEST_KEY_V1);
+  // the save to start with: account cache when signed in, else the guest slot;
+  // older editions become the starting point of the new world once
+  const guest = () => read(GUEST_KEY) || read(GUEST_KEY_V2) || read(GUEST_KEY_V1);
   function boot() {
     const profile = C && !A.file ? C.profile() : null;
     if (profile) {
@@ -155,5 +158,5 @@ const Cloud = (() => {
   const flush = () => { if (A.name && A.cache && A.cache.dirty && Game.ready) { Game.persist(); sync(true); } };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   window.addEventListener('pagehide', flush);
-  return { boot, persist, sync, syncNow, status, logout, openLogin, get file() { return A.file; }, get name() { return A.name; }, readGuest: () => read(GUEST_KEY) };
+  return { boot, persist, sync, syncNow, status, logout, openLogin, get file() { return A.file; }, get name() { return A.name; }, readGuest: () => read(GUEST_KEY) || read(GUEST_KEY_V2) };
 })();

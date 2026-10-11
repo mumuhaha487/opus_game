@@ -389,7 +389,7 @@ gggggggggGGg
 ..ggggggGg..
 ...gggggg...
 ....gggg....`], ICON);
-  VARIANTS.i_gem = { ruby: { g: RAMP.red }, sapphire: { g: RAMP.blue }, topaz: { g: RAMP.gold }, emerald: { g: RAMP.green }, amethyst: { g: RAMP.purple } };
+  VARIANTS.i_gem = { red: { g: RAMP.red }, blue: { g: RAMP.blue }, gold: { g: RAMP.gold }, green: { g: RAMP.green }, purple: { g: RAMP.purple } };
   const PART_SHAPES = {
     part_fang: `
 ..........aa
@@ -462,21 +462,9 @@ aaa.........
 ..........aa`,
   };
   for (const k in PART_SHAPES) def(k, { a: RAMP.bone, W: P.white }, [PART_SHAPES[k]], ICON);
-  // which shape and ramp each monster family's part uses
-  const PART_LOOK = {
-    p_slime: ['part_goo', RAMP.green], p_rabbit: ['part_fang', RAMP.bone], p_insect: ['part_hide', RAMP.gold], p_goblin: ['part_hide', RAMP.green],
-    p_shroom: ['part_goo', RAMP.red], p_bat: ['part_wing', RAMP.purple], p_plant: ['part_goo', RAMP.moss], p_spider: ['part_wing', RAMP.cloud],
-    p_fox: ['part_core', RAMP.fire], p_troll: ['part_fang', RAMP.bone], p_scorpion: ['part_fang', RAMP.fire], p_snake: ['part_hide', RAMP.teal],
-    p_mummy: ['part_hide', RAMP.bone], p_rat: ['part_core', RAMP.ink], p_wolf: ['part_fang', RAMP.cloud], p_beast: ['part_hide', RAMP.cloud],
-    p_frost: ['part_core', RAMP.ice], p_skeleton: ['part_bone', RAMP.bone], p_penguin: ['part_wing', RAMP.navy], p_ghost: ['part_core', RAMP.ghost],
-    p_undead: ['part_fang', RAMP.moss], p_frog: ['part_goo', RAMP.moss], p_golem: ['part_core', RAMP.steel], p_mole: ['part_core', RAMP.gold],
-    p_crystal: ['part_core', RAMP.purple], p_demon: ['part_fang', RAMP.red], p_lizard: ['part_hide', RAMP.fire], p_flame: ['part_core', RAMP.lava],
-    p_worm: ['part_hide', RAMP.dark], p_bird: ['part_wing', RAMP.sand], p_sky: ['part_goo', RAMP.cloud], p_gargoyle: ['part_core', RAMP.red],
-    p_knight: ['part_hide', RAMP.silver], p_eye: ['part_core', RAMP.red], p_drake: ['part_bone', RAMP.bone], p_cult: ['part_hide', RAMP.purple],
-  };
+  // every engraving part names its shape and ramp in data.js (MATS partN_i: shape, ramp)
   for (const k in PART_SHAPES) VARIANTS[k] = {};
-  for (const id in PART_LOOK) VARIANTS[PART_LOOK[id][0]][id] = { a: PART_LOOK[id][1] };
-  ART.PART_LOOK = PART_LOOK;
+  if (typeof MATS !== 'undefined') for (const id in MATS) { const M = MATS[id]; if (M.kind === 'part') VARIANTS[M.shape][id] = { a: RAMP[M.ramp] || RAMP.bone }; }
   def('i_scroll', { p: RAMP.sand, k: P.bark, e: P.red }, [`
 ..pppppppp..
 .pPPPPPPPPp.
@@ -496,8 +484,14 @@ aaa.........
 aaaaaaaaaaaa
 AAAAAAAAAAAA
 AAAAAAAAAAAA`], ICON);
+  // ores by id: the four common materials, then two metals per grade
+  const ORE_RAMP = {
+    ore0_0: RAMP.wood, ore0_1: RAMP.steel, ore0_2: RAMP.brown, ore0_3: RAMP.fire, ore1_0: RAMP.sand, ore1_1: RAMP.navy, ore2_0: RAMP.silver, ore2_1: RAMP.gold,
+    ore3_0: RAMP.cloud, ore3_1: RAMP.ink, ore4_0: RAMP.red, ore4_1: RAMP.ice, ore5_0: RAMP.purple, ore5_1: RAMP.blue, ore6_0: RAMP.dark, ore6_1: RAMP.lava,
+    ore7_0: RAMP.bone, ore7_1: RAMP.gold, ore8_0: RAMP.ice, ore8_1: RAMP.teal, ore9_0: RAMP.green, ore9_1: RAMP.purple,
+  };
   VARIANTS.i_ore = {};
-  [RAMP.wood, RAMP.brown, RAMP.steel, RAMP.silver, RAMP.gold, RAMP.ice, RAMP.cloud, RAMP.purple, RAMP.fire, RAMP.teal].forEach((r, i) => (VARIANTS.i_ore[i] = { a: r }));
+  for (const id in ORE_RAMP) VARIANTS.i_ore[id] = { a: ORE_RAMP[id] };
   def('i_chaos', { c: RAMP.purple, W: P.white }, [`
 .....c......
 ....ccc.....
@@ -561,7 +555,8 @@ pPPPPPPPPPPp`], ICON);
 .mwwwwwwwwwwwwm.
 .mwwwwwwwwwwwwm.
 .mmmmmmmmmmmmmm.`], { ox: 8, oy: 11 });
-  VARIANTS.chest = { 0: { w: RAMP.wood, m: RAMP.steel, g: P.amber }, 1: { w: RAMP.red, m: RAMP.silver, g: P.yellow }, 2: { w: RAMP.purple, m: RAMP.gold, g: P.cyan } };
+  // TBH's three chests: white (monsters), blue (stage bosses), red (act bosses)
+  VARIANTS.chest = { 0: { w: RAMP.bone, m: RAMP.steel, g: P.amber }, 1: { w: RAMP.blue, m: RAMP.silver, g: P.yellow }, 2: { w: RAMP.red, m: RAMP.gold, g: P.cyan } };
 
   // ---------------- skill icons (16 px) ----------------
   const SK = (name, pal, art) => def(name, pal, [art], ICON);
@@ -1015,6 +1010,16 @@ bbbbbbbbp
 bbbbbbbbp
 bbbbbbbbp
 .ppppppp.`], ICON);
+  def('i_party', { a: RAMP.skin, b: RAMP.red, c: RAMP.blue, d: RAMP.gold }, [`
+....a....
+.a.aaa.a.
+aaa.a.aaa
+.a.bbb.a.
+ccc.b.ddd
+ccc.b.ddd
+.c.b.b.d.
+.........
+.........`], ICON);
   def('i_pet', { p: RAMP.brown }, [`
 .p.....p.
 ppp...ppp
@@ -1045,6 +1050,7 @@ wwwwgwwww
 mwwwwwwwm
 mmmmmmmmm
 .........`], ICON);
+  VARIANTS.i_chest = { 0: { w: RAMP.bone }, 1: { w: RAMP.blue }, 2: { w: RAMP.red, g: P.yellow } };
   def('i_bag', { b: RAMP.brown, s: P.bark }, [`
 ...bbb...
 ....s....
@@ -1077,6 +1083,16 @@ ppppppppp`], ICON);
 .....yggggy...
 ....ggggggggg.
 ...ggggggggggg`], { ox: 7, oy: 8 });
+  // the hunter's crossbow turret on its tripod
+  def('turret', { w: RAMP.wood, m: RAMP.steel, r: P.red, y: P.yellow }, [`
+...........m
+.mmmmmmmmmmm
+wwwwwwwyrww.
+..wwwwwwww..
+.....mm.....
+....w..w....
+...w....w...
+..w......w..`], { ox: 6, oy: 7 });
   // ---------------- projectiles (pointing right) ----------------
   def('p_arrow', { f: P.red, s: P.cream, m: RAMP.silver }, [`
 f........
@@ -1091,7 +1107,7 @@ ffsssssmmm
 oWWo
 oWWo
 .oo.`], { ox: 2, oy: 2 });
-  VARIANTS.p_magic = { fire: { o: P.orange }, ice: { o: P.cyan }, light: { o: P.yellow }, poison: { o: P.green }, holy: { o: P.cream }, phys: { o: P.mist } };
+  VARIANTS.p_magic = { fire: { o: P.orange }, cold: { o: P.cyan }, lightning: { o: P.yellow }, chaos: { o: P.magenta }, phys: { o: P.mist } };
   def('p_hatchet', { m: RAMP.silver, b: RAMP.wood }, [`
 .mm..
 mmmb.

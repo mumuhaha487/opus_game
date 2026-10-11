@@ -20,16 +20,14 @@ function Monitor(clock) {
 
 const Game = (() => {
   let s = null, b = null, t = 0, ready = false, simT = 0;
-  const G = { tab: 'gear', dialog: null, toast: null, monitor: Monitor(() => simT), mini: false, badge: {} };
+  const G = { tab: 'party', dialog: null, toast: null, monitor: Monitor(() => simT), mini: false, badge: {} };
   const canvas = document.getElementById('screen');
   const buf = mkCanvas(640, 360), bctx = buf.getContext('2d');
   let scr = canvas.getContext('2d', { alpha: false });
-  let L = null, lastWall = Date.now(), lastSave = Date.now(), pipWin = null, muteMem = null, lastFull = 0;
+  let L = null, lastWall = Date.now(), lastSave = Date.now(), pipWin = null, muteMem = null, lastFull = 0, lastLost = 0;
 
   // ---------- save ----------
   function persist() { if (!s) return; s.t = Date.now(); Cloud.persist(s); lastSave = Date.now(); }
-  const S = () => b.S;
-  const power = () => powerNow(s, b.S);
   function say(text, color = PAL.cream) { G.toast = { text, color, life: 2.6 }; }
 
   // swap in a different save (cloud, account switch, import, reset)
@@ -39,6 +37,7 @@ const Game = (() => {
     newBattle();
     if (reason === 'cloud') say('已载入云端进度', PAL.green);
     if (rep && s.flags.chose) G.dialog = offlineDialog(rep);
+    else if (s.flags.chose) upgradeNotice();
     persist();
   }
   function newBattle() {
@@ -49,82 +48,83 @@ const Game = (() => {
   }
   function applyOpts() { FX.opts = { shake: s.opts.shake, nums: s.opts.nums, fx: s.opts.fx }; Sound.setVolume(s.opts.sfx, s.opts.music); }
 
-  // ---------- offline: replay the current stage headless, then pay out by the hour ----------
+  // ---------- offline (TBH): only with the 安眠 rune, up to 8 hours, gold and experience ----------
   function settleOffline(show) {
     const gap = (Date.now() - (s.t || Date.now())) / 1000;
     if (gap < 60) return null;
-    const S0 = computeStats(s), secs = Math.min(gap, S0.offlineH * 3600), eff = S0.offlineGain;
+    const A = acctStats(s);
+    if (!A.offline) { s.t = Date.now(); return null; }
+    const secs = Math.min(gap, OFFLINE_H * 3600);
     const r = measureRates(s, 90);
-    const gold = r.gold * secs * eff, exp = r.exp * secs * eff, kills = Math.floor(r.kills * secs * eff);
-    const lv0 = s.hero.lv, items0 = s.stats.items, tray0 = s.tray.length;
+    const gold = r.gold * secs * OFFLINE_RATE * (1 + A.offGold), exp = r.exp * secs * OFFLINE_RATE * (1 + A.offExp);
+    const kills = Math.floor(r.kills * secs * OFFLINE_RATE);
+    const lv0 = {};
+    for (const cls of partyList(s)) lv0[cls] = s.heroes[cls].lv;
     s.gold += gold; s.stats.gold += gold; s.stats.kills += kills; s.stats.play += secs;
-    gainExp(s, exp, null);
-    // chests: each kind by its rate; the tray and auto-open runes decide what is kept
-    const where = { d: r.d, a: r.a, L: stageLevel(r.d, r.a, r.s) };
-    const got = [0, 0, 0];
-    let lost = 0, lostGold = 0;
-    r.chests.forEach((rate, k) => {
-      const n = Math.min(300, Math.floor(rate * secs * eff));
-      for (let i = 0; i < n; i++) {
-        if (Loot.addChest(s, { k, d: where.d, L: where.L, a: where.a }, null, S0)) got[k]++;
-        else { lost++; lostGold += CHESTS[k].gold * CURVE.gold(where.L) * DIFFS[where.d].gold * S0.gold; }
-      }
-    });
-    // chests that did not fit in the tray still bring back their gold
-    s.gold += lostGold; s.stats.gold += lostGold;
+    const L0 = stageLevel(r.d, r.a, r.s);
+    // the measured party experience is per hero already
+    for (const cls of partyList(s)) gainExp(s, cls, exp * expPenalty(s.heroes[cls].lv, L0), null);
     checkPets(s, null); checkAch(s, null);
-    const rep = { gap, secs, gold: gold + lostGold, exp, kills, got, lost, items: s.stats.items - items0, tray: s.tray.length - tray0, lv: s.hero.lv - lv0, capped: gap > secs, capH: S0.offlineH, eff };
+    const ups = partyList(s).map(cls => [cls, s.heroes[cls].lv - lv0[cls]]).filter(([, n]) => n > 0);
+    const rep = { gap, secs, gold, exp, kills, ups, capped: gap > secs };
     s.t = Date.now();
     if (show) G.dialog = offlineDialog(rep);
     return rep;
   }
   function offlineDialog(r) {
     const lines = [
-      { text: `离开了 ${fmtTime(r.gap)}${r.capped ? `（按上限 ${r.capH} 小时结算）` : ''} · 离线收益 ${pct(r.eff)}`, color: PAL.steel },
-      { text: `金币 +${fmt(r.gold)} · 经验 +${fmt(r.exp)}`, color: PAL.yellow },
-      { text: `击杀 ${fmt(r.kills)}${r.lv ? ` · 升了 ${r.lv} 级` : ''}`, color: PAL.cream },
-      { text: `宝箱 ${CHESTS.map((C, k) => r.got[k] ? `${C.name} ${r.got[k]}` : '').filter(Boolean).join(' · ') || '无'}`, color: PAL.amber },
+      { text: `离开了 ${fmtTime(r.gap)}${r.capped ? `（按上限 ${OFFLINE_H} 小时结算）` : ''} · 离线收益 ${pct(OFFLINE_RATE)}`, color: PAL.steel },
+      { text: `金币 +${fmt(r.gold)} · 每名英雄经验 +${fmt(r.exp)}`, color: PAL.yellow },
+      { text: `击杀 ${fmt(r.kills)}`, color: PAL.cream },
     ];
-    if (r.items) lines.push({ text: `自动开箱得到 ${r.items} 件装备`, color: PAL.cyan });
-    if (r.lost) lines.push({ text: `托盘满了，另有 ${r.lost} 个宝箱只带回了里面的金币`, color: PAL.amber });
-    return { title: '离线收益', lines, buttons: [{ label: '收下', kind: 'gold', fn: () => { G.dialog = null; Sound.play('fanfare'); } }] };
+    for (const [cls, n] of r.ups) lines.push({ text: `${CLASSES[cls].hero}升了 ${n} 级`, color: PAL.cyan });
+    lines.push({ text: '宝箱只在在线狩猎时掉落', color: PAL.slate });
+    return { title: '离线收益', lines, buttons: [{ label: '收下', kind: 'gold', fn: () => { G.dialog = null; Sound.play('fanfare'); upgradeNotice(); } }] };
+  }
+  // the second-edition hunter arrives in the third edition
+  function upgradeNotice() {
+    if (!s.flags.v2 || s.flags.v3seen) return;
+    s.flags.v3seen = 1;
+    const cls = partyList(s)[0];
+    G.dialog = {
+      title: '悬赏怪物猎人 3.0', w: 320,
+      lines: [
+        { text: '世界改成 3 幕 × 10 关 × 4 难度，每关结尾都有首领；最多 3 名英雄组队出战。', color: PAL.cream },
+        { text: `你的猎人以${CLASSES[cls].name}${CLASSES[cls].hero}的身份带着等级、装备和金币加入。`, color: PAL.green },
+        { text: s.flags.refund ? '原来的符文按花费全数退回成金币；装备插槽清空，宝石等材料换算到新的材料表。' : '装备插槽清空，宝石等材料换算到新的材料表。', color: PAL.steel },
+      ],
+      buttons: [{ label: '出发', kind: 'gold', fn: () => { G.dialog = null; } }],
+    };
   }
 
-  // ---------- event hooks: monitor, bounty board, red dots, autosave ----------
+  // ---------- event hooks: monitor, red dots, autosave ----------
   function attachHooks() {
     const ev = b.ev;
-    ev.on('kill', m => {
-      G.monitor.kill();
-      if (b.mode.kind === 'mine') return;
-      Board.progress(s, 'hunt', m.type);
-      if (m.elite) Board.progress(s, 'elite');
-      if (m.champ) Board.progress(s, 'champ');
-    });
+    ev.on('kill', () => G.monitor.kill());
     ev.on('gold', g => G.monitor.gold(g));
     ev.on('exp', x => G.monitor.exp(x));
     ev.on('chestDrop', () => G.monitor.chest());
-    ev.on('crit', () => Board.progress(s, 'crit'));
-    ev.on('bossKill', () => { Board.progress(s, 'boss'); persist(); });
-    ev.on('open', res => { Board.progress(s, 'open', null, res.n || 1); if (res.items.some(x => x.kept && Loot.isUpgrade(s, x.it))) G.badge.gear = true; });
-    ev.on('alch', (it, g, why) => { Board.progress(s, 'alch'); if (why === 'full' && Date.now() - lastFull > 20000) { lastFull = Date.now(); say('背包满了，新装备自动炼成金币', PAL.amber); } });
-    ev.on('trayFull', () => { if (Date.now() - lastFull > 20000) { lastFull = Date.now(); say('宝箱托盘满了，打开一些吧', PAL.red); } });
-    ev.on('stageClear', () => Board.progress(s, 'stage'));
+    ev.on('bossKill', m => { if (m.bossKind === 'act') persist(); });
+    ev.on('alch', (it, g, why) => { if (why === 'full' && Date.now() - lastFull > 20000) { lastFull = Date.now(); say('背包满了，新装备自动炼成金币', PAL.amber); } });
+    ev.on('chestLost', ch => { if (Date.now() - lastLost > 20000) { lastLost = Date.now(); say(`${CHESTS[ch.k].name}装满了，新掉落的会丢失`, PAL.red); } });
     ev.on('levelUp', () => { if (!s.opts.autoSkill) G.badge.skill = true; });
-    ev.on('record', (d, a, st) => { if (st === STAGES) persist(); for (const k in MODES) if (MODES[k].unlock[0] === d && stageIndex(MODES[k].unlock[1], MODES[k].unlock[2]) + 1 === s.prog.best[d]) say(`${MODES[k].name}开放了`, PAL.amber); });
-    ev.on('modeEnd', res => { modeResult(res); persist(); });
+    ev.on('record', (d, a, st) => { if (st === STAGES) persist(); });
+    ev.on('heroUnlock', () => { G.badge.party = true; persist(); });
   }
 
   // ---------- actions ----------
   const after = sound => { b.recalc(); persist(); if (sound) Sound.play(sound); };
   const sel = () => Panels.UI_ST.gear;
-  function equip(u) { if (Loot.equip(s, u)) { sel().sel = null; after('equip'); } }
-  function unequip(slot) { if (Loot.unequip(s, slot)) after('equip'); }
-  function autoEquip() { const n = Loot.autoEquip(s); after(n ? 'equip' : 'nope'); say(n ? `换上了 ${n} 件更强的装备` : '身上已经是最强的组合', n ? PAL.green : PAL.steel); }
+  const findItem = u => { const it = s.inv.find(x => x.u === u); if (it) return it; for (const cls in s.heroes) for (const slot of SLOTS) { const e = s.heroes[cls].eq[slot]; if (e && e.u === u) return e; } return null; };
+  function selectHero(cls) { if (s.heroes[cls]) Panels.UI_ST.hero = cls; }
+  function equip(cls, u) { if (Loot.equip(s, cls, u)) { sel().sel = null; after('equip'); } }
+  function unequip(cls, slot) { if (Loot.unequip(s, cls, slot)) after('equip'); }
+  function autoEquip(cls) { const n = Loot.autoEquip(s, cls); after(n ? 'equip' : 'nope'); say(n ? `${CLASSES[cls].hero}换上了 ${n} 件更强的装备` : '身上已经是最强的组合', n ? PAL.green : PAL.steel); }
   function sortInv() { s.inv.sort((a, c) => c.g - a.g || c.l - a.l || SLOTS.indexOf(TYPES[a.t].slot) - SLOTS.indexOf(TYPES[c.t].slot)); Sound.play('click'); }
-  function alchOne(u) { const i = s.inv.findIndex(x => x.u === u); if (i < 0) return; const it = s.inv.splice(i, 1)[0]; const g = Loot.alch(s, it, b.ev, b.S); sel().sel = null; say(`炼成 ${fmt(g)} 金币`, PAL.yellow); after('salvage'); }
+  function alchOne(u) { const i = s.inv.findIndex(x => x.u === u); if (i < 0) return; const it = s.inv.splice(i, 1)[0]; const g = Loot.alch(s, it, b.ev); sel().sel = null; say(`炼成 ${fmt(g)} 金币`, PAL.yellow); after('salvage'); }
   function alchFiltered() {
-    const grades = Panels.UI_ST.cube.grades, S0 = b.S;
-    const r = Loot.alchMany(s, it => grades[it.g] && !(s.keepUp && Loot.isUpgrade(s, it, S0)), b.ev);
+    const grades = Panels.UI_ST.cube.grades;
+    const r = Loot.alchMany(s, it => grades[it.g] && !(s.keepUp && Loot.isUpgrade(s, it)), b.ev);
     say(r.n ? `炼金 ${r.n} 件，得到 ${fmt(r.gold)} 金币` : '没有符合条件的装备', r.n ? PAL.yellow : PAL.steel);
     after(r.n ? 'salvage' : 'nope');
   }
@@ -135,49 +135,60 @@ const Game = (() => {
     const keep = [];
     for (const ch of s.tray.splice(0)) {
       if (!pred(ch) || res.n >= 200) { keep.push(ch); continue; }
-      const r = Loot.open(s, ch, null, b.S, b.rng);
+      const r = Loot.open(s, ch, null, b.rng, b.P);
       res.n++; res.gold += r.gold; res.items.push(...r.items);
       for (const id of r.mats) res.mats[id] = (res.mats[id] || 0) + 1;
     }
     s.tray.push(...keep);
     res.items.sort((a, c) => c.it.g - a.it.g);
-    if (res.n) { b.ev.emit('open', res); after('open'); } else Sound.play('nope');
+    if (res.n) { b.ev.emit('open', res); if (res.items.some(x => x.kept && Loot.isUpgrade(s, x.it))) G.badge.gear = true; after('open'); } else Sound.play('nope');
     return res.n ? res : null;
   }
   const openKind = k => openWhere(ch => ch.k === k);
   const openAll = () => openWhere(() => true);
-  function enhance(slot) { if (Loot.enhance(s, slot)) { after('forge'); FX.burst(View.v.hx, GY - 12, 12, [PAL.cyan, PAL.white, PAL.blue], { speed: 70 }); } else Sound.play('nope'); }
-  function synth(g, n) {
-    let made = 0, best = null;
-    for (let i = 0; i < n && Loot.synthOk(s, g); i++) { const it = Loot.synth(s, g, b.rng, b.ev); if (it) { made++; if (!best || it.g > best.g) best = it; } }
-    if (made) { say(`合成 ${made} 次${best.g > g + 1 ? '，跳了两级！' : ''}`, GRADES[best.g].color); after('forge'); } else Sound.play('nope');
+  function synth(g, r, n) {
+    let made = 0, best = null, stay = 0;
+    for (let i = 0; i < n && Loot.synthOk(s, g, r); i++) { const it = Loot.synth(s, g, r, b.rng, b.ev); if (it) { made++; if (it.g === g) stay++; if (!best || it.g > best.g) best = it; } }
+    if (made) { say(`合成 ${made} 次${best.g > g + 1 ? '，大成功！' : stay ? `，${stay} 次保持原品质` : ''}`, GRADES[best.g].color); after('forge'); } else Sound.play('nope');
   }
   function craft(type, tier) { const it = Loot.craft(s, type, tier, b.rng, b.ev); if (it) { say('制作出 ' + Loot.name(it), GRADES[it.g].color); after('forge'); } else Sound.play('nope'); }
-  function socket(slot, key, matId) { const it = s.eq[slot]; if (it && Loot.socket(s, it, key, matId, b.rng)) after('forge'); else Sound.play('nope'); }
-  function unsocket(slot, key, i) { const it = s.eq[slot]; if (it && Loot.unsocket(s, it, key, i)) after('salvage'); }
+  function socket(u, key, matId) { const it = findItem(u); if (it && Loot.socket(s, it, key, matId, b.rng)) after('forge'); else Sound.play('nope'); }
+  function unsocket(u, key, i) { const it = findItem(u); if (it && Loot.unsocket(s, it, key, i)) after('salvage'); else Sound.play('nope'); }
   function offer(g) { const it = Loot.offer(s, g, b.rng, b.ev); if (it) { say('供奉得到 ' + Loot.name(it), GRADES[it.g].color); after('fanfare'); } else Sound.play('nope'); }
-  function reroll(slot, i) { const it = s.eq[slot]; if (it && Loot.reroll(s, it, i, b.rng)) after('forge'); else Sound.play('nope'); }
   function runeBuy(id) {
     const n = RUNE[id], lv = s.runes[id] || 0, c = runeCost(n, lv);
     if (lv >= n.max || !runeOpen(s, n) || s.gold < c) { Sound.play('nope'); return; }
+    const size0 = partySize(s);
     s.gold -= c; s.runes[id] = lv + 1;
+    if (partySize(s) > size0) { say('队伍多了一个位置，去「队伍」页让新英雄上阵', PAL.yellow); G.badge.party = true; }
+    else if (RUNE_KINDS[n.kind].eff.skillSlot) { for (const cls in s.heroes) if (s.opts.autoSkill) Skills.auto(s, cls); say('每名英雄多了一个主动技能槽', PAL.yellow); }
     after('level');
   }
   const skillDo = fn => { fn(); after(); };
-  const skillRaise = id => skillDo(() => Skills.raise(s, id));
-  const skillLower = id => skillDo(() => Skills.lower(s, id));
-  const skillReset = () => { skillDo(() => Skills.reset(s)); say('技能点已全部退回', PAL.cyan); };
-  const skillAuto = () => skillDo(() => Skills.auto(s));
-  const skillSlot = (id, i) => skillDo(() => Skills.slot(s, id, i));
-  const skillUnslot = i => skillDo(() => Skills.unslot(s, i));
+  const skillRaise = (cls, id) => skillDo(() => Skills.raise(s, cls, id));
+  const skillLower = (cls, id) => skillDo(() => Skills.lower(s, cls, id));
+  const skillReset = cls => { skillDo(() => Skills.reset(s, cls)); say(`${CLASSES[cls].hero}的技能点已全部退回`, PAL.cyan); };
+  const skillAuto = cls => skillDo(() => Skills.auto(s, cls));
+  const skillSlot = (cls, id, i) => skillDo(() => Skills.slot(s, cls, id, i));
+  const skillUnslot = (cls, i) => skillDo(() => Skills.unslot(s, cls, i));
+  function partyDeploy(cls, i) {
+    const r = Party.deploy(s, cls, i);
+    if (r === 'cool') { say(`换人冷却还剩 ${clock(Party.coolLeft(s) / 1000)}`, PAL.amber); Sound.play('nope'); return; }
+    if (r !== 'ok') { Sound.play('nope'); return; }
+    Panels.UI_ST.hero = cls; G.badge.party = false;
+    after('fanfare');
+    say(`${CLASSES[cls].hero}加入了队伍`, PAL.green);
+  }
+  function partyRemove(i) { if (Party.remove(s, i)) after('tab'); }
+  function partyMove(i, dir) { if (Party.move(s, i, dir)) { Panels.UI_ST.party.slot = i + dir; after('tab'); } }
   function setFarm(v) {
-    if (b.mode.kind !== 'main' || s.prog.farm === v) return;
+    if (s.prog.farm === v) return;
     s.prog.farm = v; s.prog.auto = false; s.prog.clears = 0;
     Sound.play('tab');
     say(v ? '刷关：反复刷当前这一关' : '推进：清完一关自动前往下一关', v ? PAL.cyan : PAL.green);
   }
   function travel(d, a, st) {
-    if (!stageOpen(s, d, a, st) || b.mode.kind !== 'main') { Sound.play('nope'); return; }
+    if (!stageOpen(s, d, a, st)) { Sound.play('nope'); return; }
     s.prog.d = d; s.prog.a = a; s.prog.s = st; s.prog.fails = 0; s.prog.auto = false;
     s.prog.farm = stageCleared(s, d, a, st) && st !== STAGES ? s.prog.farm : false;
     newBattle(); persist(); Sound.play('tab');
@@ -185,91 +196,50 @@ const Game = (() => {
   }
   function setPet(id) { s.pets.cur = id; persist(); Sound.play('click'); }
   function askReset() {
-    G.dialog = { title: '清空进度', lines: [{ text: '所有进度、装备与符文都会清除，从普通 1-1 重新开始。', color: PAL.red }, { text: '这一步无法撤回。', color: PAL.cream }],
-      buttons: [{ label: '清空', kind: 'red', fn: () => { G.dialog = null; const keep = s.opts; s = newSave(); s.opts = keep; s.flags.chose = 1; newBattle(); persist(); say('进度已清空', PAL.red); } }, { label: '取消', fn: () => { G.dialog = null; } }] };
+    G.dialog = { title: '清空进度', lines: [{ text: '所有英雄、进度、装备与符文都会清除，从普通 1-1 重新开始。', color: PAL.red }, { text: '这一步无法撤回。', color: PAL.cream }],
+      buttons: [{ label: '清空', kind: 'red', fn: () => { const keep = s.opts; s = newSave(); s.opts = keep; newBattle(); persist(); G.dialog = chooseDialog(); say('进度已清空', PAL.red); } }, { label: '取消', fn: () => { G.dialog = null; } }] };
   }
 
-  // ---------- tickets and side modes ----------
-  function tickets(k) {
-    const tk = s.tickets[k], cap = ticketCap(s, k), per = MODES[k].regenH * 3600e3, now = Date.now();
-    if (tk.n >= cap) { tk.n = cap; tk.t = now; return { n: cap, next: 0 }; }
-    const got = Math.floor((now - tk.t) / per);
-    if (got > 0) { tk.n = Math.min(cap, tk.n + got); tk.t += got * per; if (tk.n >= cap) tk.t = now; }
-    return { n: tk.n, next: tk.n >= cap ? 0 : per - (now - tk.t) };
+  // ---------- the first hero ----------
+  function setStarter(cls) {
+    const keep = s.opts, play = s.stats.play, flags = s.flags;
+    s = newSave(Date.now(), cls); s.opts = keep; s.stats.play = play; s.flags = { ...flags, chose: 1 };
+    Panels.UI_ST.hero = cls;
+    newBattle(); persist();
   }
-  function spend(k) { const tk = tickets(k); if (tk.n <= 0) return false; if (s.tickets[k].n >= ticketCap(s, k)) s.tickets[k].t = Date.now(); s.tickets[k].n--; return true; }
-  function startMode(k) {
-    if (b.mode.kind !== 'main' || !modeOpen(s, k)) return;
-    if (k === 'trial') { G.dialog = trialDialog(); return; }
-    if (!spend(k)) { Sound.play('nope'); return; }
-    if (k === 'mine') b.startMine(); else b.startRush();
-    G.sheet = false;
-    persist();
-  }
-  function trialDialog() {
-    const sel = new Set(s.trial.sel);
-    return {
-      title: '突变试炼', w: 300, lines: [{ text: `${DIFFS[topDiff(s)].name}最前线强度，挑战 5 波和一个悬赏首领。勾选突变，每 50% 奖励多一个地域宝箱。`, color: PAL.steel }],
-      custom(ctx, x, y, w) {
-        MUTATOR_IDS.forEach((k, i) => {
-          const M = MUTATORS[k], cx = x + (i % 2) * (w / 2), cy = y + Math.floor(i / 2) * 16;
-          if (UI.checkbox('mut' + k, cx, cy, `${M.name} +${pct(M.bonus)}`, sel.has(k), { color: PAL.magenta, tip: M.text })) { if (sel.has(k)) sel.delete(k); else sel.add(k); }
-        });
-        const bonus = [...sel].reduce((a, k) => a + MUTATORS[k].bonus, 0);
-        Text.draw(ctx, `奖励 +${pct(bonus)} · 地域宝箱 ×${1 + Math.floor(bonus * 2)}`, x, y + 52, { color: PAL.yellow });
-        return 68;
-      },
-      buttons: [{ label: '开始', kind: 'gold', fn: () => { if (!spend('trial')) { Sound.play('nope'); return; } s.trial.sel = [...sel]; G.dialog = null; G.sheet = false; b.startTrial([...sel]); persist(); } }, { label: '取消', fn: () => { G.dialog = null; } }],
-    };
-  }
-  function leaveMode() { if (b.mode.kind === 'trial') b.endTrial(false); else if (b.mode.kind !== 'main') b.endMode(); }
-  function modeResult(res) {
-    let lines;
-    if (res.kind === 'mine') lines = [{ text: `采得 ${fmt(res.gold)} 金币`, color: PAL.yellow }];
-    else if (res.kind === 'rush') lines = [{ text: `击败了 ${res.n} 个悬赏首领`, color: PAL.cream }, { text: `首领宝箱 +${res.n}`, color: PAL.pink }];
-    else if (res.kind === 'trial') lines = res.win ? [{ text: '试炼通过', color: PAL.green }, { text: `地域宝箱 +${res.chests}`, color: PAL.amber }] : [{ text: `止步第 ${res.wave} 波`, color: PAL.red }];
-    else lines = [{ text: '已返回主线', color: PAL.cream }];
-    G.dialog = { title: MODES[res.kind] ? MODES[res.kind].name : '结算', lines, buttons: [{ label: '好', kind: 'gold', fn: () => { G.dialog = null; } }] };
-  }
-  function claim(i) { if (Board.claim(s, i, b.ev)) after('buy'); }
-
-  // ---------- hunter look ----------
-  const sex = () => (s && s.opts.hero === 'f' ? 'f' : 'm');
-  const heroName = () => (sex() === 'f' ? '希娅' : '洛恩');
-  function setSex(x) { s.opts.hero = x; s.flags.chose = 1; persist(); }
   function chooseDialog() {
     return {
-      title: '选择你的猎人', w: 312,
+      title: '选择第一名英雄', w: 360,
       custom(ctx, x, y, w) {
-        const big = L.H >= 300, ph = big ? 128 : 48;
-        const cards = [['m', '洛恩', '宽檐帽下目光如刀'], ['f', '希娅', '笑起来比赏金还亮']];
-        cards.forEach(([k, name, line], i) => {
-          const cx = x + i * (w / 2), cw = w / 2 - 4, chh = ph + 46;
-          const st = UI.hit('pick' + k, cx, y, cw, chh);
+        const big = L.H >= 300, ph = big ? 96 : 40, n = STARTERS.length;
+        STARTERS.forEach((cls, i) => {
+          const C = CLASSES[cls], cx = x + i * (w / n), cw = w / n - 4, chh = ph + 46;
+          const st = UI.hit('pick' + cls, cx, y, cw, chh);
           Frame.panel(ctx, cx, y, cw, chh, { fill: st.hover ? PAL.dusk : PAL.night });
           Frame.rarity(ctx, Math.round(cx + cw / 2 - ph / 2 - 2), y + 3, ph + 4, ph + 4, st.hover ? 4 : 3, t);
-          const img = big ? Portraits.full(k) : Portraits.face(k);
-          if (img) ctx.drawImage(img, Math.round(cx + cw / 2 - ph / 2), y + 5, ph, ph);
-          Text.draw(ctx, name, cx + cw / 2, y + ph + 11, { align: 'center', color: st.hover ? PAL.yellow : PAL.white });
-          Text.draw(ctx, line, cx + cw / 2, y + ph + 26, { align: 'center', color: PAL.steel });
-          if (st.click) { setSex(k); G.dialog = null; Sound.play('fanfare'); }
+          ctx.drawImage(big ? Portraits.full(cls) : Portraits.face(cls), Math.round(cx + cw / 2 - ph / 2), y + 5, ph, ph);
+          Text.draw(ctx, `${C.name} ${C.hero}`, cx + cw / 2, y + ph + 11, { align: 'center', color: st.hover ? PAL.yellow : PAL.white });
+          Text.draw(ctx, C.role, cx + cw / 2, y + ph + 26, { align: 'center', color: PAL.steel });
+          if (st.hover) UI.setTip([{ text: `${C.name} ${C.hero}`, color: PAL.amber }, C.line, `${TYPES[C.weapon].name} + ${TYPES[C.off].name}`]);
+          if (st.click) { setStarter(cls); G.dialog = null; Sound.play('fanfare'); }
         });
         return ph + 50;
       },
+      lines: [{ text: '牧师可以随时免费招募；更多英雄随着冒险加入', color: PAL.steel }],
       buttons: [],
     };
   }
   // the first save of a new account: bring the guest progress along?
   function firstAccountSave() {
     const guest = Cloud.readGuest();
-    const deep = guest && guest.v === SAVE_VERSION && (guest.prog?.best?.[0] || 0) >= 1;
-    if (!deep) return Promise.resolve();
+    const g = guest && (guest.v === SAVE_VERSION || guest.v === 2) ? normalizeSave(guest) : null;
+    if (!g || (g.prog.best[0] || 0) < 1) return Promise.resolve();
     return new Promise(res => {
       G.dialog = {
-        title: '带入本机进度', lines: [{ text: `这台设备上有猎人 ${guest.hero?.lv || 1} 级的游客进度。`, color: PAL.cream }, { text: '带入这个账号吗？', color: PAL.steel }],
+        title: '带入本机进度', lines: [{ text: `这台设备上有 ${maxHeroLv(g)} 级英雄的游客进度。`, color: PAL.cream }, { text: '带入这个账号吗？', color: PAL.steel }],
         buttons: [
-          { label: '带入', kind: 'gold', fn: () => { G.dialog = null; adopt(normalizeSave(guest), 'import'); res(); } },
-          { label: '从零开始', fn: () => { G.dialog = null; const o = s.opts; s = newSave(); s.opts = o; s.flags.chose = 1; newBattle(); res(); } },
+          { label: '带入', kind: 'gold', fn: () => { G.dialog = null; adopt(g, 'import'); res(); } },
+          { label: '从零开始', fn: () => { const o = s.opts; s = newSave(); s.opts = o; newBattle(); G.dialog = chooseDialog(); res(); } },
         ],
       };
     });
@@ -286,7 +256,8 @@ const Game = (() => {
       try {
         const data = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
         if (!data || typeof data !== 'object' || !data.v) throw new Error('bad');
-        adopt(normalizeSave(data), 'import'); say('存档已导入', PAL.green); return true;
+        const next = normalizeSave(data); next.flags.chose = 1;
+        adopt(next, 'import'); say('存档已导入', PAL.green); return true;
       } catch { return false; }
     });
   }
@@ -423,7 +394,7 @@ const Game = (() => {
       if (st.click && !on) openTab(tb.id);
     }
   }
-  // compact mode, sheet folded: the chest tray and the hunter at a glance + a grid that opens each panel
+  // compact mode, sheet folded: the chests and the party at a glance + a grid that opens each panel
   function drawDock(ctx) {
     const D = L.dock;
     ctx.fillStyle = PAL.night; ctx.fillRect(D.x, D.y, D.w, D.h);
@@ -440,23 +411,20 @@ const Game = (() => {
       if (dot(tb.id) && Math.floor(t * 2) % 2) { ctx.fillStyle = PAL.red; ctx.fillRect(x + cw - 6, y + 3, 4, 4); }
       if (st.click) openTab(tb.id);
     });
-    // chest tray card
+    // chest card
     const ch = Math.min(76, D.h - 6), tw = Math.min(196, gx - 112);
-    const counts = [0, 0, 0]; for (const c of s.tray) counts[c.k]++;
     Frame.panel(ctx, 3, D.y + 3, tw, ch, { fill: s.tray.length ? '#2c3150' : PAL.ink, hi: PAL.dusk });
-    Text.draw(ctx, `宝箱 ${s.tray.length}/${traySize(s)}`, 8, D.y + 5, { color: s.tray.length >= traySize(s) ? PAL.red : PAL.amber });
+    Text.draw(ctx, `宝箱 ${s.tray.length}`, 8, D.y + 5, { color: PAL.amber });
     const cwid = Math.floor((tw - 10) / 3);
-    CHESTS.forEach((C, k) => { const x = 6 + k * cwid + cwid / 2; Spr.draw(ctx, Spr.get('chest', 0, String(k)), x - 10, D.y + 30); Text.draw(ctx, '×' + counts[k], x + 1, D.y + 21, { color: counts[k] ? PAL.white : PAL.slate }); });
+    CHESTS.forEach((C, k) => { const x = 6 + k * cwid + cwid / 2, n = chestCount(s, k), cap = chestCap(s, k); Spr.draw(ctx, Spr.get('chest', 0, String(k)), x - 10, D.y + 30); Text.draw(ctx, `${n}/${cap}`, x + 1, D.y + 21, { color: n >= cap ? PAL.red : n ? PAL.white : PAL.slate }); });
     if (ch >= 60 && UI.button('dockopen', 6, D.y + ch - 18, tw - 6, 16, '全部打开', { kind: 'gold', disabled: !s.tray.length, sound: 'open' })) { const r = openAll(); if (r) { Panels.UI_ST.gear.view = 'chest'; Panels.UI_ST.gear.res = r; openTab('gear'); } }
-    // the hunter card: level, experience, free points, power
+    // the party card: levels and free points
     const hx = tw + 7, hw = gx - hx - 4;
     if (hw > 90) {
       Frame.panel(ctx, hx, D.y + 3, hw, ch, { fill: PAL.ink, hi: PAL.dusk });
-      Text.draw(ctx, `${heroName()} Lv.${s.hero.lv}`, hx + 5, D.y + 5, { color: PAL.white });
-      Frame.bar(ctx, hx + 5, D.y + 20, hw - 10, 4, s.hero.lv >= HERO.maxLevel ? 1 : s.hero.exp / expNeed(s.hero.lv), PAL.cyan);
-      Text.draw(ctx, `战力 ${fmt(power())}`, hx + 5, D.y + 27, { color: PAL.yellow });
-      const free = skillFree(s);
-      if (ch >= 60 && UI.button('dockskill', hx + 3, D.y + ch - 18, hw - 6, 16, free ? `技能点 ${free}` : `${DIFFS[s.prog.d].name} ${s.prog.a}-${s.prog.s}`, { kind: free ? 'green' : 'plain' })) openTab(free ? 'skill' : 'map');
+      partyList(s).forEach((cls, i) => { const H = s.heroes[cls]; Text.draw(ctx, `${CLASSES[cls].hero} ${H.lv}`, hx + 5, D.y + 5 + i * 13, { color: Skills.free(H) ? PAL.yellow : PAL.white }); });
+      const free = partyList(s).find(cls => Skills.free(s.heroes[cls]) > 0);
+      if (ch >= 60 && UI.button('dockskill', hx + 3, D.y + ch - 18, hw - 6, 16, free ? `${CLASSES[free].hero}有技能点` : `${DIFFS[s.prog.d].name} ${s.prog.a}-${s.prog.s}`, { kind: free ? 'green' : 'plain' })) { if (free) { Panels.UI_ST.hero = free; openTab('skill'); } else openTab('map'); }
     }
   }
   function drawSheetHead(ctx) {
@@ -466,11 +434,11 @@ const Game = (() => {
     if (UI.button('fold', H.w - 48, H.y + 2, 46, H.h - 4, '收起', { icon: 'i_down', kind: 'blue', tip: ['收起面板，回到战斗画面'] })) { G.sheet = false; Sound.play('tab'); }
   }
   function dot(id) {
-    if (id === 'gear') return !!G.badge.gear || s.tray.length >= traySize(s) * 0.8;
-    if (id === 'skill') return skillFree(s) > 0 && SKILL_IDS.some(x => Skills.canRaise(s, x) && (SKILLS[x].fam === famOf(s) || SKILLS[x].fam === 'any'));
-    if (id === 'rune') return RUNE_NODES.some(n => (s.runes[n.id] || 0) < n.max && runeOpen(s, n) && s.gold >= runeCost(n, s.runes[n.id] || 0) * 2);
-    if (id === 'hunt') return s.board.list.some(c => c.done && !c.claimed);
-    if (id === 'cube') return GRADES.some((g, i) => i < GRADE_MAX && Loot.synthOk(s, i) && i >= 1);
+    if (id === 'party') return !!G.badge.party || (partyList(s).length < partySize(s) && CLASS_IDS.some(c => heroUnlocked(s, c) && !s.party.includes(c)));
+    if (id === 'gear') return !!G.badge.gear || CHESTS.some((C, k) => chestCount(s, k) >= chestCap(s, k));
+    if (id === 'skill') return !s.opts.autoSkill && partyList(s).some(cls => skillTree(cls).some(x => Skills.canRaise(s, cls, x)));
+    if (id === 'rune') return runesUnlocked(s) && RUNE_SPEC.some(n => (s.runes[n.id] || 0) < n.max && runeOpen(s, n) && s.gold >= runeCost(n, s.runes[n.id] || 0) * 2);
+    if (id === 'cube') return cubeUnlocked(s) && GRADES.some((g, i) => i >= 1 && i < GRADE_MAX && Loot.synthOk(s, i, 0));
     return false;
   }
   function drawDialog(ctx) {
@@ -540,8 +508,8 @@ const Game = (() => {
     FX.tickPending(dt);
     FX.update(dt, View.v.hx, GY);
     if (G.toast) { G.toast.life -= dt; if (G.toast.life <= 0) G.toast = null; }
-    const boss = b.boss && !b.boss.dead && b.phase !== 'march';
-    Sound.setMusic(b.mode.kind === 'mine' ? 'mine' : boss || b.mode.kind === 'rush' ? 'boss' : ACTS[b.where.a - 1].id);
+    const boss = b.boss && !b.boss.dead && b.phase !== 'march' && b.boss.bossKind === 'act';
+    Sound.setMusic(boss ? 'boss' : stageDef(b.where.a, b.where.s).scene);
     if (Date.now() - lastSave > 10000) persist();
     render(dt);
     win.requestAnimationFrame(frame);
@@ -560,12 +528,14 @@ const Game = (() => {
   async function boot() {
     await Promise.all([Text.load(), Portraits.load()]);
     s = Cloud.boot() || newSave();
-    if (!s.flags.chose) G.dialog = chooseDialog();
+    if (s.flags.v2) s.flags.chose = 1;
+    resize();
     const rep = settleOffline(false);
     newBattle();
-    if (rep && s.flags.chose) G.dialog = offlineDialog(rep);
-    if (s.flags.v1 && !s.flags.v2seen) { s.flags.v2seen = 1; if (s.flags.chose) G.dialog = { title: '悬赏怪物猎人 2.0', lines: [{ text: '世界扩展成 4 个难度 × 9 个地域 × 10 关，装备、宝箱、魔方和符文树全部重做。', color: PAL.cream }, { text: '猎人的外观保留，旅程从普通 1-1 重新开始。', color: PAL.steel }], buttons: [{ label: '出发', kind: 'gold', fn: () => { G.dialog = null; } }] }; }
-    resize();
+    if (!s.flags.chose) G.dialog = chooseDialog();
+    else if (rep) G.dialog = offlineDialog(rep);
+    else upgradeNotice();
+    Panels.UI_ST.hero = partyList(s)[0];
     ready = true;
     persist();
     document.getElementById('boot')?.remove();
@@ -574,10 +544,10 @@ const Game = (() => {
   }
 
   Object.assign(G, {
-    boot, persist, say, adopt, applyOpts, equip, unequip, autoEquip, sortInv, alchOne, alchFiltered, alchMat, openKind, openAll, enhance,
-    synth, craft, socket, unsocket, offer, reroll, runeBuy, skillRaise, skillLower, skillReset, skillAuto, skillSlot, skillUnslot,
-    setFarm, travel, setPet, askReset, tickets, startMode, leaveMode, claim, sex, heroName, setSex, firstAccountSave, exportSave, importSave,
-    toggleMute, toggleMini, toggleFull, openTab, S, power, battle: () => b, save: () => s,
+    boot, persist, say, adopt, applyOpts, selectHero, equip, unequip, autoEquip, sortInv, alchOne, alchFiltered, alchMat, openKind, openAll,
+    synth, craft, socket, unsocket, offer, runeBuy, skillRaise, skillLower, skillReset, skillAuto, skillSlot, skillUnslot,
+    partyDeploy, partyRemove, partyMove, setFarm, travel, setPet, askReset, firstAccountSave, exportSave, importSave,
+    toggleMute, toggleMini, toggleFull, openTab, battle: () => b, save: () => s,
   });
   Object.defineProperties(G, { ready: { get: () => ready }, layout: { get: () => L } });
   return G;

@@ -7,7 +7,7 @@ import { collectCharacters, collectHubCharacters, missingGlyphs } from './tools/
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', '_routes.json', 'hub', 'entropy-blade', 'tbmh'];
+const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh'];
 
 // ---------- release checks (no dependencies) ----------
 const problems = [];
@@ -34,30 +34,27 @@ for (const id of Object.keys(saveGames)) check(seen.has(id), `server/games: "${i
 {
   const ctx = {};
   vm.runInNewContext(['core.js', 'data.js'].map(f => readFileSync(path.join(root, 'tbmh/js', f), 'utf8')).join('\n') +
-    '\n;globalThis.__d = { TYPES, LEGENDS, SLOT_CAT, AFFIXES, INSCRIPTIONS, GRADES, GEM_KINDS, PART_DEFS, SKILLS, RUNE_NODES, PETS, MONSTERS, BOSSES, CONTRACTS, MUTATORS, MAT_IDS, DIFFS, ACTS, STAGES, HERO, CUBE_MAX, ENH_MAX, CHESTS };', ctx);
+    '\n;globalThis.__d = { CLASS_IDS, TYPES, LEGENDS, SLOT_CAT, AFFIXES, INSCRIBE_POOL, GRADES, SKILLS, ACTIVES, RUNE_SPEC, PETS, MONSTERS, BOSSES, STAGE_DEFS, MAT_IDS, DIFFS, ACT_COUNT, STAGES, HERO_MAX_LEVEL, CUBE_MAX, CHESTS, PARTY_MAX, LEGEND_GRADE };', ctx);
   const d = ctx.__d, srv = await import(pathToFileURL(path.join(root, 'server/games/tbmh.js')));
   const same = (name, a, b) => check(JSON.stringify([...a].sort()) === JSON.stringify([...b].sort()), `server/games/tbmh.js ${name} differs from tbmh/js/data.js`);
   const pairs = o => Object.entries(o).map(([k, v]) => k + ':' + [].concat(v).join('/'));
-  same('TYPES', Object.entries(d.TYPES).map(([k, v]) => `${k}:${v.slot}/${v.fam || ''}`), pairs(srv.TYPES));
+  same('CLASSES', d.CLASS_IDS, srv.CLASSES);
+  same('TYPES', Object.entries(d.TYPES).map(([k, v]) => `${k}:${v.slot}/${v.cls || ''}`), pairs(srv.TYPES));
   same('ELEM_ROLL', Object.entries(d.TYPES).filter(([, v]) => v.elemRoll).map(([k, v]) => k + ':' + v.elemRoll.join('/')), pairs(srv.ELEM_ROLL));
   same('SLOT_CAT', pairs(d.SLOT_CAT), pairs(srv.SLOT_CAT));
-  same('LEGENDS', Object.entries(d.LEGENDS).map(([k, v]) => `${k}:${v.cat}/${v.fam || ''}`), pairs(srv.LEGENDS));
+  same('LEGENDS', Object.entries(d.LEGENDS).map(([k, v]) => `${k}:${v.cat}/${v.cls || ''}`), pairs(srv.LEGENDS));
   same('AFFIXES', Object.keys(d.AFFIXES), srv.AFFIXES);
-  same('INSCRIPTIONS', Object.keys(d.INSCRIPTIONS), srv.INSCRIPTIONS);
+  same('INSCRIBE', d.INSCRIBE_POOL, srv.INSCRIBE);
   same('GRADES', d.GRADES.map((g, i) => `${i}:${g.affixes}/${g.sockets.join('/')}`), srv.GRADES.map((g, i) => `${i}:${g.join('/')}`));
-  same('GEMS', Object.keys(d.GEM_KINDS), srv.GEMS);
-  same('PARTS', Object.keys(d.PART_DEFS), srv.PARTS);
   same('MATERIALS', d.MAT_IDS, srv.matIds());
-  same('SKILLS', Object.entries(d.SKILLS).map(([k, v]) => k + ':' + v.max), pairs(srv.SKILLS));
-  same('PASSIVES', Object.keys(d.SKILLS).filter(k => d.SKILLS[k].passive), srv.PASSIVES);
-  same('RUNES', d.RUNE_NODES.map(n => `${n.id}:${n.max}/${n.p || ''}`), pairs(srv.RUNES));
+  same('SKILLS', Object.entries(d.SKILLS).map(([k, v]) => `${k}:${v.cls}/${v.max}/${d.ACTIVES[k] ? 1 : 0}`), pairs(srv.SKILLS));
+  same('RUNES', d.RUNE_SPEC.map(n => `${n.id}:${n.max}/${n.p || 0}`), pairs(srv.RUNES));
   same('PETS', Object.keys(d.PETS), srv.PETS);
   same('MONSTERS', Object.keys(d.MONSTERS), srv.MONSTERS);
   same('BOSSES', Object.keys(d.BOSSES), srv.BOSSES);
-  same('CONTRACTS', Object.keys(d.CONTRACTS), srv.CONTRACTS);
-  same('MUTATORS', Object.keys(d.MUTATORS), srv.MUTATORS);
+  same('CHAMPS', d.STAGE_DEFS.flat().filter(st => st.boss.kind === 'champ').map(st => st.boss.key), srv.CHAMPS);
   const L = srv.LIMITS;
-  check(L.diffs === d.DIFFS.length && L.acts === d.ACTS.length && L.stages === d.STAGES && L.heroMax === d.HERO.maxLevel && L.cubeMax === d.CUBE_MAX && L.enhMax === d.ENH_MAX && L.chests === d.CHESTS.length, 'server/games/tbmh.js LIMITS differ from tbmh/js/data.js');
+  check(L.diffs === d.DIFFS.length && L.acts === d.ACT_COUNT && L.stages === d.STAGES && L.heroMax === d.HERO_MAX_LEVEL && L.cubeMax === d.CUBE_MAX && L.chests === d.CHESTS.length && L.party === d.PARTY_MAX, 'server/games/tbmh.js LIMITS differ from tbmh/js/data.js');
 }
 // pixel fonts cover every character their pages draw
 {

@@ -120,11 +120,16 @@ const Sound = (() => {
   function coin(n) { play('coin', { gap: 0.06 }); }
   function cast(id) {
     if (!ac || vol.sfx <= 0) return;
-    const base = { cleave: 50, bash: 46, bladestorm: 62, execute: 38, whirl: 58, throwaxe: 60, crush: 40, rage: 44, multishot: 66, pierceshot: 70, arrowrain: 64, gale: 67, blastbolt: 43, snipe: 74, snare: 48, repeater: 61, fireball: 47, chainlight: 69, frostnova: 76, hydra: 41, smite: 55, prayer: 72, aegis: 57, holynova: 63, warcry: 45, storm: 72, soul: 52 }[id] || 60;
+    const base = {
+      k_thrust: 50, k_charge: 46, k_retri: 38, k_aegis: 57, k_blade: 62, k_will: 45, r_rapid: 66, r_scatter: 64, r_rain: 67, r_swift: 70, r_pierce: 74, r_skewer: 61,
+      s_fireball: 47, s_iceorb: 76, s_lightning: 69, s_hydra: 41, s_storm: 79, s_meteor: 36, p_heal: 72, p_wrath: 55, p_sanct: 67, p_rez: 77,
+      h_blast: 43, h_frost: 75, h_quick: 68, h_trap: 48, h_turret: 52, h_shock: 70, y_jump: 40, y_crush: 38, y_cry: 45, y_quake: 42, y_spin: 58, y_blood: 44,
+    }[id] || 60;
     tone({ f: midi(base + 12), f1: midi(base + 24), dur: 0.18, wave: 'p25', vol: 0.12 });
     noise({ dur: 0.2, freq: 1200, f1: 5000, type: 'bandpass', vol: 0.1 });
-    if (id === 'warcry') tone({ f: 110, f1: 220, dur: 0.4, wave: 'square', vol: 0.18 });
-    if (id === 'chainlight' || id === 'smite') { noise({ dur: 0.4, freq: 4000, f1: 300, vol: 0.3, at: 0.02 }); }
+    if (id === 'y_cry' || id === 'k_will') tone({ f: 110, f1: 220, dur: 0.4, wave: 'square', vol: 0.18 });
+    if (id === 's_lightning' || id === 'p_wrath' || id === 'h_shock') { noise({ dur: 0.4, freq: 4000, f1: 300, vol: 0.3, at: 0.02 }); }
+    if (id === 'p_heal' || id === 'p_sanct' || id === 'p_rez') [76, 79, 84].forEach((n, i) => tone({ f: midi(n), dur: 0.2, wave: 'triangle', vol: 0.1, at: i * 0.06 }));
   }
 
   // ---------- music: procedural chiptune per area ----------

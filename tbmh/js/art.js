@@ -206,22 +206,190 @@ const ART = (() => {
       '..ooo.nnnccccvvyyyy...y.',
     ],
   };
+  // ---------------------------------------------------------------
+  //  THE PARTY — every hero shares the hunter's legs, arms and poses;
+  //  only the head, shoulders and the swaying tail are their own
+  // ---------------------------------------------------------------
+  const PINK_HAIR = [P.wine, P.magenta, P.pink, P.cream, P.white];
+  const LOOKS = {
+    // 洛恩 · 猎手 and 希娅 · 游侠 keep their first-edition sprites
+    loen: { upper: HERO_UPPER.m, tail: HERO_TAIL.m, down: HERO_DOWN.m, clear: /[ry]/, coat: RAMP.navy, pal: {} },
+    sia: { upper: HERO_UPPER.f, tail: HERO_TAIL.f, down: HERO_DOWN.f, clear: /[ry]/, coat: RAMP.navy, pal: {} },
+    // 葛雷 · 骑士: open-faced great helm with a red plume, grizzled beard, broad pauldrons
+    gray: {
+      upper: [
+        '..........rr............',
+        '........rrr.............',
+        '......rrraaaa...........',
+        '.......aaaaaaa..........',
+        '.......aaaaaaaa.........',
+        '......gAAAAAAAAg........',
+        '.......aasssss..........',
+        '.......aassses..........',
+        '.......aasssss..........',
+        '........ahhhs...........',
+        '........gaaaa...........',
+        '.....aaaaaaaaaa.........',
+        '....aaAaaaaaaAa.........',
+        '.....aaccccbcc..........',
+        '.......cccbccc..........',
+        '.......ccbcccc..........',
+        '.......bbbgbbb..........',
+        '......ccccccccc.........',
+        '......cccc..cccc........',
+      ],
+      tail: [
+        { 1: [[7, 'r']], 2: [[5, 'r']] },
+        { 1: [[6, 'r'], [7, 'r']], 2: [[4, 'r'], [5, 'r']] },
+        { 0: [[9, 'r']], 2: [[3, 'r'], [4, 'r'], [5, 'r']], 3: [[5, 'r'], [6, 'r']] },
+      ],
+      down: [
+        '........................',
+        '...............r.aaa....',
+        '..............rraaaaa...',
+        '.............aaaaaaaa...',
+        '..OO.NNnnccccaasss......',
+        '..OOnnnnccbcaahhse......',
+        '..ooo.nnnccccaahh.......',
+      ],
+      clear: /[r]/, coat: RAMP.red, pal: { h: RAMP.bone },
+    },
+    // 伊薇 · 法师: a wide star-pinned witch hat over long violet hair
+    ivy: {
+      upper: [
+        '......w.................',
+        '......ww................',
+        '.......www..............',
+        '.......wwwwt............',
+        '.......wwwwww...........',
+        '...wwwwwwwwwwwwwww......',
+        '....WWWWWWWWWWWWW.......',
+        '.......llsssss..........',
+        '.......llsssis..........',
+        '......lllssss...........',
+        '......lll.Sss...........',
+        '.....llllccccc..........',
+        '.....lllccccccc.........',
+        '.....lll.ccgcc..........',
+        '......ll.cccccc.........',
+        '........ccccccc.........',
+        '........bbbgbbb.........',
+        '.......ccccccccc........',
+        '......cccccccccc........',
+      ],
+      tail: [
+        { 15: [[6, 'l']] },
+        { 15: [[5, 'l'], [6, 'l']], 16: [[6, 'l']] },
+        { 13: [[4, 'l']], 14: [[4, 'l'], [5, 'l']] },
+      ],
+      down: [
+        '........................',
+        '...................ww...',
+        '.............wwwwwwww...',
+        '..............wwwwwtw...',
+        '..OO.NNnnccccllsss......',
+        '..OOnnnnccbclllssi......',
+        '..ooo.nnnccccllll.......',
+      ],
+      clear: /[l]/, coat: RAMP.purple, pal: { w: RAMP.blue, t: P.yellow, l: RAMP.purple },
+    },
+    // 茉莉 · 牧师: white veil with a gold circlet, soft pink hair, green eyes
+    molly: {
+      upper: [
+        '........................',
+        '.........uuuu...........',
+        '........uuuuuu..........',
+        '.......uuuuuuuu.........',
+        '.......ugggggggu........',
+        '......uupppppps.........',
+        '......uupppssss.........',
+        '......uupsssss..........',
+        '......uupsssis..........',
+        '......uuppssss..........',
+        '......uuup.Ss...........',
+        '.....uuuuucccc..........',
+        '.....uuuucccccc.........',
+        '.....uuu.ccgcc..........',
+        '......uu.cccccc.........',
+        '........ccccccc.........',
+        '........bbbgbbb.........',
+        '.......ccccccccc........',
+        '......cccccccccc........',
+      ],
+      tail: [
+        { 15: [[6, 'u']] },
+        { 15: [[5, 'u'], [6, 'u']], 16: [[6, 'u']] },
+        { 13: [[4, 'u']], 14: [[4, 'u'], [5, 'u']] },
+      ],
+      down: [
+        '........................',
+        '................uuu.....',
+        '..............uuuuuuu...',
+        '.............uggggguu...',
+        '..OO.NNnnccccuupsss.....',
+        '..OOnnnnccbcuupssi......',
+        '..ooo.nnnccccuuup.......',
+      ],
+      clear: /[u]/, coat: RAMP.bone, pal: { u: RAMP.cloud, p: PINK_HAIR, i: P.leaf },
+    },
+    // 布兰 · 屠戮者: flame-red mohawk and braided beard, war paint, fur mantle, bare arms
+    bran: {
+      upper: [
+        '.........xx.............',
+        '........xxxx............',
+        '........xxxxx...........',
+        '.......sxxxxss..........',
+        '.......sssxssss.........',
+        '.......ssssssss.........',
+        '.......sskksss..........',
+        '.......ssssses..........',
+        '.......sxxxsss..........',
+        '........xxxxs...........',
+        '.........xx.............',
+        '.....ffffxxfff..........',
+        '....fffffffffff.........',
+        '....fffccccbcc..........',
+        '.......cccbccc..........',
+        '.......ccbcccc..........',
+        '.......bbbgbbb..........',
+        '......ccccccccc.........',
+        '......cccc..cccc........',
+      ],
+      // the topknot tail streams back from the crest
+      tail: [
+        { 1: [[7, 'x']], 2: [[6, 'x'], [7, 'x']], 3: [[5, 'x']] },
+        { 2: [[6, 'x'], [7, 'x']], 3: [[5, 'x'], [6, 'x']], 4: [[4, 'x']] },
+        { 0: [[8, 'x']], 1: [[6, 'x'], [7, 'x']], 2: [[4, 'x'], [5, 'x']] },
+      ],
+      down: [
+        '........................',
+        '..................xx....',
+        '...............xxxxxx...',
+        '..............xxxxxxxx..',
+        '..OO.NNnnccccffsss......',
+        '..OOnnnnccbcffxsse......',
+        '..ooo.nnnccccffxx.......',
+      ],
+      clear: /[x]/, coat: RAMP.wood, sleeve: 's', pal: { x: RAMP.fire, f: RAMP.sand },
+    },
+  };
   // pose = { legs, arm, bob, dx, scarf }
-  function heroRows(pose, sex = 'm') {
+  function heroRows(pose, look = 'loen') {
+    const Lk = LOOKS[look] || LOOKS.loen;
     const W = 24, H = 24, rows = Array.from({ length: H }, () => '.'.repeat(W).split(''));
     const put = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H && c !== '.') rows[y][x] = c; };
     if (pose.down) {
-      HERO_DOWN[sex].forEach((r, y) => [...r].forEach((c, x) => put(x, y + 17, c)));
+      Lk.down.forEach((r, y) => [...r].forEach((c, x) => put(x, y + 17, c)));
       return rows.map(r => r.join(''));
     }
     const legs = HERO_LEGS[pose.legs || 'stand'];
     legs.forEach((r, y) => [...r].forEach((c, x) => put(x, 19 + y, c)));
     const by = pose.bob || 0, bx = pose.dx || 0;
-    HERO_UPPER[sex].forEach((r, y) => [...r].forEach((c, x) => put(x + bx, y + by, c)));
-    const sc = HERO_TAIL[sex][pose.scarf || 0];
-    for (const y in sc) for (const [x, c] of sc[y]) { const yy = +y + by; if (c === '.') { if (rows[yy] && /[ry]/.test(rows[yy][x + bx])) rows[yy][x + bx] = '.'; } else put(x + bx, yy, c); }
+    Lk.upper.forEach((r, y) => [...r].forEach((c, x) => put(x + bx, y + by, c)));
+    const sc = Lk.tail[pose.scarf || 0];
+    for (const y in sc) for (const [x, c] of sc[y]) { const yy = +y + by; if (c === '.') { if (rows[yy] && Lk.clear.test(rows[yy][x + bx])) rows[yy][x + bx] = '.'; } else put(x + bx, yy, c); }
     const arm = HERO_ARMS[pose.arm || 'rest'];
-    for (const [x, y, c] of arm.px) put(x + bx, y + by, c);
+    for (const [x, y, c] of arm.px) put(x + bx, y + by, c === 'c' && Lk.sleeve ? Lk.sleeve : c);
     return rows.map(r => r.join(''));
   }
   const HERO_POSES = {
@@ -232,10 +400,11 @@ const ART = (() => {
     cast: { legs: 'stand', arm: 'cast', scarf: 2 }, hurt: { legs: 'stand', arm: 'rest', dx: -1, scarf: 2 }, down: { down: true },
     aim: { legs: 'stand', arm: 'strike', scarf: 1 }, loose: { legs: 'stand', arm: 'strike', dx: -1, scarf: 2 },
   };
-  function heroGrid(poseName, coat = 'none', sex = 'm') {
-    const pose = HERO_POSES[poseName];
-    const rows = heroRows(pose, sex);
-    const pal = { ...HERO_PAL, c: COATS[coat] || COATS.none };
+  function heroGrid(poseName, coat = 'none', look = 'loen') {
+    if (look === 'm') look = 'loen'; else if (look === 'f') look = 'sia';
+    const pose = HERO_POSES[poseName], Lk = LOOKS[look] || LOOKS.loen;
+    const rows = heroRows(pose, look);
+    const pal = { ...HERO_PAL, ...Lk.pal, c: coat !== 'none' && COATS[coat] ? COATS[coat] : Lk.coat };
     const g = bake(rows, pal, { name: 'hero:' + poseName, ox: 10, oy: 23 });
     const arm = HERO_ARMS[pose.arm || 'rest'];
     g.hand = [arm.hand[0] + (pose.dx || 0) + 1, arm.hand[1] + (pose.bob || 0) + 1];
@@ -1708,5 +1877,5 @@ lllll
 lllll
 .lll.`], { ox: 2, oy: 2 });
 
-  return { RAMP, S, def, grid, bake, heroGrid, HERO_POSES, COATS, BLADE, GEM, GRIP, Paint, VARIANTS: {} };
+  return { RAMP, S, def, grid, bake, heroGrid, HERO_POSES, COATS, LOOKS, BLADE, GEM, GRIP, Paint, VARIANTS: {} };
 })();

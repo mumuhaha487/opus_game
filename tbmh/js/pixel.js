@@ -16,7 +16,7 @@ function mixHex(a, b, t) { const A = rgb(a), B = rgb(b); return '#' + [0, 1, 2].
 // equipment colors: metal and cloth follow the item-level tier group (MATERIAL_GROUP), the gem follows the grade
 const METAL = [ART.RAMP.brown, ART.RAMP.steel, ART.RAMP.silver, ART.RAMP.gold, ART.RAMP.ice, ART.RAMP.purple, ART.RAMP.fire];
 const CLOTH = [ART.RAMP.wood, ART.RAMP.brown, ART.RAMP.red, ART.RAMP.navy, ART.RAMP.teal, ART.RAMP.purple, ART.RAMP.gold];
-const ELEM_RAMP = { fire: ART.RAMP.fire, ice: ART.RAMP.ice, light: ART.RAMP.gold, poison: ART.RAMP.green, holy: ART.RAMP.bone, phys: ART.RAMP.silver };
+const ELEM_RAMP = { fire: ART.RAMP.fire, cold: ART.RAMP.ice, lightning: ART.RAMP.gold, chaos: ART.RAMP.purple, phys: ART.RAMP.silver };
 
 const Spr = (() => {
   const cache = new Map();
@@ -38,10 +38,10 @@ const Spr = (() => {
     return c;
   }
   function frames(name) { return ART.S[name] ? ART.S[name].frames.length : 0; }
-  function hero(pose, coat, sex) {
-    const key = 'hero|' + pose + '|' + coat + '|' + sex;
+  function hero(pose, coat, look) {
+    const key = 'hero|' + pose + '|' + coat + '|' + look;
     let c = cache.get(key);
-    if (!c) { c = toCanvas(ART.heroGrid(pose, coat, sex)); cache.set(key, c); }
+    if (!c) { c = toCanvas(ART.heroGrid(pose, coat, look)); cache.set(key, c); }
     return c;
   }
   // weapon in one of 4 lossless orientations: 0 up-right, 1 down-right (90° cw), 2 up-left (mirror), 3 down-left
@@ -135,16 +135,36 @@ const Spr = (() => {
   return { get, frames, hero, weapon, icon, item, held, tint, pixelsOf, draw, cache };
 })();
 
-// hunter portraits (portraits.js): full = 立绘 128 px, face = avatar 48 px, mini = HUD avatar 32 px
+// hero portraits (portraits.js): full = 立绘 128 px, face = avatar 48 px, mini = HUD avatar 32 px,
+// keyed by look (LOOK in data.js); a hero without painted art shows its sprite bust
 const Portraits = (() => {
-  const img = {};
+  const img = {}, busts = new Map();
   function load() {
     const P = window.TBMH_PORTRAITS || {};
     return Promise.all(Object.entries(P).map(([k, src]) => new Promise(res => { const i = new Image(); i.onload = () => { img[k] = i; res(); }; i.onerror = res; i.src = src; })));
   }
-  const key = (sex, kind) => (sex === 'f' ? 'sia' : 'loen') + '_' + kind;
-  const get = (sex, kind) => img[key(sex, kind)] || null;
-  return { load, full: sex => get(sex, 'full'), face: sex => get(sex, 'face'), mini: sex => get(sex, 'mini') };
+  // the idle sprite's head and shoulders, scaled up on a dusk card
+  function bust(look, size) {
+    const key = look + size;
+    let c = busts.get(key);
+    if (c) return c;
+    const spr = Spr.hero('idle0', 'none', look);
+    c = mkCanvas(size, size);
+    const x = c.getContext('2d');
+    x.imageSmoothingEnabled = false;
+    x.fillStyle = PAL.dusk; x.fillRect(0, 0, size, size);
+    x.fillStyle = PAL.night; x.fillRect(0, Math.round(size * 0.72), size, size);
+    const k = Math.max(1, Math.floor(size / 16)), sw = 16, sh = 16;
+    x.drawImage(spr, 3, 0, sw, sh, Math.round(size / 2 - (sw * k) / 2) + k, size - sh * k, sw * k, sh * k);
+    busts.set(key, c);
+    return c;
+  }
+  const get = (look, kind, size) => img[look + '_' + kind] || bust(look, size);
+  const lookOf = x => (x === 'm' ? 'loen' : x === 'f' ? 'sia' : LOOK[x] || x);
+  return {
+    load, has: x => !!img[lookOf(x) + '_full'],
+    full: x => get(lookOf(x), 'full', 128), face: x => get(lookOf(x), 'face', 48), mini: x => get(lookOf(x), 'mini', 32),
+  };
 })();
 
 // =====================================================================
@@ -357,7 +377,7 @@ const Frame = {
   },
   // item slot border by grade: every grade has its own pixel pattern, from 传说 on with a running shimmer
   rarity(ctx, x, y, w, h, r, t = 0) {
-    if (r >= 5) return this.mythic(ctx, x, y, w, h, r, t);
+    if (r >= 4) return this.mythic(ctx, x, y, w, h, r, t);
     const R = RARITY[r];
     ctx.fillStyle = PAL.ink; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = R.deep; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
@@ -368,14 +388,7 @@ const Frame = {
       ctx.fillStyle = R.glow; for (const [px, py] of [[x + 1, y + 1], [x + w - 3, y + 1], [x + 1, y + h - 3], [x + w - 3, y + h - 3]]) ctx.fillRect(px, py, 2, 2);
       return;
     }
-    if (r === 3) {
-      ctx.fillStyle = R.dark; this.ring(ctx, x + 1, y + 1, w - 2, h - 2);
-      ctx.fillStyle = R.color; this.ring(ctx, x + 2, y + 2, w - 4, h - 4, true);
-      ctx.fillStyle = R.glow;
-      for (const [px, py] of [[x, y], [x + w - 1, y], [x, y + h - 1], [x + w - 1, y + h - 1]]) { ctx.fillRect(px - 1, py, 3, 1); ctx.fillRect(px, py - 1, 1, 3); }
-      return;
-    }
-    // legendary: gold double border, ruby corners and a shimmer running round the edge
+    // 传说: gold double border, ruby corners and a shimmer running round the edge
     ctx.fillStyle = PAL.amber; this.ring(ctx, x + 1, y + 1, w - 2, h - 2);
     ctx.fillStyle = PAL.yellow; this.ring(ctx, x + 2, y + 2, w - 4, h - 4, true);
     ctx.fillStyle = PAL.red; for (const [px, py] of [[x, y], [x + w - 2, y], [x, y + h - 2], [x + w - 2, y + h - 2]]) ctx.fillRect(px, py, 2, 2);
@@ -388,7 +401,7 @@ const Frame = {
       ctx.fillStyle = PAL.white; ctx.fillRect(px, py, 1, 1);
     }
   },
-  // 不朽 · 至宝 · 超凡 · 天界 · 宇宙: double border, jeweled corners, shimmer; 宇宙 cycles through every grade color
+  // 不朽 · 至宝 · 超凡 · 天界 · 神圣 · 宇宙: double border, jeweled corners, shimmer; 宇宙 cycles through every grade color
   mythic(ctx, x, y, w, h, r, t) {
     const R = GRADES[r];
     ctx.fillStyle = PAL.ink; ctx.fillRect(x, y, w, h);

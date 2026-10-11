@@ -151,7 +151,7 @@ const Scene = (() => {
 
   // ---------- layer builders ----------
   function build(bid) {
-    const L = BIOME_LOOK[bid], seed = ACTS.findIndex(b => b.id === bid) * 97 + 13;
+    const L = BIOME_LOOK[bid], seed = SCENE_IDS.indexOf(bid) * 97 + 13;
     const sky = mkCanvas(1, SH), sx = sky.getContext('2d');
     // banded sky with dithered seams
     const bands = L.sky, bh = Math.ceil(GY / bands.length);
@@ -333,7 +333,7 @@ const Scene = (() => {
     const tint = DIFF_TINT[diff];
     if (tint) { ctx.fillStyle = rgba(tint[0], tint[1]); ctx.fillRect(0, 0, w, GY); }
     tile(ctx, L.ground, scroll, GY - 2, w);
-    const kind = ACTS.find(b => b.id === bid).mote;
+    const kind = SCENE_MOTE[bid];
     moteStep(dt, kind, w);
     moteDraw(ctx, kind, t);
   }

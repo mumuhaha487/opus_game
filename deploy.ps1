@@ -1,11 +1,10 @@
-# Optional manual deployment; normal updates deploy automatically after a Git push.
+# Optional manual deployment of the inc-games Worker; normal updates deploy through Workers Builds after a Git push.
 # Needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the environment; nothing secret lives here.
 #   PS> $env:CLOUDFLARE_API_TOKEN = '...'; $env:CLOUDFLARE_ACCOUNT_ID = '...'; .\deploy.ps1
-param([string]$Project = 'inc-games-git')
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-$out = Join-Path $root 'dist'
 node (Join-Path $root 'build.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Site build failed.' }
-npx --yes wrangler@4 pages deploy $out --project-name $Project --branch main --commit-dirty=true
-if ($LASTEXITCODE -ne 0) { throw 'Cloudflare deployment failed.' }
+Push-Location $root
+try { npx --yes wrangler@4 deploy; if ($LASTEXITCODE -ne 0) { throw 'Cloudflare deployment failed.' } }
+finally { Pop-Location }

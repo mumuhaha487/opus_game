@@ -1,12 +1,12 @@
 # GAME.INC.RE
 
-Static game collection with accounts and likes, published at https://game.inc.re/.
+Static game collection with accounts and likes, published at https://game.inc.re/ by the Cloudflare Worker `inc-games`.
 
 - Repository: https://github.com/mumuhaha487/opus_game
 - Production branch: `main` (the repository default branch)
-- Cloudflare Pages project: `inc-games-git`
-- Build command: `node build.mjs`
-- Build output directory: `dist`
+- Cloudflare Worker: `inc-games` (`wrangler.jsonc`): static assets from `dist/` plus the API in `worker.js` → `server/`
+- Workers Builds: build command `node build.mjs`, deploy command `npx wrangler deploy`, root directory `/`
+- Custom domain: `game.inc.re` (attached to the Worker; the zone serves proxied hostnames over IPv4 only)
 - Node.js: 22 or newer; the build installs nothing.
 
 ## Layout
@@ -17,14 +17,16 @@ Static game collection with accounts and likes, published at https://game.inc.re
 | `hub/catalog.js` | 游戏目录：每款游戏的分类、封面、介绍、角色、按键说明 |
 | `entropy-blade/` | 《熵刃》像素横版动作肉鸽 |
 | `tbmh/` | 《悬赏怪物猎人》像素挂机放置 RPG（策划文档见 `tbmh/README.md`） |
-| `functions/`, `server/` | Pages Functions：账号、云存档、点赞 |
+| `worker.js`, `server/` | Worker 入口与接口：账号、云存档、点赞（`/api/*`，其余请求交给静态资源） |
+| `wrangler.jsonc` | Worker 配置：静态资源目录、R2 绑定、自定义域名 |
 | `tools/` | 像素字体子集工具 |
 | `build.mjs` | 发布检查 + 复制站点文件 + 资源版本号 |
 
 ## Updating the Site
 
 Edit the site, run `node build.mjs`, then commit and push to `main`.
-Cloudflare's GitHub integration builds and deploys each push automatically.
+Workers Builds runs `node build.mjs` and `npx wrangler deploy` for each push to `main`.
+`deploy.ps1` does the same build and deploy by hand (needs `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` in the environment).
 
 ```powershell
 node build.mjs
@@ -79,9 +81,8 @@ and credential files are ignored by Git.
 - 累计数存在 `likes/summary.json`（总数 + 最近 14 天每日数）。所有写入都是 R2 条件写入（etag），并发时自动重试；
   计数写入失败会退回当日标记。点赞接口另有每 IP 每 10 分钟 40 次的限流。
 
-**Pages 还是 Workers：** Pages Functions 跑在同一套 Workers 运行时上，支持 R2 / D1 / KV 绑定、Secrets、
-`CF-Connecting-IP` 和条件写入，点赞与账号都在现有 Pages 项目里完成，不需要迁移。Cloudflare 现在推荐新项目用
-Workers + 静态资源，Durable Objects、Cron Triggers 等只在 Workers 上有；以后需要这些功能时再迁移即可。
+**运行在 Workers 上：** 站点从 Pages 迁到了 Worker `inc-games`（2026-10-11），沿用同一个 R2 桶与同样的 `AUTH_SECRET` / `PW_PEPPER`，
+账号、会话、存档与点赞数据原样保留。旧的 Pages 项目 `inc-games-git` 已停止自动构建，最后一次部署留在 pages.dev 上作为回退。
 
 ## 账号与云存档
 
@@ -89,10 +90,10 @@ GAME.INC.RE 的账号在所有游戏通用。在汇总页的账号对话框、�
 `hub/account-core.js` 提供共享的认证请求、账号指针、缓存键、旧键迁移和退出流程；`hub/account-ui.js` 显示账号与游戏存档。
 未登录时各游戏使用浏览器本地存档，登录后各游戏通过同一账号访问各自的云存档。
 
-账号接口由同站点 Pages Functions 提供：`functions/` 是入口，`server/` 实现认证、请求校验与点赞，
+账号接口由同站点的 Worker 提供：`worker.js` 把 `/api/*` 交给 `server/api.js`，`server/` 实现认证、请求校验与点赞，
 `server/games/` 的 `GAMES` 注册表按游戏选择白名单清洗函数。`GET /api/saves` 逐个读取已注册游戏，返回当前用户已有的云端存档。
-R2 绑定名为 `ACCOUNTS`，生产桶为 `game-inc-accounts`，预览桶为 `game-inc-accounts-preview`。
-`_routes.json` 把 Functions 调用限定在 `/api/*`，静态资源由 Pages 直接提供。
+R2 绑定名为 `ACCOUNTS`，生产桶为 `game-inc-accounts`，本地预览用 `game-inc-accounts-preview`。
+其余路径由 Worker 静态资源直接返回（`_headers` 同样生效）。
 全站账号指针是 `gameinc_profile_v1`，游戏缓存使用 `gameinc_save_<game>_<小写用户名>_v1`。
 退出会尝试上传脏缓存，仍未同步的进度留在这台设备上，下次登录同一账号后由对应游戏合并上传。
 
@@ -101,25 +102,24 @@ R2 绑定名为 `ACCOUNTS`，生产桶为 `game-inc-accounts`，预览桶为 `ga
 1. 在 Cloudflare 账号内创建上述两个 R2 桶，保持 r2.dev 访问关闭、自定义域名列表为空。
 2. 给两个桶添加前缀为 `rl/` 的生命周期规则，`deleteObjectsTransition.condition`
    为 `{ "type": "Age", "maxAge": 86400 }`，启用后 GET 核对。
-3. 在 Pages 项目 `inc-games-git` 的 production / preview 配置中分别添加对应的
-   `ACCOUNTS` R2 绑定，保留现有 `NODE_VERSION`（`plain_text`，值为 `22`）及其它配置。
-4. 每个环境各生成两个不同的 32 字节密码学随机数（base64url 编码），添加为
-   `secret_text` 类型的 `AUTH_SECRET`、`PW_PEPPER`，PATCH 后 GET 核对变量类型和绑定。
+3. `wrangler.jsonc` 已声明 `ACCOUNTS` R2 绑定与自定义域名 `game.inc.re`；第一次 `npx wrangler deploy` 会创建 Worker。
+4. 生成两个不同的 32 字节密码学随机数（base64url 编码），用 `npx wrangler secret put AUTH_SECRET` / `PW_PEPPER` 写入 Worker，
    生产值备份到被忽略的 `.env.accounts`。`PW_PEPPER` 更换后所有已注册密码都会失效；
-   `AUTH_SECRET` 更换后已有会话需重新登录，当天的点赞标记也会重新计算。配置在下一次部署时生效。
+   `AUTH_SECRET` 更换后已有会话需重新登录，当天的点赞标记也会重新计算。
+5. 在 Worker 的 Settings → Builds 连接 GitHub 仓库：分支 `main`，构建命令 `node build.mjs`，部署命令 `npx wrangler deploy`，根目录 `/`。
 
 本地联调在被忽略的 `.dev.vars` 中设置测试用的 `AUTH_SECRET`、`PW_PEPPER`：
 
 ```powershell
 node build.mjs
-npx --yes wrangler@4 pages dev dist --r2 ACCOUNTS
+npx --yes wrangler@4 dev
 ```
 
 接口通过同源 `/api/*` 访问；POST / PUT 请求带同源 `Origin` 与 JSON 媒体类型。
 密码先经 `PW_PEPPER` 的 HMAC-SHA256，再进行带随机盐的 PBKDF2-SHA256（目标迭代次数 100000，用户记录保存实际次数）。
 会话通过签名 Cookie 保存，属性为 `__Host-gsid`、Secure、HttpOnly、SameSite=Lax、Path=/，有效期 30 天。
 注册、存档与点赞使用 R2 条件写入，限流键经过 SHA256，`rl/` 临时数据一天后清理。存档上传数据按白名单清洗；桶保持私有。
-清洗后的单份存档默认上限 64 KB，游戏模块可以导出更大的 `MAX`（悬赏怪物猎人为 160 KB，只接受第二版存档）。
+清洗后的单份存档默认上限 64 KB，游戏模块可以导出更大的 `MAX`（悬赏怪物猎人约 176 KB，只接受第三版存档）。
 
 ## 像素字体
 
