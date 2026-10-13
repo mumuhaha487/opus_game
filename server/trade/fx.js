@@ -1,5 +1,5 @@
 // PLATFORM §2.4：USD/CNY 主源腾讯 GBK 报价，备源东方财富离岸人民币。
-// 汇率缓存 60 秒，服务端检查时间；客户端传入的汇率不参与记账。
+// 汇率缓存 30 秒，服务端检查时间；客户端传入的汇率不参与记账。
 // PLATFORM §2.2：超过 10 分钟或两源失败时拒绝换汇。
 import { parse } from './decimal.js';
 import { upstream, chinaTime } from './upstream.js';
@@ -26,7 +26,7 @@ export async function getFx(now = Date.now(), budget) {
   ];
   for (const [url, decode] of sources) {
     try {
-      const result = await upstream(url, 60, decode, budget);
+      const result = await upstream(url, 30, decode, budget);
       return validRate(result.rate, result.rateTime, now);
     } catch (error) { if (error?.code === 'upstream_budget') throw error; }
   }

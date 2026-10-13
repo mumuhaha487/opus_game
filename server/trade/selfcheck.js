@@ -2,7 +2,7 @@
 // 覆盖定点十进制、记账舍入、现货手续费与签到日历。
 // 强平价与合约保证金使用生产函数核对，全部检查保持纯函数。
 import * as decimal from './decimal.js';
-import { defaultState } from './state.js';
+import { defaultState, transfer } from './state.js';
 import { checkin, nextStreak, REWARDS } from './checkin.js';
 import { FEE_RATE } from './spot.js';
 import { liquidation, removable, MAKER, TAKER } from './futures.js';
@@ -51,6 +51,14 @@ export function runSelfcheck() {
   assert(nextStreak(state.checkin, now + 2 * 86400000) === 1, 'missed day');
   // PLATFORM §3：新奖励表逐日递增，第七天以后保持 50 USD。
   for (let i = 1; i < 10; i++) assert(checkin(state, now + i * 86400000) === REWARDS[Math.min(i, 6)], 'reward cap');
-  return { checks: ['decimal', 'rounding:1000', 'spot-fee', 'liquidation-formula', 'futures-fee', 'futures-margin', 'checkin-calendar'] };
+  // PLATFORM §2.2：生产划转核对 0.2% 费用、CNY floor 与往返资产守恒。
+  const funds = defaultState(now); funds.wallet.usd = '10';
+  const fx = { rate: '6.6944', rateTime: now };
+  const outbound = transfer(funds, { from: 'wallet', to: 'ashare', amount: '10' }, now, fx);
+  assert(outbound.fee === '0.02' && outbound.received === '66.81', 'fx fee 0.2%');
+  transfer(funds, { from: 'ashare', to: 'wallet', amount: funds.ashare.cash.free }, now, fx);
+  assert(parse(funds.wallet.usd) < parse('10'), 'fx roundtrip conservation');
+  return { checks: ['decimal', 'rounding:1000', 'spot-fee', 'liquidation-formula', 'futures-fee', 'futures-margin',
+    'checkin-calendar', 'fx-fee:0.2%', 'fx-conservation'] };
 }
 runSelfcheck();

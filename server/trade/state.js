@@ -116,9 +116,9 @@ export function transfer(state, data, now, fx) {
   const decimals = data.from === 'ashare' ? 2 : 8;
   if (amount <= 0n || amount !== roundTo(amount, decimals, 'floor')) throw { status: 400, code: 'bad_request' };
   const exchanging = data.from === 'ashare' || data.to === 'ashare';
-  // PLATFORM §2.2：出账单位扣 0.1% 费用（ceil），随后换算，到账按目标精度 floor。
+  // PLATFORM §2.2：出账单位扣 0.2% 费用（ceil），随后换算，到账按目标精度 floor。
   if (exchanging && (!fx || now - fx.rateTime > 600000)) throw { status: 503, code: 'fx_unavailable' };
-  const fee = exchanging ? roundTo(mul(amount, parse('0.001'), 'ceil'), decimals, 'ceil') : 0n;
+  const fee = exchanging ? roundTo(mul(amount, parse('0.002'), 'ceil'), decimals, 'ceil') : 0n;
   const net = amount - fee, rate = exchanging ? parse(fx.rate) : parse('1');
   if (net <= 0n || rate <= 0n) throw { status: 400, code: 'bad_request' };
   const converted = !exchanging ? net : data.to === 'ashare' ? mul(net, rate, 'floor') : div(net, rate, 'floor');
