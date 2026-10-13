@@ -5,6 +5,7 @@ import { absent } from '../store.js';
 import { parse, toStr, mul, div, roundTo } from './decimal.js';
 import { checkinView } from './checkin.js';
 import { marketStatus } from './ashare-rules.js';
+import { dayKey } from '../likes.js';
 export const tradeKey = uid => `trade/${uid}.json`;
 export function defaultState(now = Date.now()) {
   return {
@@ -96,6 +97,8 @@ export function stateView(state, now, partial = false, notices = []) {
   return {
     serverTime: now, partial, checkin: checkinView(state.checkin, now), spot: { balances },
     wallet: state.wallet, disclaimerAt: state.disclaimerAt,
+    // PLATFORM §5.2.4：跨日视图清零，下一张成功委托在条件写内更新持久化计数。
+    agent: { ...state.agent, day: dayKey(now), ordersToday: state.agent.day === dayKey(now) ? state.agent.ordersToday : 0 },
     ashare: { cash: state.ashare.cash,
       holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })),
       market: { ...marketStatus(now, { time: state.ashare.marketTime ?? now }), checked: state.ashare.marketTime != null } },

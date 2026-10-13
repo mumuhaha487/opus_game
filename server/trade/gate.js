@@ -1,6 +1,13 @@
 // Gate.io 公开行情客户端与 Cloudflare Cache 接口。
 // 请求预算按一次 Worker 调用共享，条件写重试也不重置预算。
 // 规格 5.3：合成缓存 URL、8 秒超时、最多 30 次上游请求。
+export function assertBookFresh(book, now) {
+  // PLATFORM §5.2.2：盘口 current 为毫秒；缺失、无效、超过 10 秒或远未来均不可成交。
+  const time = typeof book?.current === 'number' || typeof book?.current === 'string' ? Number(book.current) : NaN;
+  if (!Number.isFinite(time) || time <= 0 || Math.abs(now - time) > 10000) {
+    throw { status: 503, code: 'market_stale' };
+  }
+}
 export class GateClient {
   constructor(now = Date.now()) { this.now = now; this.used = 0; this.pending = new Map(); }
   async get(path, query = {}, ttl = 5) {

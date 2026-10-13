@@ -3,6 +3,14 @@
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
   Cache-Control: public, max-age=0, must-revalidate
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# PLATFORM §5.4：交易和开发者页面的 CSP，Cloudflare 要求每个响应头值位于单行。
+/trade/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com https://push2his.eastmoney.com https://searchapi.eastmoney.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'
+
+/developer/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com https://push2his.eastmoney.com https://searchapi.eastmoney.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'
 
 /hub/*
   Cache-Control: public, max-age=0, must-revalidate

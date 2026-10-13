@@ -12,6 +12,8 @@ function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', ...headers,
+    // PLATFORM §5.4：认证、公共接口、错误和异常响应均使用 JSON 防嵌入策略。
+    'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   } });
 }
 const fail = (status, error, headers) => reply(status, { error }, headers);

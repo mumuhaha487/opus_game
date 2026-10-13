@@ -2,6 +2,7 @@
 // 规格 5.1：方法检查、账号限流、统一错误与 no-store 响应。
 // 结算和操作在同一 R2 条件写内提交，summary 只读一次交易文档。
 import { rateWindow } from '../store.js';
+import { dayKey } from '../likes.js';
 import { GateClient } from './gate.js';
 import { readState, updateState, stateView, summary, transfer } from './state.js';
 import { checkin } from './checkin.js';
@@ -32,11 +33,14 @@ const MESSAGES = {
   market_closed: '当前不在交易时段', price_out_of_limit: '委托价格超出涨跌停范围',
   lot_size: '买入数量须为 100 股的整数倍（科创板至少 200 股）',
   t_plus_one: '可卖数量不足（当日买入的股票下一交易日才能卖出）', suspended: '该股票停牌', not_a_share: '仅支持沪深 A 股',
+  market_stale: '行情暂时不同步，请稍后再试', daily_order_limit: '今日委托次数已达上限',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
     'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', ...headers,
+    // PLATFORM §5.4：API 仅返回 JSON，所有成功、错误及方法拒绝响应使用同一防嵌入策略。
+    'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   } });
 }
 export async function handleTrade(request, env, session, data) {
@@ -69,6 +73,12 @@ export async function handleTrade(request, env, session, data) {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
       if (method === 'POST' && !state.disclaimerAt) throw { status: 403, code: 'disclaimer_required' };
+      const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order'].includes(route);
+      const previous = ordering && state.clientIds.find(entry => entry.clientId === data.clientId);
+      // PLATFORM §5.2.4–5：重放不新增委托；每日上限在同一个 etag 事务内检查与增加。
+      if (previous) return { order: structuredClone(previous.result), notices: [] };
+      const day = dayKey(now), ordersToday = state.agent.day === day ? state.agent.ordersToday : 0;
+      if (ordering && ordersToday >= 500) throw { status: 429, code: 'daily_order_limit' };
       const fx = route === 'transfer' && [data.from, data.to].includes('ashare') ? await getFx(now, gate) : null;
       if (route === 'ashare/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
         await ashare.quotes([data.code, 'sh000001']);
@@ -92,6 +102,11 @@ export async function handleTrade(request, env, session, data) {
       const candidate = method === 'GET' ? structuredClone(state) : state;
       let settlement;
       try {
+        // ASHARE §4：有 A 股资金、持仓或历史参与的账户，state 也刷新指数日期，避免隔日误报休市。
+        if (route === 'state' && (candidate.ashare.marketTime != null || candidate.ashare.cash.free !== '0'
+          || candidate.ashare.cash.locked !== '0' || Object.keys(candidate.ashare.holdings).length)) {
+          candidate.ashare.marketTime = (await ashare.quote('sh000001')).time;
+        }
         settlement = await settle(candidate, gate, now, method === 'POST', ashare);
       } catch (error) {
         if (method !== 'GET' || error?.code !== 'market_unavailable') throw error;
@@ -112,6 +127,7 @@ export async function handleTrade(request, env, session, data) {
       if (route === 'futures/leverage') await changeLeverage(state, data, gate);
       if (route === 'futures/tpsl') await changeTPSL(state, data, gate, now);
       if (route === 'futures/margin') await changeMargin(state, data, gate, now);
+      if (ordering) state.agent = { ...state.agent, day, ordersToday: ordersToday + 1 };
       return { ...settlement, order, reward, transferred };
     }, now);
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),

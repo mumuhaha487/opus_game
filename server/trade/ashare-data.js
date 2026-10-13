@@ -21,6 +21,7 @@ function numeric(value, zero = false) {
   return toStr(parse(value));
 }
 function signedNumeric(value) {
+  if (value === '-' || value === '') return '0';
   return value.startsWith('-') ? toStr(-parse(value.slice(1))) : numeric(value, true);
 }
 export function parseTencent(text) {

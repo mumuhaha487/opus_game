@@ -108,8 +108,11 @@ export async function placeAshareOrder(state, data, client, now) {
   if (state.orders.length >= 50) fail('too_many_orders');
   if (data.type === 'market' && market.status !== 'open') fail('market_closed');
   if (data.type === 'market' && quote.suspended) fail('suspended');
+  // PLATFORM §5.2.2：市价拒绝旧报价；限价保留挂单意图，旧盘口不能立即成交。
+  const fresh = Math.abs(now - quote.time) <= 30000;
+  if (data.type === 'market' && !fresh) throw { status: 503, code: 'market_stale' };
   const order = createAshareOrder(state, data, quote, market, now);
-  const matching = market.status === 'open' && !quote.suspended;
+  const matching = market.status === 'open' && !quote.suspended && fresh;
   const estimate = data.type === 'limit' ? mul(values.price, values.qty, 'ceil') : 0n;
   const match = matching ? matchAshare(quote, data.side, values.qty, values.price,
     data.type === 'market' && data.side === 'buy' ? parse(state.ashare.cash.free) : null) : { filled: 0n, quote: 0n };

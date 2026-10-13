@@ -4,6 +4,7 @@
 import { parse, toStr, mul, div, min, roundTo, credit, debit } from './decimal.js';
 import { marketFor } from './markets.js';
 import { balance, adjustBalance, moveLock, ledger } from './state.js';
+import { assertBookFresh } from './gate.js';
 export const FEE_RATE = parse('0.001');
 const failure = code => { throw { status: 400, code }; };
 function checkedDecimal(value, decimals, code) {
@@ -118,6 +119,7 @@ export async function placeOrder(state, data, gate, now) {
 }
 async function placeBookOrder(state, order, values, specification, gate, now) {
   const book = await gate.book(order.symbol);
+  assertBookFresh(book, now);
   const match = eatBook(book, order.side, values.qty, values.quoteQty, Number(specification.amount_precision), values.price);
   if (order.type === 'limit') {
     checkNotional(mul(values.price, values.qty, 'floor'), specification);

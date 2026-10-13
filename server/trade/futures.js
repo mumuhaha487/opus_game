@@ -4,6 +4,7 @@
 import { parse, toStr, mul, div, min, max, credit, debit } from './decimal.js';
 import { marketFor } from './markets.js';
 import { ledger } from './state.js';
+import { assertBookFresh } from './gate.js';
 export const MAKER = parse('0.0002'), TAKER = parse('0.0005');
 const fail = (code, extra = {}) => { throw { status: 400, code, ...extra }; };
 export const signed = value => value.startsWith('-') ? -parse(value.slice(1)) : parse(value);
@@ -179,7 +180,9 @@ export async function placeFuturesOrder(state, data, gate, now) {
   const { spec, qty, price, ticker } = await orderValues(state, data, gate);
   if (state.orders.length >= 50) fail('too_many_orders');
   const order = makeFuturesOrder(state, data, leverageFor(state, data.symbol, spec), now);
-  const match = data.type === 'stop_market' ? null : futuresMatch(await gate.futuresBook(data.symbol), data.side,
+  const book = data.type === 'stop_market' ? null : await gate.futuresBook(data.symbol);
+  if (book) assertBookFresh(book, now);
+  const match = data.type === 'stop_market' ? null : futuresMatch(book, data.side,
     qty, parse(spec.quanto_multiplier), price);
   if (data.type === 'market' && !match.filled) fail('no_liquidity');
   const estimate = data.type === 'market' ? match.average : price;
@@ -221,6 +224,9 @@ function positionFor(state, symbol) {
   if (!position) throw { status: 404, code: 'position_not_found' }; return position;
 }
 export async function closeFutures(state, data, gate, now) {
+  // PLATFORM §5.2.5：已平仓后同 clientId 重放仍返回原结果，不能先要求仓位存在。
+  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
+  if (previous) return structuredClone(previous.result);
   const position = positionFor(state, data.symbol);
   if (!['market', 'limit'].includes(data.type)) fail('bad_request');
   return placeFuturesOrder(state, { symbol: data.symbol, clientId: data.clientId || crypto.randomUUID(),
