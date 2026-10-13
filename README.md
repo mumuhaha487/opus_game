@@ -135,6 +135,70 @@ node build.mjs
 字体源是熵刃内嵌的同版本 Fusion Pixel（`entropy-blade/js/fontdata.js`）；缺字时工具会列出缺的字符并停止。
 生成工具的依赖只安装在被忽略的 `tools/.deps/`，站点构建保持零依赖。
 
+## 模拟交易所
+
+入口为 `/trade/`，复用 GAME.INC.RE 全站账号，资产保存在现有 `ACCOUNTS` R2 绑定的 `trade/<uid>.json`。
+第一阶段提供现货交易、签到、划转、资产页，以及真实 USDT 永续合约行情；合约下单在第二阶段开放。
+
+行情使用 Gate.io 公开 REST / WebSocket。大陆直连与 Cloudflare Worker 出口均已验证可用；
+Binance 镜像在 Worker 出口返回 403。展示和成交使用同一数据源，浏览器行情流量直接访问 Gate.io。
+
+```mermaid
+flowchart LR
+  Browser[浏览器] <-->|公开实时行情| Gate[Gate.io]
+  Browser <-->|全站签名会话| Worker[Cloudflare Worker]
+  Worker <-->|条件写入| R2[R2 账号资产]
+  Worker -->|权威盘口、成交、K 线| Gate
+```
+
+| 接口 | 第一阶段用途 |
+|---|---|
+| `GET /api/trade/state` | 先惰性结算，返回资产、签到、当前委托和近期历史 |
+| `GET /api/trade/summary` | 只读交易文档，供汇总页显示账号摘要 |
+| `GET /api/trade/history?kind=orders\|trades\|ledger&market=spot\|futures` | 有上限的完整历史 |
+| `POST /api/trade/checkin` | 领取北京时间当天的签到奖励 |
+| `POST /api/trade/transfer` | 现货 / 合约账户之间划转 USDT |
+| `POST /api/trade/spot/order` | 市价、限价、止盈止损下单，clientId 去重 |
+| `POST /api/trade/spot/cancel` | 撤销当前账号的现货委托 |
+| `POST /api/trade/spot/cancel-all` | 按交易对或全部撤销现货委托 |
+
+市价买单吃 asks，卖单吃 bids；深度不足时部分成交并取消余量。限价单先冻结资金，
+立即可成交部分吃盘口记 Taker，余量等待下单后的真实成交或完整 K 线命中，再按限价一次性成交记 Maker。
+止盈止损根据服务端最新价确定触发方向；限价允许成交时按触发价成交，否则成为已触发的挂单。
+现货 Maker / Taker 都是 0.1%，买入手续费扣币，卖出手续费扣 USDT。
+
+惰性结算的首尾不完整分钟查逐笔，历史按 1m / 1h / 1d 分段，跳过下单之前的数据。
+成交时间使用逐笔时间或 K 线开盘时间，已触发挂单从下一根 K 线开始判断。
+金额内部使用 18 位 BigInt，余额 8 位：入账向下、出账及费用向上取整。
+R2 使用 etag 条件写并最多重试四次；每次 Worker 调用最多 30 次上游 fetch，
+预算不足时返回 partial 并记录进度，前端一秒后继续同步。
+
+签到连续七天奖励为 **1000、1000、1500、1500、2000、2000、5000 USDT**，第八天回第一档；
+断签回到第一档，奖励发到现货账户。首次创建交易文档余额为 0。
+
+成本估算：每个登录且可见的页面每 20 秒请求 state，持续一小时约 180 次 Worker 请求，
+穿过委托价格时额外请求，单账号限流为每分钟 180 次全部请求 / 40 次 POST。
+每次 state 包括一次会话用户读取、交易限流的读写、一次交易文档读取；
+发生结算进度或操作变化时再写一次交易文档。POST 再增加一次限流读写，etag 冲突会增加交易文档读写。
+行情展示占 0 次 Worker 请求；summary 读取一次交易文档，零 Gate.io 请求。
+
+范围：现货三种委托已实现；本期合约模式按逐仓、单向持仓设计，没有全仓或 OCO。
+第一阶段合约只展示行情，合约下单 API 尚未开放。
+
+本地开发先在被忽略的 `.dev.vars` 中设置独立测试用 `AUTH_SECRET` 与 `PW_PEPPER`，
+使用本地 R2，不连接生产存储：
+
+```powershell
+node tools/hub-font.mjs
+node --test "_work/trade/tests/*.test.mjs"
+node build.mjs
+npx --yes wrangler@4 dev --local
+node _work/trade/ui-check.mjs
+```
+
+图表库是 `trade/vendor/` 中原样复制的 Lightweight Charts 5.2.1，保留许可证和 attribution。
+构建不安装依赖，额外检查 39 个市场、vendor 版本与纯函数自检（包含 1000 组舍入守恒检查）。
+
 ## Optional Manual Deployment
 
 `deploy.ps1` builds the same site and uploads it with Wrangler. It requires

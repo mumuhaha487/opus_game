@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!-- 模拟交易所单页入口，复用全站 GameAccount 会话。
+     样式与文案来自规格第 9 节，行情直连 Gate.io。
+     Lightweight Charts 原样 vendored，全部动态 DOM 由模块安全写入。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B0E11">
+  <title>模拟交易所 · GAME.INC.RE</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/trade.css">
+</head>
+<body>
+  <header class="trade-header" id="header">
+    <a class="trade-brand" href="#/spot/BTC_USDT">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+        <path fill="#FCD535" d="M12 1 23 12 12 23 1 12Z"/>
+        <path fill="#181A20" d="M12 6 18 12 12 18 6 12Z"/>
+        <path fill="#FCD535" d="M12 9.5 14.5 12 12 14.5 9.5 12Z"/>
+      </svg>
+      <span>模拟交易所<small>GAME.INC.RE</small></span>
+    </a>
+    <nav class="desktop-nav" aria-label="交易所" id="desktop-nav"></nav>
+    <div class="header-actions" id="header-actions"></div>
+  </header>
+  <main>
+    <div class="desk" id="desk">
+      <section class="panel bar" id="bar" aria-label="交易对"></section>
+      <section class="panel book" id="book" aria-label="订单簿"></section>
+      <section class="panel chart" id="chart" aria-label="K 线"></section>
+      <section class="panel form" id="form" aria-label="下单">
+        <div id="spot-form"></div>
+        <div class="futures-placeholder" id="futures-form" hidden>合约交易即将开放</div>
+      </section>
+      <div class="aux" id="aux">
+        <div class="aux-tabs" id="aux-tabs"></div>
+        <section class="panel side" id="side" aria-label="市场列表"></section>
+        <section class="panel tape" id="tape" aria-label="最新成交"></section>
+      </div>
+      <section class="panel orders" id="orders" aria-label="委托与资产"></section>
+    </div>
+    <section class="panel market-page" id="markets-page" aria-label="行情" hidden></section>
+    <section class="panel assets-page" id="assets-page" aria-label="资产" hidden></section>
+  </main>
+  <footer class="trade-footer">
+    <div><i class="connection-dot" id="connection-dot"></i><span id="connection-status">行情重连中…</span> · 数据来源 Gate.io</div>
+    <div>资产为 GAME.INC.RE 模拟资产，仅用于站内交易体验 <a href="../index.html">游戏汇总</a></div>
+  </footer>
+  <nav class="mobile-nav" aria-label="交易所" id="mobile-nav"></nav>
+  <div class="chart-mobile-actions" id="chart-mobile-actions"></div>
+  <dialog id="modal" class="trade-modal" aria-label="账号与资产操作"><div id="modal-content"></div></dialog>
+  <div id="toasts" role="status" aria-live="polite"></div>
+  <script src="../hub/account-core.js"></script>
+  <script src="js/markets.js"></script>
+  <script src="vendor/lightweight-charts.standalone.production.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
