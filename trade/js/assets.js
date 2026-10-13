@@ -2,6 +2,11 @@
 // 规格 9.9：估算总值、签到 / 划转 / 交易三按钮和登录入口。
 // 估值使用浏览器 Gate.io 行情；余额始终来自已认证 Worker。
 import { element, button, money, quantity, time } from './format.js';
+export function assetAmount(feed, asset, value) {
+  if (asset === 'USDT') return money(value);
+  const precision = feed.specs.get('spot:' + asset + '_USDT')?.value.amount_precision;
+  return precision === undefined ? '--' : quantity(value, Number(precision));
+}
 export class Assets {
   constructor(panel, feed, api, modals) { this.panel = panel; this.feed = feed; this.api = api; this.modals = modals; }
   spotValue(state) {
@@ -24,7 +29,8 @@ export class Assets {
   }
   render(state) {
     const panel = this.panel;
-    const signature = JSON.stringify([this.api.generation, state?.spot, state?.futures, state?.recent.ledger]);
+    const precisions = state?.spot.balances.map(funds => this.feed.specs.get('spot:' + funds.asset + '_USDT')?.value.amount_precision);
+    const signature = JSON.stringify([this.api.generation, state?.spot, state?.futures, state?.recent.ledger, precisions]);
     if (signature === this.signature) { this.refreshValues(state); return; }
     this.signature = signature;
     const ledgerSignature = JSON.stringify([this.api.generation, state?.recent.ledger]);
@@ -57,7 +63,8 @@ export class Assets {
     for (const funds of state.spot.balances) {
       const total = Number(funds.free) + Number(funds.locked), row = element('tr');
       const last = funds.asset === 'USDT' ? 1 : Number(this.feed.tickers.spot.get(funds.asset + '_USDT')?.last || 0);
-      for (const value of [funds.asset, quantity(total, 8), quantity(funds.free, 8), quantity(funds.locked, 8), money(total * last)]) {
+      const amount = value => assetAmount(this.feed, funds.asset, value);
+      for (const value of [funds.asset, amount(total), amount(funds.free), amount(funds.locked), money(total * last)]) {
         row.append(element('td', value));
       }
       this.valuations.push({ asset: funds.asset, total, cell: row.lastChild });

@@ -35,7 +35,8 @@ export async function updateState(bucket, uid, action, now = Date.now()) {
     const before = JSON.stringify(state);
     const result = await action(state);
     normalize(state, now);
-    if (etag && JSON.stringify(state) === before) return { state, ...result };
+    // 本轮验收修正规格 5.4：默认空账户只读，首次发生实际变更时才创建文档。
+    if (JSON.stringify(state) === before) return { state, ...result };
     state.updated = now;
     const onlyIf = etag ? { etagMatches: etag } : absent();
     if (await bucket.put(tradeKey(uid), JSON.stringify(state), { onlyIf })) return { state, ...result };
@@ -65,7 +66,7 @@ export function summary(state, now) {
     asset !== 'USDT' && parse(funds.free) + parse(funds.locked) > 0n).length;
   const funds = balance(state, 'USDT');
   return {
-    checkedToday: checkinView(state.checkin, now).checkedToday, streak: state.checkin.streak,
+    checkedToday: checkinView(state.checkin, now).checkedToday, streak: checkinView(state.checkin, now).streak,
     spotUSDT: toStr(parse(funds.free) + parse(funds.locked)), futuresUSDT: toStr(futuresTotal),
     assets, positions: Object.keys(state.futures.positions).length,
   };

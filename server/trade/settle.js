@@ -96,6 +96,8 @@ async function settleOrder(state, order, gate, now, notices) {
 }
 export async function settle(state, gate, now, force = false) {
   const notices = [];
+  // 本轮验收修正规格 6.5：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
+  if (!state.orders.length && !Object.keys(state.futures.positions).length) return { partial: false, notices };
   if (!force && now - (state.lastSettlement || 0) < 2000) return { partial: false, notices };
   let partial = false;
   const symbols = new Set(state.orders.filter(order => order.market === 'spot').map(order => order.symbol));

@@ -20,7 +20,7 @@ button, a, select { transition: color 0.15s, background-color 0.15s; }
 button { border: 0; background: transparent; cursor: pointer; padding: 4px 8px; }
 button:disabled { cursor: default; }
 a { color: inherit; text-decoration: none; }
-a:hover, button:hover { color: var(--brand); }
+a:hover { color: var(--brand); }
 input { min-width: 0; outline: 0; }
 select { border: 0; background: var(--input); padding: 2px 4px; border-radius: 4px; }
 .up { color: var(--up); } .down { color: var(--down); }
@@ -209,6 +209,7 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
 .modal-field input:focus, .modal-field input:hover { border-color: var(--brand); }
 .trade-modal .primary { display: block; width: 100%; margin-top: 20px; }
 .day-cards { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.trade-modal.checkin-modal { width: min(560px, 100vw - 32px); }
 .day-card { background: var(--input); border-radius: 8px; padding: 12px 8px; border: 1px solid transparent;
   text-align: center; position: relative; }
 .day-card span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; }
@@ -224,6 +225,11 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
 .toast > span:first-child { font-size: 16px; }
 .chart-fullscreen .chart { position: fixed; z-index: 20; inset: 0; border-radius: 0; }
 .market-picker { position: fixed; top: 124px; left: 4px; width: 360px; height: 480px; z-index: 15; padding: 12px; }
+.chart-toolbar button:hover, .market-tabs button:hover, .orders-tabs button:hover, .order-types button:hover,
+.tape-tabs button:hover, .aux-tabs button:hover, .pair-button:hover, .modal-header button:hover,
+.stepper:hover, .order-controls button:hover { color: var(--text); }
+.header-actions > button:not(.primary):hover, .register-link:hover, button.accent:hover { color: var(--brand); }
+.header-actions > a.muted:hover, .trade-footer a:hover { color: var(--text); }
 @media (min-width: 1200px) and (max-width: 1439px) and (min-height: 500px) {
   .desk { grid-template-columns: 280px minmax(560px, 1fr) 280px; }
 }

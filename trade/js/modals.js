@@ -17,6 +17,7 @@ export class Modals {
   }
   error(error) { this.toast(error.data?.message || GameAccount.errorText(error), true); }
   open(title) {
+    this.dialog.classList.toggle('checkin-modal', title === '每日签到');
     this.content.replaceChildren();
     const header = element('div', '', 'modal-header'); header.append(element('h2', title), button('×', () => this.dialog.close()));
     this.content.append(header); if (!this.dialog.open) this.dialog.showModal(); return this.content;

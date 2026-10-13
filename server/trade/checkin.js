@@ -9,10 +9,11 @@ export function nextStreak(checkin, now) {
 }
 export function checkinView(checkin, now) {
   const today = dayKey(now), checkedToday = checkin.last === today;
-  const streak = checkedToday ? checkin.streak : nextStreak(checkin, now);
-  const dayIndex = (streak - 1) % 7;
-  return { today, checkedToday, streak: checkin.streak, dayIndex, rewards: REWARDS,
-    nextReward: REWARDS[checkedToday ? streak % 7 : dayIndex], total: checkin.total, days: checkin.days };
+  // 规格 8、9.10：已连续天数只保留今日或昨日签到；断签显示 0，待领回第 1 档。
+  const streak = checkedToday || checkin.last === dayKey(now - 86400000) ? checkin.streak : 0;
+  const dayIndex = checkedToday ? (streak - 1) % 7 : streak % 7;
+  return { today, checkedToday, streak, dayIndex, rewards: REWARDS,
+    nextReward: REWARDS[streak % 7], total: checkin.total, days: checkin.days };
 }
 export function checkin(state, now) {
   if (state.checkin.last === dayKey(now)) throw { status: 409, code: 'already_checked_in' };

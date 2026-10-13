@@ -16,6 +16,7 @@ const MESSAGES = {
   bad_qty: '数量不符合精度要求', insufficient_balance: '可用余额不足', too_many_orders: '当前委托最多 50 笔',
   order_not_found: '委托不存在或已结束', already_checked_in: '今天已经签到过了',
   market_unavailable: '行情服务暂时不可用，请稍后再试', no_liquidity: '当前盘口深度不足，未能成交',
+  rate_limited: '操作太频繁，请稍后再试', not_found: '接口不存在', method_not_allowed: '请求方法不支持',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -25,15 +26,19 @@ function reply(status, data, headers = {}) {
 }
 export async function handleTrade(request, env, session, data) {
   const url = new URL(request.url), route = url.pathname.slice('/api/trade/'.length);
-  if (!Object.hasOwn(ROUTES, route)) return reply(404, { error: 'not_found' });
+  if (!Object.hasOwn(ROUTES, route)) return reply(404, { error: 'not_found', message: MESSAGES.not_found });
   const method = ROUTES[route];
-  if (request.method !== method) return reply(405, { error: 'method_not_allowed' }, { Allow: method });
+  if (request.method !== method) {
+    return reply(405, { error: 'method_not_allowed', message: MESSAGES.method_not_allowed }, { Allow: method });
+  }
   const uid = session.user.uid, now = Date.now();
   try {
-    const waits = [await rateWindow(env.ACCOUNTS, 'trade-uid', uid, 60, 180, true)];
-    if (method === 'POST') waits.push(await rateWindow(env.ACCOUNTS, 'trade-post', uid, 60, 40, true));
-    const retryAfter = Math.max(...waits);
-    if (retryAfter) return reply(429, { error: 'rate_limited', retryAfter }, { 'Retry-After': String(retryAfter) });
+    // 本轮验收修正规格 5.1：仅 POST 计数，60 秒共 40 次；GET 不写限流文档。
+    if (method === 'POST') {
+      const retryAfter = await rateWindow(env.ACCOUNTS, 'trade-post', uid, 60, 40, true);
+      if (retryAfter) return reply(429, { error: 'rate_limited', message: MESSAGES.rate_limited, retryAfter },
+        { 'Retry-After': String(retryAfter) });
+    }
     if (route === 'summary' || route === 'history') {
       const { state } = await readState(env.ACCOUNTS, uid, now);
       if (route === 'summary') return reply(200, summary(state, now));
@@ -45,7 +50,17 @@ export async function handleTrade(request, env, session, data) {
     }
     const gate = new GateClient(now);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
-      const settlement = await settle(state, gate, now, method === 'POST');
+      // 本轮验收修正规格 5.5：GET 在副本结算，失败或预算耗尽返回原状态，零账户写入。
+      const candidate = method === 'GET' ? structuredClone(state) : state;
+      let settlement;
+      try {
+        settlement = await settle(candidate, gate, now, method === 'POST');
+        if (settlement.partial) throw { status: 503, code: 'upstream_budget' };
+      } catch (error) {
+        if (method !== 'GET' || !['market_unavailable', 'upstream_budget'].includes(error?.code)) throw error;
+        return { partial: true, stale: true, notices: [] };
+      }
+      if (method === 'GET') Object.assign(state, candidate);
       let order, reward;
       if (route === 'checkin') reward = checkin(state, now);
       if (route === 'transfer') transfer(state, data, now);
@@ -55,6 +70,7 @@ export async function handleTrade(request, env, session, data) {
       return { ...settlement, order, reward };
     }, now);
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),
+      ...(result.stale ? { stale: true } : {}),
       ...(result.order ? { order: result.order } : {}), ...(result.reward ? { reward: result.reward } : {}) });
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';

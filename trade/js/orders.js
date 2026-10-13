@@ -2,6 +2,7 @@
 // 规格 9.3、9.9：桌面 40px 表格行，手机当前委托卡片。
 // 撤单与全部撤单通过已登录交易 API 执行，动态内容使用 textContent。
 import { element, button, price, quantity, money, time, icon } from './format.js';
+import { assetAmount } from './assets.js';
 const STATUS = { new: '未成交', triggered: '已触发', filled: '已成交', partial_canceled: '部分成交', canceled: '已撤销' };
 const TYPE = { market: '市价', limit: '限价', stop_limit: '止盈止损' };
 export class Orders {
@@ -29,7 +30,8 @@ export class Orders {
   async render(state) {
     const generation = this.api.generation;
     const signature = JSON.stringify([this.feed.market, this.feed.symbol, this.tab, this.hideOthers.checked,
-      state?.openOrders, state?.recent, state?.spot]);
+      state?.openOrders, state?.recent, state?.spot,
+      state?.spot.balances.map(funds => this.feed.specs.get('spot:' + funds.asset + '_USDT')?.value.amount_precision)]);
     if (signature === this.signature) return; this.signature = signature;
     const tabs = this.tabsFor(state);
     if (!tabs.some(([name]) => name === this.tab)) this.tab = tabs[0][0];
@@ -89,7 +91,8 @@ export class Orders {
     if (this.tab === 'assets') {
       const total = Number(record.free) + Number(record.locked);
       const latest = record.asset === 'USDT' ? 1 : Number(this.feed.tickers.spot.get(record.asset + '_USDT')?.last || 0);
-      return [record.asset, quantity(total, 8), quantity(record.free, 8), quantity(record.locked, 8), money(total * latest),
+      const amount = value => assetAmount(this.feed, record.asset, value);
+      return [record.asset, amount(total), amount(record.free), amount(record.locked), money(total * latest),
         button('交易', () => { location.hash = '#/spot/' + (record.asset === 'USDT' ? 'BTC' : record.asset) + '_USDT'; }, 'accent')];
     }
     if (this.tab === 'ledger') return [time(record.t, true), record.note, record.asset, record.amount, record.note];
