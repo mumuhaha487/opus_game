@@ -17,6 +17,7 @@
   --brand: var(--gold); --brand-hover: var(--gold-hover); --brand-text: var(--gold-ink); --accent: var(--gold);
 }
 .cn-market { --rise: var(--red); --fall: var(--green);
+  --up: var(--rise); --down: var(--fall);
   --rise-bg: rgba(229,72,77,0.14); --fall-bg: rgba(34,181,115,0.14); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.5 var(--font); font-variant-numeric: tabular-nums; }
@@ -575,7 +576,8 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 .stock-identity small { display: block; font-size: 12px; }
 .stock-price { flex: none; }
 .stock-price > small { display: block; font-size: 13px; }
-.stock-head > .bar-stat { flex: 0 1 auto; white-space: nowrap; }
+.stock-statistics { display: flex; gap: 14px; flex: 1; min-width: 0; overflow: hidden; }
+.stock-statistics .bar-stat { white-space: nowrap; }
 .stock-head > .market-status { margin-left: auto; flex: none; }
 .stock-head > button { flex: none; }
 .stock-level { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center;
@@ -615,12 +617,8 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 .stock-dock .seg button { padding: 0 8px; }
 .stock-mobile-actions, .ticket-close, .compact-chart-tabs { display: none; }
 .stock-fullscreen { position: fixed; inset: 0; z-index: 40; border-radius: 0; }
-@media (min-width: 1200px) and (max-width: 1439px) {
-  .stock-head > .bar-stat:nth-of-type(n+6) { display: none; }
-}
-@media (min-width: 1440px) { .stock-head > .bar-stat:nth-of-type(n+8) { display: none; } }
 @media (min-width: 1024px) and (max-width: 1199px) and (min-height: 500px) {
-  .stock-head > .bar-stat { display: none; }
+  .stock-statistics { display: none; }
   .compact-chart-tabs { display: flex; }
   .compact-book > .chart { display: flex; }
   .compact-book > .chart > :not(.compact-chart-tabs) { visibility: hidden; }
@@ -629,7 +627,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 @media (max-width: 767px), (max-height: 499px) {
   #stock-page { display: flex; flex-direction: column; gap: 8px; }
   .stock-head { height: auto; min-height: 80px; padding: 12px; gap: 12px; flex-wrap: wrap; }
-  .stock-head > .bar-stat, .stock-head > .market-status, .stock-head > button { display: none; }
+  .stock-statistics, .stock-head > .market-status, .stock-head > button { display: none; }
   .stock-head .latest-price { font-size: 24px; }
   .stock-identity .badge-circle, .stock-identity .star { display: none; }
   .stock-head .stock-identity { flex: 1; }
@@ -773,3 +771,18 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .day-card b { font-size: 12px; }
   .stock-mobile-actions button { min-height: 48px; }
 }
+/* 第三轮评审：签到金额、紧凑统计与独立登录标签。 */
+.rail-login { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; font-size: 11px; }
+.rail-checkin { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; }
+.checkin-day { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.checkin-day small { font-size: 10px; white-space: nowrap; }
+.overview-checkin, .overview-status { display: flex; flex-direction: column; align-items: flex-start; }
+.overview-checkin > button { margin-top: auto; }
+.overview-status p { margin: 10px 0; }
+.overview-status .market-hours { font-size: 12px; }
+@media (min-width: 1024px) and (min-height: 500px) {
+  .stock-head { gap: 16px; }
+  .stock-head .stock-price { display: grid; grid-template-columns: auto auto; gap: 0 8px; align-items: center; }
+  .stock-head .stock-price small { grid-column: span 2; }
+}
+.overview-status > p:last-child { margin-top: auto; }

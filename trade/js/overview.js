@@ -4,6 +4,7 @@ import { title, segment, change, spark, table } from './ui.js';
 import { INDICES } from './ashare/universe.js';
 import { valuations, totalValue, ACCOUNTS } from './wallet.js';
 import { positionMetrics } from './futures.js';
+import { marketClock } from './ashare/feed.js';
 export class Overview {
   constructor(panel, feed, ashare, api, modals, wallet, navigate) {
     Object.assign(this, { panel, feed, ashare, api, modals, wallet, navigate, cryptoSort: 0 });
@@ -22,8 +23,10 @@ export class Overview {
     funds.replaceChildren(title('WALLET', '我的资产'), element('b', this.wallet.display(total, this.wallet.currency), 'wallet-total'));
     const statistics = element('div', '', 'wallet-statistics');
     for (const [id, name, unit] of ACCOUNTS) {
-      const row = element('div'); row.append(element('span', name, 'muted'), element('b', money(values[id]) + ' ' + unit),
-        element('small', this.wallet.display(values[id], id === 'ashare' ? 'CNY' : 'USD'), 'muted')); statistics.append(row);
+      const row = element('div'), native = id === 'ashare' ? 'CNY' : 'USD';
+      row.append(element('span', name, 'muted'), element('b', money(values[id]) + ' ' + unit));
+      if (this.wallet.currency !== native) row.append(element('small', this.wallet.display(values[id], native), 'muted'));
+      statistics.append(row);
     }
     const actions = element('div', '', 'card-actions');
     actions.append(button('签到', () => this.modals.checkin(), 'primary'), button('划转', () => this.modals.transfer(), 'secondary'),
@@ -33,15 +36,22 @@ export class Overview {
     const days = element('div', '', 'checkin-squares');
     data.rewards.forEach((reward, index) => {
       const square = element('span', '', index < data.streak ? 'taken' : index === Math.min(6, data.streak) ? 'today' : '');
-      square.title = '第 ' + (index + 1) + ' 天 · ' + this.wallet.display(+reward); days.append(square);
+      const day = element('div', '', 'checkin-day'), cny = this.wallet.currency === 'CNY';
+      const amount = cny ? this.wallet.rate ? Math.round(+reward * this.wallet.rate) : '--' : Math.round(+reward);
+      square.title = '第 ' + (index + 1) + ' 天 · ' + this.wallet.display(+reward);
+      day.append(square, element('small', '+' + (cny ? '¥' : '') + amount)); days.append(day);
     });
     checkin.replaceChildren(title('CHECK-IN', '每日签到'), days, element('p', '连续 ' + data.streak + ' 天'),
       element('p', '下次 +' + this.wallet.display(+data.nextReward)),
       button(data.checkedToday ? '今日已签到' : '签到', () => this.modals.checkin(), 'primary'));
     const clock = this.ashare.clock(), pill = element('span', clock.label, 'market-status ' + clock.status);
+    const nextOpen = clock.status === 'open' ? marketClock(clock.target + 1).target : clock.target;
     status.replaceChildren(title('MARKET', '市场状态'), pill,
       element('p', (clock.status === 'open' ? '距离收盘 ' : '距离开盘 ') + countdown((clock.target - Date.now()) / 1000)),
-      element('p', '加密市场 · 24 小时交易', 'muted'));
+      element('p', '加密市场 · 24 小时交易', 'muted'),
+      element('p', 'A 股交易时段 09:30–11:30 · 13:00–15:00（北京时间）', 'market-hours muted'),
+      element('p', '下一次开盘：' + new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai',
+        month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(nextOpen), 'muted'));
     const cn = INDICES.map(([code, name]) => this.ticker(code, name, true));
     const crypto = ['BTC', 'ETH', 'SOL'].map(coin => this.ticker(coin, coin, false));
     tickers.replaceChildren(...(this.wallet.region === 'cn' ? [...cn, ...crypto] : [...crypto, ...cn]));

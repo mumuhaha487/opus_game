@@ -25,7 +25,7 @@ export class Feed {
     try {
       await Promise.allSettled(['BTC', 'ETH', 'SOL'].map(async coin => {
         const symbol = coin + '_USDT';
-        const rows = await this.rest('/spot/candlesticks?currency_pair=' + symbol + '&interval=1m&limit=60');
+        const rows = await this.rest('/spot/candlesticks?currency_pair=' + symbol + '&interval=1h&limit=24');
         this.sparkCandles.set(symbol, rows.map(row => ({ time: +row[0], close: +row[2] }))); this.dirty = true;
       }));
     } finally { this.miniPending = false; }

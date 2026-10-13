@@ -2,6 +2,7 @@
 import { element, button, price, time } from '../format.js';
 import { segment } from '../ui.js';
 import { movingAverage } from '../chart.js';
+import { chartTime } from '../chart-time.js';
 export class AshareChart {
   constructor(panel, feed) {
     this.feed = feed; this.period = 'trends'; this.indicators = true;
@@ -22,8 +23,10 @@ export class AshareChart {
       layout: { background: { color: '#13161C' }, textColor: '#7D8696', fontFamily: style.fontFamily, fontSize: 11 },
       grid: { vertLines: { color: '#1C2029' }, horzLines: { color: '#1C2029' } },
       crosshair: { vertLine: { color: '#59616F', style: 2 }, horzLine: { color: '#59616F', style: 2 } },
-      rightPriceScale: { borderColor: '#232833' }, timeScale: { borderColor: '#232833', timeVisible: true },
-      localization: { timeFormatter: value => time(value * 1000, true).slice(0, 16), priceFormatter: value => price(value, 2) },
+      rightPriceScale: { borderColor: '#232833' }, timeScale: { borderColor: '#232833', timeVisible: true,
+        tickMarkFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101) },
+      localization: { timeFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101),
+        priceFormatter: value => price(value, 2) },
     });
     this.chart.subscribeCrosshairMove(event => {
       const rows = feed.bars.get(feed.code + ':' + this.period) || [];
@@ -35,6 +38,7 @@ export class AshareChart {
   }
   select(period) { this.period = this.feed.period = period; this.key = ''; this.feed.schedule(); }
   rebuild() {
+    this.chart.applyOptions({ timeScale: { timeVisible: !(+this.period >= 101) } });
     for (const series of this.series || []) this.chart.removeSeries(series);
     const library = globalThis.LightweightCharts, line = ['trends', 'five'].includes(this.period);
     this.main = this.chart.addSeries(line ? library.LineSeries : library.CandlestickSeries,
@@ -63,7 +67,7 @@ export class AshareChart {
     this.paintLegend(unique.at(-1)); if (changed) this.chart.timeScale().fitContent();
   }
   paintLegend(row) {
-    this.legend.textContent = row ? time(row.time * 1000, true).slice(0, 16) + '  开 ' + price(row.open, 2)
+    this.legend.textContent = row ? chartTime(row.time, 'Asia/Shanghai', +this.period >= 101) + '  开 ' + price(row.open, 2)
       + '  高 ' + price(row.high, 2) + '  低 ' + price(row.low, 2) + '  收 ' + price(row.close, 2) : '';
   }
 }

@@ -18,6 +18,7 @@ export class Stock {
     this.dock = element('section', '', 'panel orders stock-dock');
     panel.append(this.head, this.chartPanel, this.book, this.ticket, this.dock);
     this.chart = new AshareChart(this.chartPanel, feed); this.buildTicket();
+    new ResizeObserver(() => this.fitStatistics()).observe(this.head);
     this.bookTabs = segment([['book', '盘口'], ['trades', '逐笔']], mode => {
       this.bookMode = mode; this.book.classList.toggle('stock-book-trades', mode === 'trades');
     }); this.bookTabs.classList.add('stock-book-tabs');
@@ -78,7 +79,7 @@ export class Stock {
     identity.append(badge(quote.name, this.code, quote.type), name,
       button(this.watch.codes.includes(this.code) ? '★' : '☆', () => this.watch.toggle(this.code), 'star'));
     const latest = element('div', '', 'stock-price');
-    latest.append(element('b', money(quote.last), 'latest-price ' + direction(quote.change)), change(quote.percent),
+    latest.append(element('b', money(quote.last), 'latest-price ' + direction(quote.last - quote.prevClose)), change(quote.percent),
       element('small', (quote.change > 0 ? '+' : '') + money(quote.change)));
     const statistics = [['今开', quote.open], ['最高', quote.high], ['最低', quote.low], ['昨收', quote.prevClose],
       ['成交量（手）', quantity(quote.volume, 0)], ['成交额', large(quote.turnover * 10000)],
@@ -93,8 +94,14 @@ export class Stock {
         history.replaceState(null, '', '#/ashare'); window.dispatchEvent(new HashChangeEvent('hashchange'));
       }
     });
-    this.head.replaceChildren(identity, latest, ...cells, pill, switcher);
+    const stats = element('div', '', 'stock-statistics'); stats.append(...cells);
+    this.head.replaceChildren(identity, latest, stats, pill, switcher); this.fitStatistics();
     if (!this.fields.price.value) this.fields.price.value = money(quote.last).replaceAll(',', '');
+  }
+  fitStatistics() {
+    const stats = this.head.querySelector('.stock-statistics'); if (!stats || !stats.clientWidth) return;
+    const cells = [...stats.children]; cells.forEach(cell => { cell.hidden = false; });
+    for (let index = cells.length - 1; index >= 0 && stats.scrollWidth > stats.clientWidth; index--) cells[index].hidden = true;
   }
   renderBook() {
     const quote = this.feed.quotes[this.code];
@@ -111,7 +118,8 @@ export class Stock {
     });
     paint([...quote.asks].reverse(), 'sell');
     const middle = element('div', '', 'book-middle');
-    middle.append(element('b', money(quote.last), direction(quote.change)), change(quote.percent)); this.book.append(middle);
+    middle.append(element('b', money(quote.last), direction(quote.last - quote.prevClose)), change(quote.percent));
+    this.book.append(middle);
     paint(quote.bids, 'buy');
     const details = element('div', '', 'stock-details'); details.append(title('TRADES', '逐笔成交'));
     for (const row of this.feed.trades.slice(-12).reverse()) {
@@ -134,7 +142,7 @@ export class Stock {
     const fees = estimateFees(value, this.side); this.fields.price.readOnly = this.type === 'market';
     [...this.sideTabs.children].forEach(control => control.classList.toggle('selected', control.dataset.value === this.side));
     [...this.types.children].forEach(control => control.classList.toggle('selected', control.dataset.value === this.type));
-    this.hands.textContent = '= ' + quantity(+this.fields.qty.value / 100, 2) + ' 手';
+    this.hands.textContent = '= ' + quantity(Math.floor(+this.fields.qty.value / 100), 0) + ' 手';
     this.summary.hidden = !logged;
     this.summary.replaceChildren(...[['可用', this.side === 'buy' ? money(this.api.state?.ashare.cash.free || 0) + ' CNY'
       : (this.holding()?.available || '0') + ' 股'], ['预计金额', money(value) + ' CNY'], ['预计费用', money(fees.total) + ' CNY'],

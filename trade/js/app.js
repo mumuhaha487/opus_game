@@ -56,11 +56,16 @@ const compactTabs = segment([['chart', '图表'], ['book', '盘口']], tab => {
 const NAVIGATION = [['overview', '总览'], ['ashare', 'A股'], ['crypto', '加密'],
   ['futures', '合约'], ['assets', '资产'], ['api', 'API']];
 const NAV_ICONS = [
-  [['polyline', { points: '3,17 9,11 13,15 21,7' }], ['path', { d: 'M15 7h6v6' }]],
-  [['path', { d: 'M4 8h13l-3-3M20 16H7l3 3' }]],
-  [['rect', { x: 4, y: 3, width: 16, height: 18, rx: 2 }], ['path', { d: 'M8 8h8M8 12h8M8 16h5' }]],
+  [['rect', { x: 3, y: 3, width: 8, height: 8, rx: 1.5 }], ['rect', { x: 13, y: 3, width: 8, height: 5, rx: 1.5 }],
+    ['rect', { x: 13, y: 10, width: 8, height: 11, rx: 1.5 }], ['rect', { x: 3, y: 13, width: 8, height: 8, rx: 1.5 }]],
+  [['path', { d: 'M7 3v4M7 15v6M17 3v6M17 17v4' }], ['rect', { x: 5, y: 7, width: 4, height: 8, rx: 1 }],
+    ['rect', { x: 15, y: 9, width: 4, height: 8, rx: 1 }]],
+  [['circle', { cx: 12, cy: 12, r: 9 }],
+    ['path', { d: 'M9.5 8h4a2 2 0 0 1 0 4h-4m0 0h4.5a2 2 0 0 1 0 4H9.5zM9.5 8v8M11 6.5V8M11 16v1.5' }]],
+  [['path', { d: 'M4 18 20 6' }], ['circle', { cx: 7, cy: 16, r: 2.5 }], ['path', { d: 'M3 21h18M15 6h5v5' }]],
   [['rect', { x: 3, y: 6, width: 18, height: 13, rx: 2 }], ['path', { d: 'M3 10h18' }],
     ['circle', { cx: 16, cy: 14.5, r: 1.2, fill: 'currentColor' }]],
+  [['path', { d: 'm9 8-4 4 4 4M15 8l4 4-4 4M13 6l-2 12' }]],
 ];
 let page = 'overview', picker, pickerList, accountSignature = '';
 const navigation = new Navigation({ overview: node('overview-page'), ashare: node('ashare-page'),
@@ -78,7 +83,7 @@ for (const id of ['desktop-nav', 'mobile-nav']) NAVIGATION.forEach(([route, labe
   link.dataset.route = route;
   if (id === 'mobile-nav' && ['futures', 'api'].includes(route)) return;
   if (route === 'api') link.href = '../developer/index.html';
-  const glyph = icon(NAV_ICONS[index % NAV_ICONS.length], 22); glyph.setAttribute('stroke-width', '1.6');
+  const glyph = icon(NAV_ICONS[index], 22); glyph.setAttribute('stroke-width', '1.6');
   link.append(glyph, element('span', label)); node(id).append(link);
 });
 const auxiliaryTabs = node('aux-tabs');
@@ -123,10 +128,15 @@ function header() {
   chip.append(element('span', '钱包', 'muted'), element('b', wallet.display(+(api.state?.wallet.usd || 0))));
   const currency = segment([['CNY', 'CNY'], ['USD', 'USD']], value => wallet.select(value), wallet.currency || 'USD');
   const controls = [chip, currency, checkin], profile = GameAccount.profile();
-  const railControls = [button('签到', () => modals.checkin(), 'rail-checkin')];
+  const railControls = [button('', () => modals.checkin(), 'rail-checkin')];
+  const present = icon([['rect', { x: 4, y: 9, width: 16, height: 4, rx: 1 }],
+    ['rect', { x: 5, y: 13, width: 14, height: 7, rx: 1 }],
+    ['path', { d: 'M12 9v11M12 9c-2-3.5-6-3.5-6-1.5S10 9 12 9c2 0 6 .5 6-1.5S14 5.5 12 9' }]], 22);
+  present.setAttribute('stroke-width', '1.6'); railControls[0].append(present); railControls[0].title = '签到';
   railControls[0].classList.toggle('unchecked', !api.state?.checkin.checkedToday);
   if (profile) {
-    const menu = element('details', '', 'user-menu'), options = element('div'); menu.append(element('summary', profile.name));
+    const menu = element('details', '', 'user-menu'), options = element('div');
+    const avatar = element('summary', profile.name[0].toUpperCase()); avatar.title = profile.name; menu.append(avatar);
     for (const [label, target] of [['资产', '#/assets'], ['返回游戏汇总', '../index.html']]) {
       const link = element('a', label); link.href = target; options.append(link);
     }
@@ -136,7 +146,10 @@ function header() {
     controls.push(button(profile.name, () => navigation.go('#/assets'), 'mobile-account'));
   } else {
     controls.push(button('登录', () => modals.login(), 'mobile-account'));
-    railControls.push(button('登录', () => modals.login(), 'avatar'));
+    const login = button('', () => modals.login(), 'rail-login'), circle = element('span', '', 'avatar');
+    const user = icon([['circle', { cx: 12, cy: 8, r: 4 }], ['path', { d: 'M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6' }]], 18);
+    user.setAttribute('stroke-width', '1.6'); circle.append(user); login.append(circle, element('span', '登录'));
+    railControls.push(login);
   }
   node('header-actions').replaceChildren(...controls);
   node('rail-actions').replaceChildren(...railControls);
@@ -290,6 +303,7 @@ window.addEventListener('resize', () => {
 });
 setInterval(() => { feed.dirty = true; }, 1000);
 // DESIGN §4.4：迷你图刷新由页面拥有计时器，纯数据Feed构造不启动后台任务。
+feed.loadMiniCharts();
 setInterval(() => { if (!document.hidden) feed.loadMiniCharts(); }, 30000);
 route(); api.refresh(); requestAnimationFrame(renderFrame);
 modals.initialDisclaimer().then(() => {

@@ -2,6 +2,7 @@
 // 配置与颜色逐项对应规格 9.4、9.6，保留 TradingView attribution。
 // 历史滚动使用 REST，实时末根使用 series.update，图例通过安全 DOM 更新。
 import { element, button, price, percent, time } from './format.js';
+import { chartTime } from './chart-time.js';
 const COLORS = ['#F2C66D', '#5B8DEF', '#A78BFA'];
 export function movingAverage(candles, period, exponential = false) {
   const values = []; let total = 0, previous;
@@ -61,9 +62,10 @@ export class Chart {
       crosshair: { mode: 0, vertLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' },
         horzLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' } },
       rightPriceScale: { borderColor: '#232833' },
-      timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8 },
+      timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8,
+        tickMarkFormatter: (value, type) => chartTime(value, undefined, type < 3) },
       localization: { priceFormatter: value => price(value, this.feed.precision()),
-        timeFormatter: value => time(value * 1000, true).slice(0, 16) },
+        timeFormatter: value => chartTime(value) },
     };
   }
   rebuild() {
