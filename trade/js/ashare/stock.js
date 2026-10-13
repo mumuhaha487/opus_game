@@ -18,6 +18,9 @@ export class Stock {
     this.dock = element('section', '', 'panel orders stock-dock');
     panel.append(this.head, this.chartPanel, this.book, this.ticket, this.dock);
     this.chart = new AshareChart(this.chartPanel, feed); this.buildTicket();
+    this.bookTabs = segment([['book', '盘口'], ['trades', '逐笔']], mode => {
+      this.bookMode = mode; this.book.classList.toggle('stock-book-trades', mode === 'trades');
+    }); this.bookTabs.classList.add('stock-book-tabs');
     this.actions = element('div', '', 'stock-mobile-actions');
     this.actions.append(button('买入', () => this.openTicket('buy'), 'buy-button'),
       button('卖出', () => this.openTicket('sell'), 'sell-button')); panel.append(this.actions);
@@ -54,7 +57,10 @@ export class Stock {
     }, 0); this.ratios.classList.add('quick-ratios'); this.ticket.append(this.ratios);
     this.summary = element('div', '', 'ticket-summary'); this.submit = button('', () => this.order(), 'buy-button');
     this.register = button('没有账号？注册', () => this.modals.login(true), 'register-link');
-    this.balance = element('div', '', 'ticket-balance'); this.ticket.append(this.summary, this.submit, this.register, this.balance);
+    // DESIGN §6/§7：刷新只更新余额文字，保留用户正在点击的划转节点。
+    this.balance = element('div', '', 'ticket-balance'); this.balanceValue = element('span');
+    this.balance.append(this.balanceValue, button('划转', () => this.modals.transfer('wallet', 'ashare'), 'accent'));
+    this.ticket.append(this.summary, this.submit, this.register, this.balance);
   }
   setCode(code) {
     if (this.code === code) return;
@@ -93,7 +99,7 @@ export class Stock {
   renderBook() {
     const quote = this.feed.quotes[this.code];
     if (!quote) { this.book.replaceChildren(element('p', '行情连接中断，正在重试', 'muted')); return; }
-    this.book.replaceChildren(title('ORDER BOOK', '五档盘口'));
+    this.book.replaceChildren(this.bookTabs, title('ORDER BOOK', '五档盘口'));
     const maximum = Math.max(1, ...[...quote.asks, ...quote.bids].map(row => row[1]));
     const paint = (levels, side) => levels.forEach(([value, size], index) => {
       const row = button('', () => { this.fields.price.value = String(value); this.type = 'limit'; this.renderTicket(); }, 'stock-level');
@@ -143,8 +149,7 @@ export class Stock {
       : (this.side === 'buy' ? '买入 ' : '卖出 ') + (quote?.name || this.code);
     this.submit.className = !logged ? 'primary' : this.side === 'buy' ? 'buy-button' : 'sell-button';
     this.submit.disabled = index || this.busy || !quote; this.register.hidden = logged || index;
-    this.balance.replaceChildren(element('span', 'A 股账户 · ' + money(this.api.state?.ashare.cash.free || 0) + ' CNY'),
-      button('划转', () => this.modals.transfer('wallet', 'ashare'), 'accent'));
+    this.balanceValue.textContent = 'A 股账户 · ' + money(this.api.state?.ashare.cash.free || 0) + ' CNY';
   }
   async order() {
     if (!this.api.logged()) { this.modals.login(); return; } if (this.busy) return;

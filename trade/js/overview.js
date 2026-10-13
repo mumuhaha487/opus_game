@@ -7,8 +7,9 @@ import { positionMetrics } from './futures.js';
 export class Overview {
   constructor(panel, feed, ashare, api, modals, wallet, navigate) {
     Object.assign(this, { panel, feed, ashare, api, modals, wallet, navigate, cryptoSort: 0 });
-    this.cards = ['wallet', 'checkin', 'status', 'tickers', 'ashare', 'crypto', 'holdings'].map(name => {
-      const card = element('section', '', 'panel overview-' + name); panel.append(card); return card;
+    this.cards = ['wallet', 'checkin', 'status', 'tickers', 'ashare', 'crypto', 'holdings'].map((name, index) => {
+      const card = element('section', '', 'panel overview-' + name); card.style.order = index;
+      panel.append(card); return card;
     });
     this.cards[4].classList.add('cn-market');
     this.rankTabs = [segment([[0, '涨幅'], [1, '跌幅'], [2, '成交额']], value => {
@@ -58,7 +59,7 @@ export class Overview {
     const pair = code + '_USDT', quote = cn ? this.ashare.quotes[code] : this.feed.tickers.spot.get(pair);
     const link = element('a', '', 'ticker-card' + (cn ? ' cn-market' : ''));
     link.href = cn ? '#/stock/' + code : '#/spot/' + pair;
-    const bars = cn ? this.ashare.bars.get(code + ':trends') || [] : this.feed.symbol === pair ? this.feed.candles : [];
+    const bars = cn ? this.ashare.bars.get(code + ':trends') || [] : this.feed.sparkCandles?.get(pair) || [];
     link.append(element('span', name), element('b', price(quote?.last, 2)),
       change(cn ? quote?.percent : quote?.change_percentage), spark(bars.map(row => row.close))); return link;
   }

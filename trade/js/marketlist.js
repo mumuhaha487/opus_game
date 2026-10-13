@@ -2,11 +2,14 @@
 // 规格 9.3、9.9、9.11：39 币搜索、排序、自选和真实永续行情。
 // 自选仅存在浏览器 localStorage，失败时保留本次内存选择。
 import { element, button, icon, price, percent, large, direction } from './format.js';
+import { navigate } from './navigation.js';
+import { title, badge } from './ui.js';
 export class MarketList {
   constructor(panel, feed, full = false, onNavigate) {
     this.feed = feed; this.full = full; this.onNavigate = onNavigate; this.tab = 'spot';
     this.sortField = 'coin'; this.reverse = false; this.metric = 'change'; this.query = '';
     this.favorites = [];
+    if (full) panel.append(title('MARKETS', '加密行情'));
     try { const saved = JSON.parse(localStorage.getItem('trade_fav_v1')); if (Array.isArray(saved)) this.favorites = saved; }
     catch { /* storage unavailable */ }
     this.search = element('input', '', 'market-search'); this.search.type = 'search'; this.search.placeholder = '搜索';
@@ -14,8 +17,8 @@ export class MarketList {
     const searchBox = element('div', '', 'market-search-box');
     searchBox.append(icon([['circle', { cx: 10, cy: 10, r: 6 }], ['path', { d: 'M15 15l5 5' }]], 16), this.search);
     panel.append(searchBox);
-    this.tabs = element('div', '', 'market-tabs'); this.tabButtons = new Map();
-    for (const [tab, label] of [['favorites', '☆ 自选'], ['spot', '现货'], ['futures', '永续']]) {
+    this.tabs = element('div', '', 'market-tabs seg'); this.tabButtons = new Map();
+    for (const [tab, label] of [['spot', '现货'], ['futures', '永续'], ['favorites', '自选']]) {
       const control = button(label, () => this.selectTab(tab)); this.tabs.append(control); this.tabButtons.set(tab, control);
     }
     panel.append(this.tabs);
@@ -34,11 +37,13 @@ export class MarketList {
     this.tab = tab; this.feed.setFuturesWanted(tab === 'futures'); this.feed.dirty = true;
   }
   navigate(market, symbol) {
-    location.hash = '#/' + market + '/' + symbol;
+    navigate('#/' + market + '/' + symbol);
     if (this.onNavigate) this.onNavigate();
   }
   createRow(market) {
     const row = element('div', '', 'market-row'), name = element('div', '', 'market-name');
+    row.tabIndex = 0; row.setAttribute('role', 'link');
+    row.onkeydown = event => { if (event.key === 'Enter') this.navigate(this.tab === 'futures' ? 'futures' : 'spot', market.spot); };
     const star = button('☆', event => {
       event.stopPropagation();
       this.favorites = this.favorites.includes(market.coin) ? this.favorites.filter(coin => coin !== market.coin)
@@ -47,6 +52,8 @@ export class MarketList {
       this.feed.dirty = true;
     }, 'star');
     name.append(star, element('b', market.coin), element('span', '/USDT', 'muted'));
+    if (this.full) name.prepend(badge(market.coin, market.coin));
+    if (this.full) name.append(element('small', market.name, 'coin-chinese muted'));
     const tag = element('small', '永续', 'perp-tag'); name.append(tag);
     const volume = element('small', '', 'market-volume'); name.append(volume);
     const last = element('span', '--', 'market-last'), change = element('span', '--', 'market-change');
@@ -60,6 +67,8 @@ export class MarketList {
   }
   render() {
     const marketType = this.tab === 'futures' ? 'futures' : 'spot';
+    // DESIGN §8：手机市场分段使用「合约」，电脑端保持「永续」。
+    this.tabButtons.get('futures').textContent = this.feed.mobile() ? '合约' : '永续';
     this.tabButtons.get('favorites').textContent = this.full && this.feed.mobile() ? '自选' : '☆ 自选';
     for (const [tab, control] of this.tabButtons) control.classList.toggle('selected', this.tab === tab);
     this.header.children[2].textContent = this.full ? '24h涨跌' : this.metric === 'change' ? '涨跌幅' : '成交额';
@@ -88,7 +97,7 @@ export class MarketList {
       last.textContent = price(ticker?.last, digits);
       const amount = ticker?.quote_volume || ticker?.volume_24h_quote;
       change.textContent = this.metric === 'volume' && !this.full ? large(amount) : percent(ticker?.change_percentage);
-      change.className = 'market-change ' + direction(ticker?.change_percentage);
+      change.className = 'market-change chg ' + direction(ticker?.change_percentage);
       volume.textContent = '成交额 ' + large(amount);
       extra[0].textContent = price(ticker?.high_24h, digits); extra[1].textContent = price(ticker?.low_24h, digits);
       extra[2].textContent = large(amount); this.body.append(row);

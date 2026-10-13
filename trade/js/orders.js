@@ -4,6 +4,7 @@
 import { element, button, price, quantity, money, time, icon } from './format.js';
 import { assetAmount } from './assets.js';
 import { positionMetrics, markFor } from './futures.js';
+import { navigate } from './navigation.js';
 const STATUS = { new: '未成交', triggered: '已触发', filled: '已成交', partial_canceled: '部分成交', canceled: '已撤销' };
 const TYPE = { market: '市价', limit: '限价', stop_limit: '止盈止损', stop_market: '止盈止损' };
 export class Orders {
@@ -68,6 +69,7 @@ export class Orders {
       rows = rows.filter(row => row.symbol === this.feed.symbol);
     }
     if (!rows.length) { this.empty(); return; }
+    this.panel.classList.remove('empty-dock'); this.panel.closest('.trade')?.classList.remove('empty-dock');
     if (this.feed.mobile() && this.tab === 'positions') { this.positionCards(rows); return; }
     if (this.feed.mobile() && this.tab === 'open') { this.cards(rows); return; }
     const table = element('table'), header = element('tr'), head = element('thead'), body = element('tbody');
@@ -83,6 +85,7 @@ export class Orders {
     this.body.replaceChildren(table);
   }
   empty() {
+    this.panel.classList.add('empty-dock'); this.panel.closest('.trade')?.classList.add('empty-dock');
     const placeholder = element('div', '', 'empty-message');
     placeholder.append(icon([['path', { d: 'M7 3h7l4 4v14H7zM14 3v5h4M10 12h5M10 16h5' }]], 48),
       element('div', '暂无记录', 'dim')); this.body.replaceChildren(placeholder);
@@ -112,7 +115,7 @@ export class Orders {
       const latest = record.asset === 'USDT' ? 1 : Number(this.feed.tickers.spot.get(record.asset + '_USDT')?.last || 0);
       const amount = value => assetAmount(this.feed, record.asset, value);
       return [record.asset, amount(total), amount(record.free), amount(record.locked), money(total * latest),
-        button('交易', () => { location.hash = '#/spot/' + (record.asset === 'USDT' ? 'BTC' : record.asset) + '_USDT'; }, 'accent')];
+        button('交易', () => navigate('#/spot/' + (record.asset === 'USDT' ? 'BTC' : record.asset) + '_USDT'), 'accent')];
     }
     if (this.tab === 'ledger') return [time(record.t, true), record.note, record.asset, record.amount, record.note];
     const common = [time(record.createdAt, true), record.symbol.replace('_', '/'), TYPE[record.type], direction];

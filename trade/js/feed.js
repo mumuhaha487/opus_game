@@ -11,6 +11,7 @@ export class Feed {
     this.book = { asks: [], bids: [] }; this.perpBook = { asks: new Map(), bids: new Map() };
     this.trades = []; this.candles = []; this.connections = {}; this.status = 'reconnecting';
     this.dirty = true; this.priceUp = true; this.wantFutures = false; this.received = {};
+    this.sparkCandles = new Map();
     document.addEventListener('visibilitychange', () => this.visibility());
   }
   mobile() { return matchMedia('(max-width: 767px), (max-height: 499px)').matches; }
@@ -19,6 +20,16 @@ export class Feed {
     if (!response.ok) throw Error('gate'); return response.json();
   }
   prefix(market = this.market) { return market === 'spot' ? '/spot' : '/futures/usdt'; }
+  async loadMiniCharts() {
+    if (this.miniPending) return; this.miniPending = true;
+    try {
+      await Promise.allSettled(['BTC', 'ETH', 'SOL'].map(async coin => {
+        const symbol = coin + '_USDT';
+        const rows = await this.rest('/spot/candlesticks?currency_pair=' + symbol + '&interval=1m&limit=60');
+        this.sparkCandles.set(symbol, rows.map(row => ({ time: +row[0], close: +row[2] }))); this.dirty = true;
+      }));
+    } finally { this.miniPending = false; }
+  }
   parameter(market = this.market) { return market === 'spot' ? 'currency_pair' : 'contract'; }
   async specification(market, symbol) {
     const key = market + ':' + symbol;
@@ -121,6 +132,7 @@ export class Feed {
     const revision = this.revision, symbol = this.symbol, interval = this.interval;
     try {
       const tickers = await this.rest(this.prefix(market) + '/tickers');
+      if (market === 'spot' && !this.sparkCandles.size) this.loadMiniCharts();
       for (const ticker of tickers) this.saveTicker(market, ticker);
       if (market !== this.market || revision !== this.revision) return;
       const specification = await this.specification(market, symbol);

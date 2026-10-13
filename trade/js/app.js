@@ -22,9 +22,13 @@ import { Watchlist } from './ashare/watch.js';
 import { Screener } from './ashare/screener.js';
 import { Stock } from './ashare/stock.js';
 import { HOT_STOCKS } from './ashare/universe.js';
+import { RenderSchedule } from './render-schedule.js';
+import { badge } from './ui.js';
 import { element, button, icon, gift, price, percent, quantity, large, countdown, direction } from './format.js';
 const node = id => document.getElementById(id);
 const feed = new Feed();
+// DESIGN §6：两个市场连接在入口建立，导航保留已有实例；隐藏60秒后统一暂停。
+feed.connect('spot'); feed.setFuturesWanted(true);
 const ashare = new AshareFeed(() => { feed.dirty = true; });
 const wallet = new WalletView(() => { feed.dirty = true; });
 let modals;
@@ -35,11 +39,20 @@ const spot = new Spot(node('spot-form'), feed, api, modals);
 const futures = new Futures(node('futures-form'), feed, api, modals);
 const book = new Book(node('book'), feed, value => (feed.market === 'spot' ? spot : futures).setPrice(value));
 const tape = new Tape(node('tape'), feed);
+// DESIGN §4.6：成交面板仍是同一个实例，电脑端收进盘口分段，手机图表页沿用原aux。
+function placeTape() {
+  const target = feed.mobile() ? node('aux') : node('book');
+  if (node('tape').parentElement !== target) target.append(node('tape'));
+}
+placeTape();
 const side = new MarketList(node('side'), feed);
 const markets = new MarketList(node('markets-page'), feed, true);
 const orders = new Orders(node('orders'), feed, api, modals);
 const assets = new Assets(node('assets-page'), feed, api, modals, ashare, wallet, hash => navigation.go(hash));
 const chart = new Chart(node('chart'), feed, interval => feed.activate(feed.market, feed.symbol, interval), toggleChart);
+const compactTabs = segment([['chart', '图表'], ['book', '盘口']], tab => {
+  node('desk').classList.toggle('compact-book', tab === 'book');
+}); compactTabs.classList.add('compact-chart-tabs'); node('chart').prepend(compactTabs);
 const NAVIGATION = [['overview', '总览'], ['ashare', 'A股'], ['crypto', '加密'],
   ['futures', '合约'], ['assets', '资产'], ['api', 'API']];
 const NAV_ICONS = [
@@ -130,8 +143,12 @@ function header() {
 }
 function createBar() {
   const pair = element('div', '', 'pair-control');
+  const logo = badge('BTC', 'BTC'), subtitle = element('small', '', 'pair-subtitle');
   const back = button('返回', closeChart), pairButton = button('', openPicker, 'pair-button');
-  const tag = element('span', '', 'market-tag'); pair.append(back, pairButton, tag);
+  const tag = element('span', '', 'market-tag'), identity = element('div'); identity.append(pairButton, subtitle);
+  const favorite = button('☆', () => {
+    const row = markets.rows.find(entry => entry.market.spot === feed.symbol); row?.star.click(); feed.dirty = true;
+  }, 'star'); pair.append(back, logo, identity, tag, favorite);
   const latest = element('div', '', 'latest-price');
   const cells = Array.from({ length: 8 }, (unusedCell, index) => {
     const cell = element('div', '', 'bar-stat'), label = element('span'), absolute = element('b', '', 'change-absolute');
@@ -143,13 +160,16 @@ function createBar() {
   giftButton.setAttribute('aria-label', '每日签到');
   mobile.append(dot, button('▥', toggleChart, 'mobile-chart-button'), giftButton);
   node('bar').append(pair, latest, ...cells.map(entry => entry.cell), mobile);
-  return { back, pairButton, tag, latest, cells, dot, giftButton };
+  return { back, pairButton, tag, latest, cells, dot, giftButton, logo, subtitle, favorite };
 }
 function bar() {
   const ticker = feed.tickers[feed.market].get(feed.symbol) || {}, coin = feed.symbol.split('_')[0];
   const view = barElements;
   view.back.hidden = !document.body.classList.contains('mobile-chart');
   view.pairButton.textContent = coin + '/USDT' + (feed.mobile() ? ' ▾' : '');
+  view.logo.textContent = coin[0]; view.logo.style.background = badge(coin, coin).style.background;
+  view.subtitle.textContent = coin + '/USDT · ' + (feed.market === 'spot' ? '现货' : '永续') + ' · Gate.io';
+  view.favorite.textContent = markets.favorites.includes(coin) ? '★' : '☆';
   view.tag.textContent = feed.market === 'spot' ? '现货' : '永续';
   view.latest.textContent = price(ticker.last, feed.precision()) + (feed.priceUp ? ' ↑' : ' ↓');
   view.latest.className = 'latest-price ' + (feed.priceUp ? 'up' : 'down');
@@ -170,6 +190,7 @@ function bar() {
     entry.cell.hidden = index >= statistics.length; if (entry.cell.hidden) return;
     const [label, value, className = ''] = statistics[index];
     entry.cell.className = 'bar-stat ' + className; entry.label.textContent = label; entry.value.textContent = value;
+    entry.value.className = index === 0 ? 'chg ' + direction(ticker.change_percentage) : '';
     if (className.startsWith('change')) {
       const change = Number(ticker.change_percentage), previous = Number(ticker.last) / (1 + change / 100);
       const absolute = Number(ticker.last) - previous;
@@ -182,10 +203,11 @@ function bar() {
   document.title = ticker.last ? price(ticker.last, feed.precision()) + ' | ' + coin + 'USDT | 模拟交易所'
     : '模拟交易所 · GAME.INC.RE';
 }
-function connectionColor() { return feed.status === 'connected' ? '#0ECB81' : feed.status === 'failed' ? '#F6465D' : '#F0B90B'; }
+function connectionColor() { return feed.status === 'connected' ? '#22B573' : feed.status === 'failed' ? '#E5484D' : '#F2C66D'; }
 function status() {
-  node('connection-status').textContent = feed.status === 'connected' ? '实时行情已连接'
-    : feed.status === 'failed' ? '行情连接失败，正在重试' : '行情重连中…';
+  const state = ['stock', 'ashare'].includes(page) ? ashare.status : feed.status;
+  node('connection-status').textContent = state === 'connected' ? '实时行情已连接'
+    : state === 'failed' ? '行情连接中断，正在重试' : '行情重连中…';
   node('connection-dot').style.backgroundColor = connectionColor();
 }
 function mobileChartActions() {
@@ -212,7 +234,9 @@ async function route() {
   navigation.show(marketPage ? 'desk' : page, page);
   node('spot-form').hidden = page === 'futures'; node('futures-form').hidden = page !== 'futures';
   for (const link of document.querySelectorAll('[data-route]')) {
-    const selected = link.dataset.route === page || page === 'spot' && link.dataset.route === 'crypto';
+    const selected = link.dataset.route === page || page === 'spot' && link.dataset.route === 'crypto'
+      || page === 'stock' && link.dataset.route === 'ashare'
+      || feed.mobile() && page === 'futures' && link.dataset.route === 'crypto';
     link.classList.toggle('selected', selected);
     if (['spot', 'futures'].includes(link.dataset.route)) link.href = '#/' + link.dataset.route + '/' + (symbol || feed.symbol);
   }
@@ -228,23 +252,30 @@ async function route() {
   if (page === 'crypto') feed.setFuturesWanted(markets.tab === 'futures');
   feed.dirty = true; mobileChartActions();
 }
-let lastRender = 0;
+const renderSchedule = new RenderSchedule();
 function renderFrame(timestamp) {
-  if (feed.dirty && timestamp - lastRender >= 100) {
-    lastRender = timestamp; feed.dirty = false;
-    header(); status();
-    watch.sync(api.state);
-    if (page === 'crypto') markets.render();
-    else if (page === 'overview') overview.render(api.state);
-    else if (page === 'ashare') screener.render();
-    else if (page === 'stock') { stock.render(); stock.chart.render(); }
-    else if (page === 'assets') assets.render(api.state);
-    else if (['spot', 'futures'].includes(page)) {
-      bar(); book.render(); chart.render(api.state); tape.render(api.state); side.render();
-      if (page === 'spot') spot.render(); else futures.render(); orders.render(api.state); api.crossing(feed);
-    }
-    pickerList?.render();
-  }
+  if (!document.hidden) renderSchedule.run(timestamp, {
+    fast: () => {
+      header(); status(); watch.sync(api.state);
+      if (['spot', 'futures'].includes(page)) { bar(); book.render(); tape.render(api.state); api.crossing(feed); }
+      if (page === 'stock') { stock.renderHead(); stock.renderBook(); }
+    },
+    chart: () => {
+      if (['spot', 'futures'].includes(page)) {
+        chart.render(api.state); if (page === 'spot') spot.render(); else futures.render();
+      }
+      if (page === 'stock') { stock.chart.render(); stock.renderTicket(); }
+    },
+    lists: () => {
+      if (page === 'crypto') markets.render();
+      else if (page === 'overview') overview.render(api.state);
+      else if (page === 'ashare') screener.render();
+      else if (page === 'assets') assets.render(api.state);
+      else if (page === 'stock') stock.renderDock(api.state);
+      else { side.render(); orders.render(api.state); }
+      pickerList?.render();
+    },
+  });
   requestAnimationFrame(renderFrame);
 }
 document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeChart(); closePicker(); } });
@@ -254,10 +285,12 @@ window.addEventListener('resize', () => {
     feed.activate(feed.market, feed.symbol, feed.interval).then(() => {
       feed.setFuturesWanted(page === 'crypto' ? markets.tab === 'futures' : side.tab === 'futures');
     });
-    orders.signature = ''; feed.dirty = true;
+    placeTape(); orders.signature = ''; feed.dirty = true;
   }, 200);
 });
 setInterval(() => { feed.dirty = true; }, 1000);
+// DESIGN §4.4：迷你图刷新由页面拥有计时器，纯数据Feed构造不启动后台任务。
+setInterval(() => { if (!document.hidden) feed.loadMiniCharts(); }, 30000);
 route(); api.refresh(); requestAnimationFrame(renderFrame);
 modals.initialDisclaimer().then(() => {
   if (location.hash.includes('checkin=1')) modals.checkin();

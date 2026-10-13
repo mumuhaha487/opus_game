@@ -21,6 +21,8 @@ export class Assets {
     const values = valuations(state, this.feed, this.ashare), total = totalValue(values, this.wallet);
     const totalCard = element('section', '', 'panel asset-total');
     totalCard.append(title('WALLET', '总资产'), element('b', this.wallet.display(total, this.wallet.currency), 'wallet-total'));
+    const currency = segment([['CNY', 'CNY'], ['USD', 'USD']], value => this.wallet.select(value), this.wallet.currency || 'USD');
+    currency.classList.add('asset-currency'); totalCard.append(currency);
     if (!state) totalCard.append(element('p', '登录后查看资产', 'muted'), button('登录', () => this.modals.login(), 'primary'));
     const cards = ACCOUNTS.map(([id, name, unit]) => {
       const card = element('section', '', 'panel asset-account');

@@ -1,5 +1,5 @@
 // ASHARE §6、DESIGN §4.5：五指数、板块/排序/搜索、50行分页与云自选。
-import { element, button, money, large } from '../format.js';
+import { element, button, money, large, countdown } from '../format.js';
 import { title, segment, table, change } from '../ui.js';
 import { BOARDS, SORTS, HOT_STOCKS, INDICES } from './universe.js';
 import { Search } from './search.js';
@@ -30,6 +30,7 @@ export class Screener {
     this.indices.replaceChildren(...INDICES.map(([code, name]) => this.overview.ticker(code, name, true)));
     const clock = this.feed.clock();
     this.status.replaceChildren(element('span', clock.label, 'market-status ' + clock.status),
+      element('span', (clock.status === 'open' ? '距离收盘 ' : '距离开盘 ') + countdown((clock.target - Date.now()) / 1000)),
       element('small', '仅教学练习 · 不构成投资建议', 'muted'));
     this.body.replaceChildren(table(['代码', '名称', '最新价', '涨跌幅', '涨跌额', '成交额', '换手率', '最高', '最低', '操作'],
       this.feed.list.map(row => this.values(row))));

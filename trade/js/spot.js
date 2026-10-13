@@ -3,7 +3,7 @@
 // 请求只传用户委托参数，价格权威与成交记账留在 Worker。
 import { element, button, money, quantity, price } from './format.js';
 import { parseInput, inputString, product, divide, stepInput } from './decimal.js';
-const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_limit', '止盈止损']];
+const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_limit', '条件']];
 export class Spot {
   constructor(panel, feed, api, modals) {
     this.feed = feed; this.api = api; this.modals = modals; this.type = 'limit'; this.side = 'buy'; this.columns = {};
@@ -16,22 +16,28 @@ export class Spot {
     for (const [side, label] of [['buy', '买入'], ['sell', '卖出']]) {
       this.sideTabs.append(button(label, () => { this.side = side; feed.dirty = true; }, side));
     }
-    panel.append(this.sideTabs);
+    panel.prepend(this.sideTabs); this.panel = panel;
     this.typeSelect = element('select', '', 'mobile-order-type');
     for (const [type, label] of TYPES) { const option = element('option', label); option.value = type; this.typeSelect.append(option); }
     this.typeSelect.onchange = () => this.setType(this.typeSelect.value); panel.append(this.typeSelect);
     const columns = element('div', '', 'spot-columns'); panel.append(columns);
     for (const side of ['buy', 'sell']) this.columns[side] = this.column(columns, side);
+    // DESIGN §6/§7：账户刷新保留划转按钮，避免交互期间重建节点。
+    this.balance = element('div', '', 'ticket-balance'); this.balanceValue = element('span');
+    this.balance.append(this.balanceValue, button('划转', () => this.modals.transfer('wallet', 'spot'), 'accent'));
+    panel.append(this.balance);
   }
   field(container, label, unit, name, side) {
-    const row = element('label', '', 'input-row field-' + name), text = element('span', label, 'field-label');
+    const row = element('div', '', 'input-row'), wrapper = element('div', '', 'field field-' + name);
+    const text = element('label', label, 'field-label');
     const input = element('input'); input.name = side + '-' + name; input.inputMode = 'decimal'; input.autocomplete = 'off';
+    input.id = 'spot-' + input.name; text.htmlFor = input.id;
     const suffix = element('span', unit, 'field-unit');
     const precision = () => name === 'qty' ? this.feed.quantityPrecision() : this.feed.precision();
     const minus = button('−', () => { input.value = stepInput(input.value, precision(), -1); this.linked(side, name); }, 'stepper');
     const plus = button('+', () => { input.value = stepInput(input.value, precision(), 1); this.linked(side, name); }, 'stepper');
-    row.append(minus, text, input, suffix, plus); input.addEventListener('input', () => this.linked(side, name));
-    container.append(row); return { row, input, text, suffix };
+    row.append(input, suffix, minus, plus); input.addEventListener('input', () => this.linked(side, name));
+    wrapper.append(text, row); container.append(wrapper); return { row: wrapper, input, text, suffix };
   }
   column(container, side) {
     const form = element('form', '', 'spot-column ' + side); form.noValidate = true; container.append(form);
@@ -44,33 +50,31 @@ export class Spot {
     const base = element('option'), quote = element('option', 'USDT'); base.value = 'qty'; quote.value = 'quoteQty';
     unit.append(base); if (side === 'buy') unit.append(quote);
     qty.suffix.replaceWith(unit); unit.onchange = () => { this.linked(side, 'qty'); this.feed.dirty = true; };
-    const slider = element('div', '', 'balance-slider'), range = element('input'); range.type = 'range';
+    // DESIGN §4.6：4个胶囊取代菱形滑杆，保留定点数量联动。
+    const slider = element('div', '', 'quick-ratios seg'), range = element('input'); range.type = 'hidden';
     range.min = 0; range.max = 100; range.value = 0; range.setAttribute('aria-label', '可用余额百分比');
-    const marks = element('div', '', 'slider-marks');
-    for (const value of [0, 25, 50, 75, 100]) {
-      const mark = button('', () => { range.value = value; range.dispatchEvent(new Event('input')); });
+    const marks = element('div', '', 'ratio-buttons');
+    for (const value of [25, 50, 75, 100]) {
+      const mark = button(value + '%', () => { range.value = value; range.dispatchEvent(new Event('input')); });
       mark.setAttribute('aria-label', value + '%'); marks.append(mark);
     }
-    const selectedTrack = element('i', '', 'slider-selected'), hint = element('span', '0%', 'slider-hint');
-    hint.hidden = true; slider.append(selectedTrack, range, marks, hint); form.append(slider);
-    range.onpointerdown = () => { hint.hidden = false; };
-    const hideHint = () => { hint.hidden = true; };
-    range.addEventListener('pointerup', hideHint); range.addEventListener('pointercancel', hideHint);
-    range.addEventListener('blur', hideHint);
+    slider.append(range, marks); form.append(slider);
     range.oninput = () => {
       const availableAmount = parseInput(this.available(side)) || 0n;
-      const fraction = inputString(availableAmount * BigInt(range.value) / 100n, 8);
+      const gross = inputString(availableAmount * BigInt(range.value) / 100n, 8);
+      const fraction = side === 'buy' ? divide(gross, '1.001', 8) : gross;
       qty.input.value = side === 'buy' && unit.value !== 'quoteQty' ? divide(fraction, this.orderPrice(side), this.feed.quantityPrecision())
         : inputString(parseInput(fraction) || 0n, unit.value === 'quoteQty' ? 8 : this.feed.quantityPrecision());
-      this.linked(side, 'qty'); hint.textContent = range.value + '%';
-      slider.style.setProperty('--slider-percent', range.value + '%');
-      slider.style.setProperty('--slider-fraction', String(Number(range.value) / 100));
-      marks.childNodes.forEach((mark, index) => mark.classList.toggle('reached', Number(range.value) >= index * 25));
+      this.linked(side, 'qty');
+      marks.childNodes.forEach((mark, index) => mark.classList.toggle('selected', Number(range.value) === (index + 1) * 25));
     };
     const amount = this.field(form, '成交额', 'USDT', 'amount', side), maximum = element('div', '', 'maximum muted');
     const submit = button('', null, side === 'buy' ? 'buy-button' : 'sell-button'); submit.type = 'submit';
     const register = button('没有账号？注册', () => this.modals.login(true), 'register-link'); form.append(maximum, submit, register);
-    const column = { form, available, stop, limit, qty, unit, base, amount, range, maximum, submit, register, busy: false };
+    const summary = element('div', '', 'ticket-summary'), estimated = element('div'), fee = element('div');
+    summary.append(available, estimated, fee, maximum); form.insertBefore(summary, submit);
+    const column = { form, available, stop, limit, qty, unit, base, amount, range, maximum, submit, register,
+      summary, estimated, fee, busy: false };
     form.onsubmit = event => { event.preventDefault(); this.submit(side); }; return column;
   }
   available(side) {
@@ -101,7 +105,8 @@ export class Spot {
     [...this.sideTabs.children].forEach(control => control.classList.toggle('selected', control.classList.contains(this.side)));
     for (const [side, column] of Object.entries(this.columns)) {
       column.form.classList.toggle('mobile-hidden', side !== this.side);
-      column.stop.row.hidden = this.type !== 'stop_limit'; column.amount.row.hidden = this.type === 'market';
+      column.stop.row.hidden = this.type !== 'stop_limit'; column.amount.row.hidden = true;
+      column.summary.hidden = !logged;
       column.limit.text.textContent = this.type === 'stop_limit' ? '限价' : '价格';
       column.limit.input.readOnly = this.type === 'market';
       column.limit.input.placeholder = this.type === 'market' ? '市场最优价格' : '';
@@ -112,14 +117,19 @@ export class Spot {
       column.qty.text.textContent = quoteMode ? '成交额' : '数量';
       column.available.lastChild.textContent = side === 'buy' ? money(this.available(side)) + ' USDT'
         : quantity(this.available(side), this.feed.quantityPrecision()) + ' ' + coin;
-      const maximum = side === 'buy' ? divide(this.available(side), this.orderPrice(side), this.feed.quantityPrecision())
+      const maximum = side === 'buy' ? divide(divide(this.available(side), '1.001', 8),
+        this.orderPrice(side), this.feed.quantityPrecision())
         : this.available(side);
       column.maximum.textContent = (side === 'buy' ? '最大可买 ' : '最大可卖 ')
         + quantity(maximum || '0', this.feed.quantityPrecision()) + ' ' + coin;
-      column.submit.textContent = column.busy ? '提交中…' : logged ? (side === 'buy' ? '买入 ' : '卖出 ') + coin : '登录';
+      const amount = Number(quoteMode ? column.qty.input.value : product(column.qty.input.value || '0', this.orderPrice(side) || '0'));
+      column.estimated.replaceChildren(element('span', '预计金额'), element('b', money(amount) + ' USDT'));
+      column.fee.replaceChildren(element('span', '预计费用'), element('b', money(amount * 0.001) + ' USDT'));
+      column.submit.textContent = column.busy ? '提交中…' : logged ? (side === 'buy' ? '买入 ' : '卖出 ') + coin : '登录后交易';
       column.submit.className = logged ? side === 'buy' ? 'buy-button' : 'sell-button' : 'primary';
       column.submit.disabled = column.busy; column.register.hidden = logged;
     }
+    this.balanceValue.textContent = '加密现货 · ' + money(this.available('buy')) + ' USDT';
   }
   validate(side, data) {
     const decimals = this.feed.quantityPrecision(), priceDecimals = this.feed.precision();

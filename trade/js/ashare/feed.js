@@ -83,14 +83,15 @@ export class AshareFeed {
       this.poll('details', () => this.loadDetails(), () => this.clock().status === 'open' ? 5000 : 60000);
     }
     if (this.page === 'ashare') this.poll('list', () => this.loadList(), () => this.clock().status === 'open' ? 30000 : 60000);
-    if (this.page === 'overview') {
-      this.poll('rank', () => this.loadRank(), () => this.clock().status === 'open' ? 30000 : 60000);
+    if (['overview', 'ashare'].includes(this.page)) {
+      if (this.page === 'overview') this.poll('rank', () => this.loadRank(), () => this.clock().status === 'open' ? 30000 : 60000);
       this.poll('indices', async () => Promise.all(INDICES.map(([code]) => this.loadBars(code))), () => 30000);
     }
   }
   enabled(name) {
     return name === 'quotes' || ['bars', 'details'].includes(name) && this.page === 'stock'
-      || name === 'list' && this.page === 'ashare' || ['rank', 'indices'].includes(name) && this.page === 'overview';
+      || name === 'list' && this.page === 'ashare' || name === 'rank' && this.page === 'overview'
+      || name === 'indices' && ['overview', 'ashare'].includes(this.page);
   }
   poll(name, run, interval) {
     let task = this.tasks.get(name);
@@ -117,6 +118,7 @@ export class AshareFeed {
     Object.assign(this.quotes, parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())));
   }
   async loadBars(code, period = 'trends') {
+    if (!['trends', 'five'].includes(period) && this.bars.has(code + ':' + period)) return this.bars.get(code + ':' + period);
     const trends = ['trends', 'five'].includes(period), parameters = new URLSearchParams({ secid: secidFor(code),
       fields1: 'f1,f2,f3,f4,f5,f6,f7,f8', fields2: 'f51,f52,f53,f54,f55,f56,f57,f58',
       ...(trends ? { ndays: period === 'five' ? '5' : '1' } : { klt: period, fqt: '1', lmt: '500', end: '20500101' }) });

@@ -2,7 +2,7 @@
 // 配置与颜色逐项对应规格 9.4、9.6，保留 TradingView attribution。
 // 历史滚动使用 REST，实时末根使用 series.update，图例通过安全 DOM 更新。
 import { element, button, price, percent, time } from './format.js';
-const COLORS = ['#F0B90B', '#EB40B5', '#B385F8'];
+const COLORS = ['#F2C66D', '#5B8DEF', '#A78BFA'];
 export function movingAverage(candles, period, exponential = false) {
   const values = []; let total = 0, previous;
   for (let i = 0; i < candles.length; i++) {
@@ -54,14 +54,14 @@ export class Chart {
   }
   options() {
     return {
-      layout: { background: { type: 'solid', color: '#181A20' }, textColor: '#848E9C', fontSize: 11,
+      layout: { background: { type: 'solid', color: '#13161C' }, textColor: '#7D8696', fontSize: 11,
         fontFamily: getComputedStyle(document.body).fontFamily, attributionLogo: true,
-        panes: { separatorColor: '#2B3139', separatorHoverColor: '#474D57' } },
-      grid: { vertLines: { color: '#1F242B' }, horzLines: { color: '#1F242B' } },
-      crosshair: { mode: 0, vertLine: { color: '#5E6673', style: 3, labelBackgroundColor: '#2B3139' },
-        horzLine: { color: '#5E6673', style: 3, labelBackgroundColor: '#2B3139' } },
-      rightPriceScale: { borderColor: '#2B3139' },
-      timeScale: { borderColor: '#2B3139', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8 },
+        panes: { separatorColor: '#232833', separatorHoverColor: '#313847' } },
+      grid: { vertLines: { color: '#1C2029' }, horzLines: { color: '#1C2029' } },
+      crosshair: { mode: 0, vertLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' },
+        horzLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' } },
+      rightPriceScale: { borderColor: '#232833' },
+      timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8 },
       localization: { priceFormatter: value => price(value, this.feed.precision()),
         timeFormatter: value => time(value * 1000, true).slice(0, 16) },
     };
@@ -71,15 +71,15 @@ export class Chart {
     for (const series of this.series) this.chart.removeSeries(series);
     this.series = []; this.lines = [];
     const specification = { type: 'price', precision: this.feed.precision(), minMove: 10 ** -this.feed.precision() };
-    const options = this.area ? { lineColor: '#F0B90B', lineWidth: 1.5,
-      topColor: 'rgba(240,185,11,0.12)', bottomColor: 'rgba(240,185,11,0)' }
-      : { upColor: '#0ECB81', wickUpColor: '#0ECB81', downColor: '#F6465D', wickDownColor: '#F6465D', borderVisible: false };
+    const options = this.area ? { lineColor: '#F2C66D', lineWidth: 1.5,
+      topColor: 'rgba(242,198,109,0.12)', bottomColor: 'rgba(242,198,109,0)' }
+      : { upColor: '#22B573', wickUpColor: '#22B573', downColor: '#E5484D', wickDownColor: '#E5484D', borderVisible: false };
     this.main = this.chart.addSeries(this.area ? library.AreaSeries : library.CandlestickSeries,
       { ...options, priceFormat: specification });
     this.series.push(this.main); this.extras = [];
     if (this.indicators.includes('VOL')) {
       this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' } });
-      this.volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } }); this.series.push(this.volume);
+      this.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } }); this.series.push(this.volume);
     } else this.volume = null;
     this.buildIndicators();
   }
@@ -122,7 +122,7 @@ export class Chart {
     if (extra.name === 'DEA') return dea;
     const difMap = new Map(dif.map(row => [row.time, row.value]));
     return dea.map(row => ({ time: row.time, value: (difMap.get(row.time) - row.value) * 2,
-      color: difMap.get(row.time) >= row.value ? 'rgba(14,203,129,0.6)' : 'rgba(246,70,93,0.6)' }));
+      color: difMap.get(row.time) >= row.value ? 'rgba(34,181,115,0.6)' : 'rgba(229,72,77,0.6)' }));
   }
   rsi(period) {
     const result = [], candles = this.feed.candles;
@@ -149,7 +149,7 @@ export class Chart {
     else this.main.update(data.at(-1));
     this.lastFirst = data[0].time; this.lastTime = data.at(-1).time;
     if (this.volume) this.volume.setData(feed.candles.map(candle => ({ time: candle.time, value: candle.volume,
-      color: candle.close >= candle.open ? 'rgba(14,203,129,0.5)' : 'rgba(246,70,93,0.5)' })));
+      color: candle.close >= candle.open ? 'rgba(34,181,115,0.5)' : 'rgba(229,72,77,0.5)' })));
     for (const extra of this.extras) extra.series.setData(this.indicatorData(extra));
     this.paintLegend(feed.candles.at(-1)); this.priceLines(state);
     if (changed) this.chart.timeScale().fitContent();
@@ -164,11 +164,11 @@ export class Chart {
     for (const order of orders) {
       const stop = ['stop_limit', 'stop_market'].includes(order.type) && order.status === 'new', buy = order.side === 'buy';
       this.lines.push(this.main.createPriceLine({ price: Number(stop ? order.stopPrice : order.price),
-        color: buy ? '#0ECB81' : '#F6465D', lineStyle: 2, axisLabelVisible: true,
+        color: buy ? '#22B573' : '#E5484D', lineStyle: 2, axisLabelVisible: true,
         title: (stop ? '触发 ' : '限价 ') + (buy ? '买入' : '卖出') + (stop ? '' : ' ' + order.qty) }));
     }
-    if (position) for (const [field, title, color] of [['entry', '开仓', '#848E9C'], ['liq', '强平', '#FF9332'],
-      ['tp', '止盈', '#0ECB81'], ['sl', '止损', '#F6465D']]) {
+    if (position) for (const [field, title, color] of [['entry', '开仓', '#7D8696'], ['liq', '强平', '#FF9332'],
+      ['tp', '止盈', '#22B573'], ['sl', '止损', '#E5484D']]) {
       if (!(Number(position[field]) > 0)) continue;
       this.lines.push(this.main.createPriceLine({ price: Number(position[field]), color, lineStyle: 2, axisLabelVisible: true, title }));
     }

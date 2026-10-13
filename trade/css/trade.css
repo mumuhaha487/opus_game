@@ -462,7 +462,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .trade > .book { display: none; }
   .bar-stat:nth-last-child(-n+4) { display: none; }
 }
-.empty-dock.orders { height: 120px; }
+.empty-dock.orders { height: 120px; min-height: 120px; }
 .empty-dock .orders-tabs, .empty-dock .order-controls { display: none; }
 .empty-dock .orders-body { min-height: 0; height: 118px; display: flex;
   flex-direction: column; justify-content: center; align-items: center; }
@@ -479,6 +479,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .chart { padding: 0; }
   .trade-modal { margin: auto 0 0; width: 100%; max-height: 85vh; border-radius: 16px 16px 0 0;
     animation: sheet-in 220ms; }
+  .trade-modal, .trade-modal.checkin-modal { width: 100%; max-width: none; }
   @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
 @media (prefers-reduced-motion: reduce) { .rail-indicator { transition: none; } .trade-modal { animation: none; } }
@@ -605,7 +606,8 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 .ticket-summary b { font-weight: 400; }
 .stock-ticket > .buy-button, .stock-ticket > .sell-button, .stock-ticket > .primary { width: 100%; }
 .ticket-balance { padding: 12px; border-radius: 8px; background: var(--surface-2); margin-top: 16px; }
-.ticket-balance button { float: right; }
+.ticket-balance { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ticket-balance button { flex: none; }
 .stock-dock { overflow: auto; padding: 12px; }
 .stock-dock.empty-dock { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
 .stock-dock.empty-dock > .seg { align-self: stretch; }
@@ -645,4 +647,129 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .index-cards { display: flex; overflow-x: auto; }
   .screener-controls > .seg { overflow: auto; width: 100%; }
   .screener-controls .seg button { white-space: nowrap; }
+}
+
+/* DESIGN §4.6–4.7：加密单列ticket、盘口/成交共用实例及窄屏图表/盘口分段。 */
+.spot-columns { display: block; padding: 0; }
+.spot-column.mobile-hidden { display: none; }
+.side-tabs { display: flex; height: 40px; background: var(--surface-2); border-radius: 8px; padding: 3px; margin: 0 0 12px; }
+.side-tabs button { flex: 1; height: 34px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+.side-tabs .buy.selected { background: var(--rise); color: white; }
+.side-tabs .sell.selected { background: var(--fall); color: white; }
+.form-top { padding: 0; height: 40px; }
+.fee-label { display: none; }
+.order-types { gap: 16px; }
+.order-types button { font-size: 13px; height: 36px; }
+.order-types .selected { border-bottom: 2px solid var(--gold); }
+.input-row { height: 44px; border-color: var(--line-2); }
+.input-row:focus-within { border-color: var(--gold); }
+.input-row .stepper { display: block; width: 32px; height: 32px; background: var(--surface-3); border-radius: 6px; padding: 0; }
+.ratio-buttons { display: flex; width: 100%; gap: 8px; }
+.ratio-buttons button { height: 28px; padding: 0; border: 1px solid transparent; }
+.ratio-buttons button.selected { border-color: var(--gold); }
+.spot-column { gap: 0; }
+.spot-column .field { margin: 8px 0; }
+.spot-column > .primary, .spot-column > .buy-button, .spot-column > .sell-button { height: 48px; }
+.spot-column .available, .spot-column .maximum { order: initial; font-size: 12px; }
+.futures-columns { display: flex; flex-direction: column; padding: 0; }
+.trade > .form { overflow: auto; }
+.futures-inputs { width: 100%; }
+.futures-account { width: 100%; }
+.futures-tags { padding: 0; margin-bottom: 8px; }
+.futures-actions { display: block; }
+.futures-actions button, .futures-login > .primary { height: 48px; }
+.futures-cost { background: var(--surface-2); padding: 12px; border-radius: 8px; }
+.book-row { height: 22px; }
+.book-title { height: 40px; }
+.book-switch { margin: 8px; }
+.book .tape { border: 0; border-radius: 0; padding: 0; height: 420px; contain: none; }
+.book.mode-book > .tape { display: none; }
+.book.mode-trades > :not(.book-switch):not(.tape) { display: none; }
+.market-page .market-row { height: 44px; }
+.market-page .market-name { gap: 6px; flex-wrap: nowrap; }
+.coin-chinese { font-size: 11px; }
+.market-page .badge-circle { width: 28px; height: 28px; }
+.market-page .market-row > .chg { justify-self: end; }
+.pair-subtitle { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+.desk .market-tag { display: none; }
+.bar-stat.change .chg { display: inline-block; }
+.bar-stat.change .change-absolute { font-size: 13px; }
+.asset-currency, .stock-book-tabs { display: none; }
+@media (min-width: 1024px) and (max-width: 1199px) and (min-height: 500px) {
+  .compact-book > .chart > :not(.compact-chart-tabs) { visibility: hidden; }
+  .compact-book > .book { display: block; grid-area: chart; margin-top: 36px; z-index: 1; }
+  .desk .bar-stat:nth-of-type(n+5) { display: none; }
+}
+@media (min-width: 1200px) and (max-width: 1439px) {
+  .futures-bar .bar-stat:nth-of-type(n+6) { display: none; }
+}
+@media (min-width: 1440px) { .futures-bar .bar-stat:nth-of-type(n+7) { display: none; } }
+/* DESIGN §8、§10.9：保留手机的交易双列与底栏，所有实际点击目标至少44×44。 */
+@media (max-width: 767px), (max-height: 499px) {
+  .top { display: flex; height: 56px; }
+  .asset-currency { display: flex; margin-top: 12px; }
+  .desk .pair-control .badge-circle, .desk .pair-subtitle, .desk .pair-control > .star { display: none; }
+  .desk .pair-button { font-size: 14px; }
+  .desk .bar { min-height: 56px; height: auto; gap: 4px; padding: 0 8px; }
+  .desk .bar-mobile-actions { gap: 0; }
+  .desk .bar-mobile-actions .connection-dot { display: none; }
+  .desk .bar-stat.change { display: none; }
+  .form-top { display: none; }
+  .mobile-order-type { min-height: 44px; }
+  .side-tabs { height: 50px; margin: 8px; }
+  .side-tabs button { height: 44px; }
+  .spot-columns, .futures-columns { padding: 0 8px 12px; }
+  .field .input-row { flex-wrap: wrap; height: auto; min-height: 88px; padding: 4px; gap: 4px; }
+  .field .input-row input { flex: 1; width: 40px; min-height: 44px; }
+  .field .input-row .stepper { width: 44px; height: 44px; }
+  .field .input-row .quantity-unit { min-width: 44px; min-height: 44px; }
+  .field .input-row .stepper:first-of-type { margin-left: auto; }
+  .spot-columns .ticket-summary { padding: 8px; margin: 8px 0; }
+  .ticket-summary > div { flex-wrap: wrap; gap: 4px; }
+  .ratio-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .ratio-buttons button { width: 100%; }
+  .book-switch { display: none; }
+  .book-title { height: auto; flex-wrap: wrap; padding: 0 4px; }
+  .book-title > span { width: 100%; }
+  .book-title select { width: 100%; }
+  .book-header, .book-row { padding: 0 4px; }
+  .book-row { height: 44px; font-size: 10px; }
+  .book-row span:last-of-type, .book-header span:last-child { display: none; }
+  .book-row, .book-header { grid-template-columns: 1fr 1fr; }
+  .book-row .depth { display: block; }
+  .market-page .market-row { height: 72px; }
+  .market-page .coin-chinese { display: block; }
+  .market-page .badge-circle { display: none; }
+  .market-page .market-name { display: block; }
+  .market-page .market-name .star { float: left; }
+  .market-page .market-change.up { color: var(--rise); background: var(--rise-bg); }
+  .market-page .market-change.down { color: var(--fall); background: var(--fall-bg); }
+  .stock-book-tabs { display: flex; }
+  .stock-book:not(.stock-book-trades) .stock-details { display: none; }
+  .stock-book-trades .stock-level, .stock-book-trades .book-middle { display: none; }
+  .stock-book-trades > .panel-title { display: none; }
+  .stock-ticket .field .input-row { min-height: 44px; flex-wrap: nowrap; }
+  .stock-ticket .field input { min-height: 44px; }
+  .stock-ticket .quick-ratios { display: grid; grid-template-columns: repeat(4,1fr); }
+  button, a[role=link], a[href], select, summary, input:not([type=hidden]) { min-width: 44px; min-height: 44px; }
+  a[href] { display: inline-flex; align-items: center; }
+  .mobile-nav a { display: flex; }
+  .ranking-list a { display: grid; height: 48px; }
+  .ticker-card { display: block !important; }
+  .input-row .stepper, .field .stepper { min-width: 44px; min-height: 44px; }
+  .stock-level { height: 44px; }
+  .seg { overflow-x: auto; }
+  .seg button { min-height: 44px; }
+  .chart-toolbar { height: 44px; }
+  .chart-toolbar .seg { flex: none; }
+  .stock-ticket .ticket-sides { height: 50px; }
+  .stock-dock .seg { max-width: 100%; }
+  .stock-head .stock-price small { display: none; }
+  .stock-watch, .screener-controls { min-width: 0; }
+  .trade-modal .modal-header button { min-width: 44px; }
+  .trade-modal .consent-label input { flex: none; margin: 0; }
+  .trade-modal .day-cards { gap: 4px; }
+  .day-card { padding: 8px 4px; }
+  .day-card b { font-size: 12px; }
+  .stock-mobile-actions button { min-height: 48px; }
 }

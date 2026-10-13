@@ -17,7 +17,7 @@ export const price = (value, precision = 1) => number(value, precision);
 export const quantity = (value, precision = 6) => number(value, precision);
 export const money = value => number(value, 2);
 export function percent(value) {
-  if (value === undefined || !Number.isFinite(Number(value))) return '--';
+  if (value === undefined || value === null || !Number.isFinite(Number(value))) return '--';
   return (Number(value) > 0 ? '+' : '') + Number(value).toFixed(2) + '%';
 }
 export const direction = value => Number(value) > 0 ? 'up' : Number(value) < 0 ? 'down' : '';

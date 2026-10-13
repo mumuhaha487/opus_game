@@ -2,11 +2,15 @@
 // 规格 9.3、9.9：桌面 18 / 40 档，手机双边 7 档。
 // 行情刷新只更改文字、样式和隐藏属性，不重建档位节点。
 import { element, button, price, quantity, money } from './format.js';
+import { segment } from './ui.js';
 export class Book {
   constructor(panel, feed, onPrice) {
     this.feed = feed; this.view = 'both'; this.factor = 1;
+    this.switcher = segment([['book', '盘口'], ['trades', '成交']], tab => {
+      panel.classList.toggle('mode-trades', tab === 'trades'); panel.classList.toggle('mode-book', tab === 'book');
+    }); this.switcher.classList.add('book-switch'); panel.classList.add('mode-book'); panel.append(this.switcher);
     const title = element('div', '', 'book-title'); title.append(element('span', '订单簿')); this.viewButtons = new Map();
-    for (const [mode, colors] of [['both', ['#F6465D', '#0ECB81']], ['buy', ['#0ECB81']], ['sell', ['#F6465D']]]) {
+    for (const [mode, colors] of [['both', ['#E5484D', '#22B573']], ['buy', ['#22B573']], ['sell', ['#E5484D']]]) {
       const control = button('', () => { this.view = mode; feed.dirty = true; }, 'book-view');
       control.setAttribute('aria-label', mode === 'both' ? '买卖都显示' : mode === 'buy' ? '只显示买盘' : '只显示卖盘');
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 16 16');
@@ -54,8 +58,8 @@ export class Book {
     const feed = this.feed, coin = feed.symbol.split('_')[0], precision = feed.precision();
     for (const [mode, control] of this.viewButtons) {
       control.classList.toggle('selected', this.view === mode);
-      if (this.view !== mode) for (const shape of control.querySelectorAll('rect')) shape.setAttribute('fill', '#5E6673');
-      else for (const shape of control.querySelectorAll('rect')) shape.setAttribute('fill', '#EAECEF');
+      if (this.view !== mode) for (const shape of control.querySelectorAll('rect')) shape.setAttribute('fill', '#59616F');
+      else for (const shape of control.querySelectorAll('rect')) shape.setAttribute('fill', '#E8EAEE');
     }
     if (this.lastPrecision !== precision) {
       this.lastPrecision = precision;
@@ -69,7 +73,8 @@ export class Book {
     }
     const headings = feed.mobile() ? ['价格', '数量', '成交额(USDT)'] : ['价格(USDT)', '数量(' + coin + ')', '成交额(USDT)'];
     this.header.replaceChildren(...headings.map(text => element('span', text)));
-    const count = feed.mobile() ? 7 : this.view === 'both' ? 18 : 40;
+    // DESIGN §4.6：电脑端买卖各12档，手机沿用7档。
+    const count = feed.mobile() ? 7 : this.view === 'both' ? 12 : 24;
     const visible = {};
     for (const side of ['asks', 'bids']) {
       const hidden = !feed.mobile() && (side === 'asks' ? this.view === 'buy' : this.view === 'sell');
