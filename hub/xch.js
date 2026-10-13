@@ -9,7 +9,16 @@ const wallet = new WalletView(renderAccount);
 const node = (tag, text = '', cls = '') => {
   const value = document.createElement(tag); value.textContent = text; value.className = cls; return value;
 };
-const number = value => value == null ? '--' : Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 });
+// Hub prices follow magnitude; index points always retain two decimal places.
+function number(value, index = false) {
+  if (value == null || !Number.isFinite(Number(value))) return '--';
+  const price = Number(value), magnitude = Math.abs(price);
+  const options = index || magnitude >= 1000 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+    : magnitude >= 1 ? { minimumFractionDigits: 2, maximumFractionDigits: 4 }
+    : magnitude >= 0.01 ? { minimumFractionDigits: 5, maximumFractionDigits: 5 }
+    : { minimumSignificantDigits: 4, maximumSignificantDigits: 4 };
+  return price.toLocaleString('en-US', options);
+}
 const pct = value => value == null ? '--' : (value > 0 ? '+' : '') + Number(value).toFixed(2) + '%';
 const tone = (value, cn) => value > 0 ? cn ? '#e0485e' : '#63c74d' : value < 0 ? cn ? '#63c74d' : '#e0485e' : 'var(--ink)';
 function svgChart(svg, values, color, filled = false) {
@@ -47,7 +56,8 @@ function paintQuotes() {
   for (const row of rows) {
     const quote = row.cn ? quotes[row.code] : cryptoQuotes.get(row.code + '_USDT');
     const percent = row.cn ? quote?.percent : quote?.change_percentage;
-    row.value.textContent = number(quote?.last); row.change.textContent = pct(percent); row.change.style.color = tone(percent, row.cn);
+    row.value.textContent = number(quote?.last, row.cn);
+    row.change.textContent = pct(percent); row.change.style.color = tone(percent, row.cn);
     if (!row.compact) svgChart(row.svg, mini.get(row.code)?.values || [], tone(percent, row.cn));
   }
 }
