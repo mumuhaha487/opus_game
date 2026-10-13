@@ -165,7 +165,7 @@
   }
 
   // ---------- all games ----------
-  const SORTS = [['new', '最新'], ['hot', '最热'], ['no', '编号']];
+  const SORTS = [['new', '最新'], ['hot', '最热']];
   function chips() {
     const box = $('chips'); box.replaceChildren();
     const make = (id, label, n, color) => {
@@ -182,18 +182,19 @@
       sort.append(b);
     }
   }
-  function card(g, solo) {
+  function card(g) {
     const c = catOf(g.category);
-    const name = el('h3', { cls: 'px', text: g.name }, [el('small', { text: g.en })]);
-    return el('article', { cls: 'card frame', style: { '--c': g.accent }, attrs: { id: 'g-' + g.id } }, [
-      cover(g, 'c-cover', { lazy: true }),
+    const name = el('h3', { cls: 'px', text: g.name }), image = el('a', { cls: 'c-cover', attrs: { href: g.href } });
+    image.append(el('img', { attrs: { src: g.cover, alt: g.coverAlt || g.name, width: '960', height: '540', loading: 'lazy' } }),
+      el('span', { cls: 'game-category px', text: c.name, style: { background: c.color } }));
+    if (isNew(g)) image.append(el('span', { cls: 'badge px', text: 'NEW' }));
+    return el('article', { cls: 'gcard frame', attrs: { id: 'g-' + g.id } }, [
+      image,
       el('div', { cls: 'c-body' }, [
-        el('div', { cls: 'c-top' }, [name, el('span', { cls: 'cat px', text: c.name, style: { '--cc': c.color } })]),
-        el('p', { cls: 'pitch', text: g.pitch }),
-        tags(g),
-        solo && g.facts ? el('dl', { cls: 'facts px' }, g.facts.map(([k, v]) => el('div', {}, [el('dt', { text: k }), el('dd', { text: v })]))) : null,
-        el('div', { cls: 'c-foot' }, [el('div', {}, [likeButton(g), heatLabel(g)]), el('div', {}, [detailBtn(g), playBtn(g, true)])]),
+        name, el('small', { cls: 'game-en px', text: g.en }), el('p', { cls: 'pitch', text: g.pitch }), tags(g),
       ]),
+      el('div', { cls: 'c-foot' }, [likeButton(g), heatLabel(g), detailBtn(g),
+        el('a', { cls: 'btn sm px', text: '开始 ▶', attrs: { href: g.href } })]),
     ]);
   }
   function renderAll() {
@@ -204,17 +205,9 @@
     list.sort(sorter);
     const box = $('groups'); box.replaceChildren();
     $('all-count').textContent = q || S.cat !== 'all' ? `${list.length} / ${GAMES.length} 款` : `${GAMES.length} 款`;
-    if (!list.length) { box.append(el('p', { cls: 'empty px', text: '没有找到相关的游戏，换个关键词试试' })); return; }
-    const cats = S.cat === 'all' ? CATS.filter(c => list.some(g => g.category === c.id)) : [catOf(S.cat)];
-    const orphan = list.filter(g => !CATS.some(c => c.id === g.category));
-    if (orphan.length) cats.push(catOf('other'));
-    for (const c of cats) {
-      const items = c.id === 'other' ? orphan : list.filter(g => g.category === c.id);
-      box.append(el('section', { cls: 'group', style: { '--cc': c.color }, attrs: { 'aria-label': c.name } }, [
-        el('div', { cls: 'g-hd px' }, [el('h3', { text: c.name }), el('small', { text: c.en }), el('span', { text: items.length + ' 款' }), c.desc ? el('p', { text: c.desc }) : null]),
-        el('div', { cls: 'grid' + (items.length === 1 ? ' solo' : '') }, items.map(g => card(g, items.length === 1))),
-      ]));
-    }
+    if (!list.length) box.append(el('p', { cls: 'empty px', text: '没有找到相关的游戏，换个关键词试试' }));
+    else box.append(...list.map(g => card(g)));
+    box.append(el('div', { cls: 'slot px', text: '下一款游戏制作中……' }, [el('i')]));
   }
   $('q').addEventListener('input', e => { S.q = e.target.value; renderAll(); });
 

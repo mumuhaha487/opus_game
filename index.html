@@ -67,6 +67,7 @@
     <section class="all" id="games" aria-labelledby="all-title">
       <p class="hub-intro">动作、放置、角色扮演……挑一款马上开玩，进度登录后云端同步。
         另有一间使用真实行情的模拟交易所，A 股与加密货币都能练手，每天签到领取模拟资金。</p>
+      <div class="games-header">
       <h2 class="sec px" id="all-title">游戏馆 ARCADE <small id="all-count"></small></h2>
       <div class="toolbar">
         <div class="chips" id="chips" role="group" aria-label="按分类筛选"></div>
@@ -75,9 +76,31 @@
           <div class="sort" id="sort" role="group" aria-label="排序"></div>
         </div>
       </div>
-      <div id="groups"></div>
+      </div>
+      <div class="games" id="groups"></div>
       <noscript><p class="empty">请开启 JavaScript 浏览游戏列表：<a href="entropy-blade/index.html">熵刃</a> · <a href="tbmh/index.html">悬赏怪物猎人</a></p></noscript>
-      <div class="slot px"><i></i>下一款游戏制作中……</div>
+    </section>
+    <section id="market" aria-labelledby="market-title">
+      <div class="market-heading">
+        <h2 class="sec px" id="market-title">交易所 MARKET <span class="live"><i></i>实时</span></h2>
+        <a class="px market-link" href="trade/index.html">进入交易所 →</a>
+      </div>
+      <div class="tickers" id="market-tickers"></div>
+      <div class="tiles">
+        <section class="tile frame">
+          <h3 class="px">CHECK-IN</h3><div class="tile-days" id="hub-checkin-days"></div>
+          <p id="hub-checkin-detail">连续 0 天 · 下次 +$20.00</p>
+          <a class="btn sm px" href="trade/index.html#/overview?checkin=1">去签到</a>
+        </section>
+        <section class="tile frame">
+          <h3 class="px">WALLET</h3><div id="hub-assets"></div>
+        </section>
+        <section class="tile frame">
+          <h3 class="px">API</h3><p>用 API Key 让 AI Agent 查询余额、自动买卖股票和加密货币。</p>
+          <a class="btn sm px" href="developer/index.html">开发者文档</a>
+        </section>
+      </div>
+      <p class="market-disclaimer">模拟交易所使用真实行情，所有资产为模拟资产，仅供教学练习，不构成投资建议。</p>
     </section>
   </main>
 
