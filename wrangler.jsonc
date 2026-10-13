@@ -13,6 +13,11 @@
   "r2_buckets": [
     { "binding": "ACCOUNTS", "bucket_name": "game-inc-accounts", "preview_bucket_name": "game-inc-accounts-preview" }
   ],
+  // PLATFORM §6.5 / 第2b轮：每Key每分钟读写各10次；namespace在账号内唯一。
+  "ratelimits": [
+    { "name": "API_RATE_READ", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "API_RATE_WRITE", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } }
+  ],
   "routes": [
     { "pattern": "game.inc.re", "custom_domain": true }
   ],

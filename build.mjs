@@ -4,6 +4,9 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { collectCharacters, collectHubCharacters, missingGlyphs } from './tools/font-data.mjs';
+import { isDeepStrictEqual } from 'node:util';
+import { derive } from './tools/derive-save-data.mjs';
+import { SAVE_DATA } from './server/games/plausibility-data.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
@@ -12,6 +15,9 @@ const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'tr
 // ---------- release checks (no dependencies) ----------
 const problems = [];
 const check = (ok, message) => { if (!ok) problems.push(message); };
+// PLATFORM §5.3 / 第2b轮：游戏数值变化必须重建快照，避免正常存档被过期常量拒绝。
+check(isDeepStrictEqual(JSON.parse(JSON.stringify(derive())), SAVE_DATA),
+  'save data differs from game data — run node tools/derive-save-data.mjs');
 // 模拟交易所发布检查（规格 11.1）。
 try {
   const marketContext = {};

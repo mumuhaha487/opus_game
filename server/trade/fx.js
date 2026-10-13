@@ -32,8 +32,12 @@ export async function getFx(now = Date.now(), budget) {
   }
   throw { status: 503, code: 'fx_unavailable' };
 }
-export async function regionView(request, now = Date.now()) {
-  const country = request.cf?.country || null, domestic = country === 'CN';
-  const { rate, rateTime } = await getFx(now);
-  return { country, region: domestic ? 'cn' : 'intl', currency: domestic ? 'CNY' : 'USD', usdcny: rate, rateTime };
+export async function regionView(request, now = Date.now(), debug = false) {
+  const override = debug ? new URL(request.url).searchParams.get('region') : null;
+  const country = ['cn', 'intl'].includes(override) ? override === 'cn' ? 'CN' : 'US' : request.cf?.country || null;
+  // PLATFORM §2.3 / 第2b轮：地区独立于FX可用性；第三轮覆盖仅由本地DEBUG_REGION=1开启。
+  let fx;
+  try { fx = await getFx(now); } catch { fx = null; }
+  return { country, region: country === 'CN' ? 'cn' : 'intl', currency: country === 'CN' ? 'CNY' : 'USD',
+    usdcny: fx?.rate || null, rateTime: fx?.rateTime || null };
 }

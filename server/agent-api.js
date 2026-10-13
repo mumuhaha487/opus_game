@@ -1,7 +1,8 @@
 // PLATFORM §6.3–6.5：只接受Bearer的Agent API；Cookie不参与认证，JSON边界保留，不开放CORS。
 // 委托、撤单、划转和合约操作复用网页handler与R2条件写，每日额度及上游预算共同计数。
 // 账户估值使用服务端可信报价，逐仓亏损以保证金为限；日志仅保存请求元信息。
-import { authenticateKey, keyRate, recordKeyUse } from './api-keys.js';
+import { authenticateKey, requestKeyRate, recordKeyUse } from './api-keys.js';
+import { dailyUsage } from './api-usage.js';
 import { handleTrade } from './trade/index.js';
 import { GateClient, assertBookFresh } from './trade/gate.js';
 import { AshareClient, validateCode } from './trade/ashare-data.js';
@@ -56,9 +57,14 @@ async function valuation(view, gate, ashare, now) {
   for (const holding of view.ashare.holdings) {
     cny += mul(parse(holding.qty), positivePrice((await ashare.quote(holding.code)).last), 'floor');
   }
-  const fx = await getFx(now, gate), rate = parse(fx.rate);
+  // PLATFORM §2.4 / 第2b轮：读原生余额不依赖FX；仅跨币种总值无法计算时置null。
+  let fx;
+  try { fx = await getFx(now, gate); } catch { fx = null; }
+  if (!fx) return { totalUSD: cny ? null : toStr(roundTo(usd, 8, 'floor')),
+    totalCNY: usd ? null : toStr(roundTo(cny, 2, 'floor')), fx: null, valuation: null };
+  const rate = parse(fx.rate);
   return { totalUSD: toStr(roundTo(usd + div(cny, rate, 'floor'), 8, 'floor')),
-    totalCNY: toStr(roundTo(mul(usd, rate, 'floor') + cny, 2, 'floor')), valuation: fx };
+    totalCNY: toStr(roundTo(mul(usd, rate, 'floor') + cny, 2, 'floor')), fx, valuation: fx };
 }
 async function quoteView(url, gate, ashare, now) {
   const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
@@ -92,7 +98,7 @@ async function dispatch(request, env, key, route, data, now) {
       if (order.market === 'ashare') codes.push(order.code);
     }
     if (codes.length || state.ashare.cash.free !== '0' || state.ashare.cash.locked !== '0') codes.push('sh000001');
-    await Promise.all([gate.preloadTickers(spot), gate.preloadTickers(futures, true), getFx(now, gate),
+    await Promise.all([gate.preloadTickers(spot), gate.preloadTickers(futures, true), getFx(now, gate).catch(() => null),
       ...(codes.length ? [ashare.quotes(codes)] : [])]);
   }
   if (route === 'quote') return reply(200, await quoteView(url, gate, ashare, now));
@@ -122,7 +128,7 @@ async function dispatch(request, env, key, route, data, now) {
     response.headers.has('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {});
 }
 export async function handleAgent(request, env, readBody) {
-  const now = Date.now(), limit = request.method === 'GET' ? 120 : 30;
+  const now = Date.now(), limit = 10;
   let key, response;
   const headers = { 'X-Request-Id': crypto.randomUUID(), 'X-RateLimit-Limit': String(limit),
     'X-RateLimit-Remaining': String(limit) };
@@ -131,7 +137,15 @@ export async function handleAgent(request, env, readBody) {
       fail(503, 'storage_unavailable', '存储服务暂时不可用，请稍后再试');
     }
     key = await authenticateKey(request, env);
-    const rate = keyRate(key.id, request.method, now);
+    const usage = await dailyUsage(env.ACCOUNTS, key, now);
+    headers['X-Daily-Quota-Limit'] = '1500'; headers['X-Daily-Quota-Remaining'] = String(usage.keyRemaining);
+    headers['X-Account-Quota-Remaining'] = String(usage.accountRemaining);
+    if (usage.denied) {
+      headers['X-RateLimit-Limit'] = usage.accountRemaining ? '1500' : '3000';
+      headers['X-RateLimit-Remaining'] = '0'; headers['Retry-After'] = String(usage.retryAfter);
+      fail(429, 'daily_quota', '今日 API 调用次数已用完');
+    }
+    const rate = await requestKeyRate(env, key.id, request.method, now);
     headers['X-RateLimit-Remaining'] = String(rate.remaining);
     if (rate.retryAfter) {
       headers['Retry-After'] = String(rate.retryAfter); fail(429, 'rate_limited', '操作太频繁，请稍后再试');

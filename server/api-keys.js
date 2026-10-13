@@ -8,6 +8,7 @@ const indexPath = id => `apikey-index/${id}.json`;
 const ID = /^[a-z2-7]{10}$/;
 const KEY = /^gk_([a-z2-7]{10})_([A-Za-z0-9_-]{43})$/;
 const buckets = new Map();
+const sampledGets = new WeakMap();
 const loggedPaths = new Set(['account', 'quote', 'orders', 'trades', 'orders/cancel', 'transfer',
   'futures/leverage', 'futures/close', 'futures/tpsl'].map(path => '/api/v1/' + path));
 const fail = (status, code, message) => { throw { status, code, message }; };
@@ -118,8 +119,8 @@ export async function authenticateKey(request, env) {
   return { id, uid: index.uid, scopes: index.scopes.filter(scope => meta.scopes.includes(scope)), meta };
 }
 export function keyRate(id, method, now = Date.now()) {
-  // PLATFORM §6.5：GET120/分钟、POST30/分钟，各自独立的isolate令牌桶。
-  const limit = method === 'GET' ? 120 : 30, name = id + ':' + (method === 'GET' ? 'read' : 'write');
+  // PLATFORM §6.5 / 第2b轮：GET与POST分别10/分钟；绑定不可用时使用isolate令牌桶。
+  const limit = 10, name = id + ':' + (method === 'GET' ? 'read' : 'write');
   const previous = buckets.get(name) || { tokens: limit, time: now };
   const tokens = Math.min(limit, previous.tokens + Math.max(0, now - previous.time) * limit / 60000);
   const allowed = tokens >= 1;
@@ -127,6 +128,14 @@ export function keyRate(id, method, now = Date.now()) {
   if (buckets.size > 10000) for (const [key, value] of buckets) if (now - value.time > 120000) buckets.delete(key);
   return { limit, remaining: Math.floor(allowed ? tokens - 1 : tokens),
     retryAfter: allowed ? 0 : Math.max(1, Math.ceil((1 - tokens) * 60 / limit)) };
+}
+export async function requestKeyRate(env, id, method, now) {
+  const estimate = keyRate(id, method, now), binding = method === 'GET' ? env.API_RATE_READ : env.API_RATE_WRITE;
+  if (!binding?.limit) return estimate;
+  try {
+    const { success } = await binding.limit({ key: id });
+    return { ...estimate, retryAfter: success ? 0 : 60, remaining: success ? estimate.remaining : 0 };
+  } catch { return estimate; }
 }
 export function ipPrefix(value) {
   if (/^(\d{1,3}\.){3}\d{1,3}$/.test(value) && value.split('.').every(part => Number(part) <= 255)) {
@@ -139,14 +148,20 @@ export function ipPrefix(value) {
   return groups.slice(0, 3).map(group => parseInt(group, 16).toString(16)).join(':') + '::/48';
 }
 export async function recordKeyUse(bucket, key, request, status, now = Date.now()) {
-  // PLATFORM §6.5：最近100条，只写方法、路径、状态和IP前缀；CAS失败丢本条，不影响主请求。
+  // PLATFORM §6.5 / 第2b轮：成功GET每Key每分钟采样一次；POST与非2xx逐次记，仍仅保留100条。
+  if (!sampledGets.has(bucket)) sampledGets.set(bucket, new Map());
+  const samples = sampledGets.get(bucket), sampled = request.method === 'GET' && status >= 200 && status < 300;
+  const shouldLog = !sampled || !samples.has(key.id) || now - samples.get(key.id) >= 60000;
+  if (sampled && shouldLog) samples.set(key.id, now);
   try {
+    if (shouldLog) {
     const path = `apikeys/log/${key.id}.json`, object = await bucket.get(path);
     const rows = object ? await object.json() : [];
     const pathname = new URL(request.url).pathname;
     rows.unshift({ time: now, method: request.method, path: loggedPaths.has(pathname) ? pathname : '/api/v1/[unknown]', status,
-      ip: ipPrefix(request.headers.get('CF-Connecting-IP') || '') });
+      ip: ipPrefix(request.headers.get('CF-Connecting-IP') || ''), ...(sampled ? { sampled: true } : {}) });
     await bucket.put(path, JSON.stringify(rows.slice(0, 100)), { onlyIf: condition(object?.etag) });
+    }
   } catch { /* logging is best effort */ }
   try {
     if (key.meta.lastUsed !== null && now - key.meta.lastUsed < 600000) return;
