@@ -7,6 +7,8 @@ import { collectCharacters, collectHubCharacters, missingGlyphs } from './tools/
 import { isDeepStrictEqual } from 'node:util';
 import { derive } from './tools/derive-save-data.mjs';
 import { SAVE_DATA } from './server/games/plausibility-data.js';
+import { QUOTE_FIELDS as serverQuoteFields } from './server/trade/ashare-data.js';
+import { QUOTE_FIELDS as clientQuoteFields } from './trade/js/ashare/feed.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
@@ -18,6 +20,8 @@ const check = (ok, message) => { if (!ok) problems.push(message); };
 // PLATFORM §5.3 / 第2b轮：游戏数值变化必须重建快照，避免正常存档被过期常量拒绝。
 check(isDeepStrictEqual(JSON.parse(JSON.stringify(derive())), SAVE_DATA),
   'save data differs from game data — run node tools/derive-save-data.mjs');
+// ASHARE §1.1、§7.12：腾讯解析两端字段表必须逐值相等。
+check(isDeepStrictEqual(serverQuoteFields, clientQuoteFields), 'trade: client/server Tencent quote fields differ');
 // 模拟交易所发布检查（规格 11.1）。
 try {
   const marketContext = {};
@@ -108,6 +112,18 @@ rmSync(out, { recursive: true, force: true });
 for (const name of siteFiles) {
   cpSync(path.join(root, name), path.join(out, name), { recursive: true, filter: shipped });
 }
+// PLATFORM §5.4、ASHARE §6：JSONP搜索只放行明确的东方财富主机；CSP输出必须单行。
+// 源文件使用标记，构建展开，避免新增源代码行超过140字符。
+const tradePolicy = [
+  "default-src 'self'", "script-src 'self' 'unsafe-inline' https://searchapi.eastmoney.com",
+  "connect-src 'self' https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn"
+    + ' https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com'
+    + ' https://push2his.eastmoney.com https://searchapi.eastmoney.com',
+  "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "font-src 'self'", "frame-ancestors 'none'",
+].join('; ');
+const headersPath = path.join(out, '_headers');
+writeFileSync(headersPath, readFileSync(headersPath, 'utf8').replace('# BUILD_TRADE_CSP',
+  '  Content-Security-Policy: ' + tradePolicy));
 
 // Hash the staged site so unchanged builds keep the same asset URLs.
 const stagedFiles = filesIn(out);

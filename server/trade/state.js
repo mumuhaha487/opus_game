@@ -11,7 +11,7 @@ export function defaultState(now = Date.now()) {
   return {
     v: 2, created: now, updated: now, seq: 0,
     // PLATFORM §2.1：统一钱包、A 股现金及每日委托计数；旧字段继续保留。
-    wallet: { usd: '0' }, ashare: { cash: { free: '0', locked: '0' }, holdings: {} },
+    wallet: { usd: '0' }, ashare: { cash: { free: '0', locked: '0' }, holdings: {}, watch: [] },
     disclaimerAt: null, agent: { ordersToday: 0, day: null }, notices: [],
     spot: { balances: { USDT: { free: '0', locked: '0' } } },
     futures: { wallet: '0', locked: '0', leverage: {}, positions: {} },
@@ -24,6 +24,8 @@ export function normalize(state, now) {
   state ||= initial;
   for (const field of Object.keys(initial)) state[field] ??= initial[field];
   state.spot.balances.USDT ||= { free: '0', locked: '0' };
+  // ASHARE §6：旧v2文档只增加自选字段，不删除原有状态字段。
+  state.ashare.watch ||= [];
   for (const [kind, limit] of Object.entries({ orders: 100, trades: 200, ledger: 200 })) {
     state.history[kind] = (state.history[kind] || []).slice(0, limit);
   }
@@ -99,7 +101,7 @@ export function stateView(state, now, partial = false, notices = []) {
     wallet: state.wallet, disclaimerAt: state.disclaimerAt,
     // PLATFORM §5.2.4：跨日视图清零，下一张成功委托在条件写内更新持久化计数。
     agent: { ...state.agent, day: dayKey(now), ordersToday: state.agent.day === dayKey(now) ? state.agent.ordersToday : 0 },
-    ashare: { cash: state.ashare.cash,
+    ashare: { cash: state.ashare.cash, watch: state.ashare.watch,
       holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })),
       market: { ...marketStatus(now, { time: state.ashare.marketTime ?? now }), checked: state.ashare.marketTime != null } },
     futures: { ...state.futures, positions: Object.entries(state.futures.positions).map(([symbol, value]) => ({ symbol, ...value })) },

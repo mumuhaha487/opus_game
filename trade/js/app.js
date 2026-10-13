@@ -17,6 +17,11 @@ import { AshareFeed } from './ashare/feed.js';
 import { WalletView } from './wallet.js';
 import { Overview } from './overview.js';
 import { segment } from './ui.js';
+import { Search } from './ashare/search.js';
+import { Watchlist } from './ashare/watch.js';
+import { Screener } from './ashare/screener.js';
+import { Stock } from './ashare/stock.js';
+import { HOT_STOCKS } from './ashare/universe.js';
 import { element, button, icon, gift, price, percent, quantity, large, countdown, direction } from './format.js';
 const node = id => document.getElementById(id);
 const feed = new Feed();
@@ -48,7 +53,12 @@ let page = 'overview', picker, pickerList, accountSignature = '';
 const navigation = new Navigation({ overview: node('overview-page'), ashare: node('ashare-page'),
   crypto: node('markets-page'), assets: node('assets-page'), desk: node('desk'), stock: node('stock-page') }, route);
 const overview = new Overview(node('overview-page'), feed, ashare, api, modals, wallet, hash => navigation.go(hash));
-node('ashare-page').append(element('span', 'SCREENER', 'px-label'), element('h1', 'A 股行情'));
+const watch = new Watchlist(api, modals, () => {
+  feed.dirty = true; ashare.configure(page, stock.code, watch.codes.length ? watch.codes : HOT_STOCKS.map(([code]) => code));
+});
+const screener = new Screener(node('ashare-page'), ashare, overview, watch);
+const stock = new Stock(node('stock-page'), ashare, api, modals, watch);
+new Search(node('global-search'), node('search-results'));
 const barElements = createBar();
 for (const id of ['desktop-nav', 'mobile-nav']) NAVIGATION.forEach(([route, label], index) => {
   const link = element('a'); link.href = '#/' + route + (['spot', 'futures'].includes(route) ? '/BTC_USDT' : '');
@@ -109,9 +119,8 @@ function header() {
     }
     options.append(button('退出登录', async () => {
       try { await GameAccount.logout(); api.accountChanged(); } catch (error) { modals.error(error); }
-    })); menu.append(options); controls.push(menu); railControls.push(menu.cloneNode(true));
-    // 克隆菜单不复制事件，顶部账号菜单直接移入rail；手机保留顶部登录入口。
-    railControls.pop(); railControls.push(menu);
+    })); menu.append(options); railControls.push(menu);
+    controls.push(button(profile.name, () => navigation.go('#/assets'), 'mobile-account'));
   } else {
     controls.push(button('登录', () => modals.login(), 'mobile-account'));
     railControls.push(button('登录', () => modals.login(), 'avatar'));
@@ -191,11 +200,15 @@ async function route() {
   const marketPage = ['spot', 'futures'].includes(requested);
   const valid = ['overview', 'ashare', 'crypto', 'assets', 'spot', 'futures', 'stock'];
   if (!valid.includes(requested) || marketPage && (!symbol
-    || !globalThis.TRADE_MARKETS.some(market => market.spot === symbol)) || parts.length > (marketPage ? 2 : 1)) {
+    || !globalThis.TRADE_MARKETS.some(market => market.spot === symbol))
+    || requested === 'stock' && !/^(sh|sz)\d{6}$/.test(symbol || '')
+    || parts.length > (marketPage || requested === 'stock' ? 2 : 1)) {
     navigation.go('#/overview'); return;
   }
   closePicker(); closeChart(); page = requested;
-  ashare.configure(page, page === 'stock' ? symbol : null, api.state?.ashare.holdings.map(row => row.code) || []);
+  if (page === 'stock') stock.setCode(symbol);
+  const pool = watch.codes.length ? watch.codes : HOT_STOCKS.map(([code]) => code);
+  ashare.configure(page, page === 'stock' ? symbol : null, [...pool, ...(api.state?.ashare.holdings.map(row => row.code) || [])]);
   navigation.show(marketPage ? 'desk' : page, page);
   node('spot-form').hidden = page === 'futures'; node('futures-form').hidden = page !== 'futures';
   for (const link of document.querySelectorAll('[data-route]')) {
@@ -220,8 +233,11 @@ function renderFrame(timestamp) {
   if (feed.dirty && timestamp - lastRender >= 100) {
     lastRender = timestamp; feed.dirty = false;
     header(); status();
+    watch.sync(api.state);
     if (page === 'crypto') markets.render();
     else if (page === 'overview') overview.render(api.state);
+    else if (page === 'ashare') screener.render();
+    else if (page === 'stock') { stock.render(); stock.chart.render(); }
     else if (page === 'assets') assets.render(api.state);
     else if (['spot', 'futures'].includes(page)) {
       bar(); book.render(); chart.render(api.state); tape.render(api.state); side.render();

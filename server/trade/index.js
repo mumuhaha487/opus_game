@@ -16,7 +16,7 @@ import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, ch
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   disclaimer: 'POST',
-  'ashare/order': 'POST', 'ashare/cancel': 'POST',
+  'ashare/order': 'POST', 'ashare/cancel': 'POST', 'ashare/watch': 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
@@ -73,6 +73,14 @@ export async function handleTrade(request, env, session, data, services) {
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
+      // ASHARE §6：会话自选最多50个，严格代码形状、去重，不开放到Agent路由。
+      if (route === 'ashare/watch') {
+        if (!Array.isArray(data.codes) || data.codes.length > 50
+          || data.codes.some(code => typeof code !== 'string' || !/^(sh|sz)\d{6}$/.test(code))) {
+          throw { status: 400, code: 'bad_request' };
+        }
+        state.ashare.watch = [...new Set(data.codes)]; return { notices: [] };
+      }
       if (method === 'POST' && !state.disclaimerAt && !session.apiKey) throw { status: 403, code: 'disclaimer_required' };
       const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order'].includes(route);
       const previous = ordering && state.clientIds.find(entry => entry.clientId === data.clientId);

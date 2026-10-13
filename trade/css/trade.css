@@ -553,3 +553,96 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .mobile-account { min-height: 44px; }
   .top .wallet-chip { height: 44px; }
 }
+
+/* DESIGN §4.5–4.6：A股视图，五档/逐笔、单列ticket；1024处图表/盘口分段。 */
+.index-cards { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.ashare-status { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.screener-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.screener-controls select { height: 36px; }
+.stock-search { position: relative; }
+.stock-search input { height: 36px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 8px; padding: 0 12px; }
+.stock-search > div { position: absolute; z-index: 10; top: 40px; background: var(--surface-2); width: 300px; }
+.stock-search a { display: block; padding: 10px 12px; }
+.search-group { display: block; color: var(--muted); padding: 8px 12px; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 12px; }
+.pager button { height: 36px; background: var(--surface-2); border-radius: 8px; }
+.stock-actions { display: flex; align-items: center; gap: 16px; }
+.stock-watch { margin-top: 12px; }
+.stock-watch td small, .ashare-page td small { display: block; font-size: 11px; }
+.stock-identity { display: flex; align-items: center; gap: 8px; flex: none; }
+.stock-identity b { font-size: 18px; font-weight: 600; }
+.stock-identity small { display: block; font-size: 12px; }
+.stock-price { flex: none; }
+.stock-price > small { display: block; font-size: 13px; }
+.stock-head > .bar-stat { flex: 0 1 auto; white-space: nowrap; }
+.stock-head > .market-status { margin-left: auto; flex: none; }
+.stock-head > button { flex: none; }
+.stock-level { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center;
+  width: 100%; height: 28px; padding: 0 12px; position: relative; text-align: right; font-size: 12px; }
+.stock-level > i { position: absolute; right: 0; top: 0; height: 100%; }
+.stock-level > span { position: relative; } .stock-level > span:first-of-type { text-align: left; }
+.stock-book .panel-title { padding: 0 12px; margin: 8px 0; }
+.stock-trade { display: grid; grid-template-columns: 1.2fr 1fr 1fr 24px; height: 22px; padding: 0 12px; font-size: 12px; }
+.stock-trade > span:not(:first-child) { text-align: right; }
+.ticket-sides { height: 40px; margin-bottom: 16px; }
+.ticket-sides button { flex: 1; height: 34px; font-weight: 600; }
+.ticket-sides button.selected[data-value=buy] { background: var(--rise); color: white; }
+.ticket-sides button.selected[data-value=sell] { background: var(--fall); color: white; }
+.stock-ticket .order-types { background: transparent; margin-bottom: 16px; }
+.stock-ticket .order-types button.selected { background: transparent; border-bottom: 2px solid var(--gold); }
+.field { margin: 12px 0; }
+.field > label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.field .input-row { height: 44px; background: var(--surface-2); border-color: var(--line-2); }
+.field .input-row:focus-within { border-color: var(--gold); }
+.field .stepper { display: block; width: 32px; height: 32px; border-radius: 6px;
+  background: var(--surface-3); padding: 0; flex: none; }
+.quick-ratios { background: transparent; padding: 0; gap: 8px; margin: 12px 0; }
+.quick-ratios button { background: var(--surface-2); border: 1px solid transparent; flex: 1; padding: 0; border-radius: 999px; }
+.quick-ratios button.selected { border-color: var(--gold); }
+.ticket-summary { background: var(--surface-2); border-radius: 8px; padding: 12px; font-size: 12px; margin: 16px 0; }
+.ticket-summary > div { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.ticket-summary > div:last-child { margin: 0; }
+.ticket-summary b { font-weight: 400; }
+.stock-ticket > .buy-button, .stock-ticket > .sell-button, .stock-ticket > .primary { width: 100%; }
+.ticket-balance { padding: 12px; border-radius: 8px; background: var(--surface-2); margin-top: 16px; }
+.ticket-balance button { float: right; }
+.stock-dock { overflow: auto; padding: 12px; }
+.stock-dock.empty-dock { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; }
+.stock-dock.empty-dock > .seg { align-self: stretch; }
+.stock-dock > .seg { background: transparent; }
+.stock-dock .seg button { padding: 0 8px; }
+.stock-mobile-actions, .ticket-close, .compact-chart-tabs { display: none; }
+.stock-fullscreen { position: fixed; inset: 0; z-index: 40; border-radius: 0; }
+@media (min-width: 1200px) and (max-width: 1439px) {
+  .stock-head > .bar-stat:nth-of-type(n+6) { display: none; }
+}
+@media (min-width: 1440px) { .stock-head > .bar-stat:nth-of-type(n+8) { display: none; } }
+@media (min-width: 1024px) and (max-width: 1199px) and (min-height: 500px) {
+  .stock-head > .bar-stat { display: none; }
+  .compact-chart-tabs { display: flex; }
+  .compact-book > .chart { display: flex; }
+  .compact-book > .chart > :not(.compact-chart-tabs) { visibility: hidden; }
+  .compact-book > .book { display: block; grid-area: chart; margin-top: 36px; z-index: 1; }
+}
+@media (max-width: 767px), (max-height: 499px) {
+  #stock-page { display: flex; flex-direction: column; gap: 8px; }
+  .stock-head { height: auto; min-height: 80px; padding: 12px; gap: 12px; flex-wrap: wrap; }
+  .stock-head > .bar-stat, .stock-head > .market-status, .stock-head > button { display: none; }
+  .stock-head .latest-price { font-size: 24px; }
+  .stock-identity .badge-circle, .stock-identity .star { display: none; }
+  .stock-head .stock-identity { flex: 1; }
+  #stock-page .chart { height: 284px; }
+  #stock-page .chart-canvas { height: 240px; flex: none; }
+  #stock-page .chart-toolbar { overflow: auto; }
+  .stock-mobile-actions { display: flex; position: fixed; left: 0; right: 0;
+    bottom: calc(56px + env(safe-area-inset-bottom)); background: var(--surface); z-index: 20; }
+  .stock-mobile-actions button { flex: 1; border-radius: 0; height: 48px; }
+  .stock-ticket { display: none; }
+  .stock-ticket.sheet-open { display: block; position: fixed; z-index: 50; bottom: 0; left: 0; right: 0;
+    border-radius: 16px 16px 0 0; max-height: 85vh; overflow: auto; padding: 16px; animation: sheet-in 220ms; }
+  .ticket-close { display: block; margin-bottom: 12px; }
+  .stock-book { padding: 0; }
+  .index-cards { display: flex; overflow-x: auto; }
+  .screener-controls > .seg { overflow: auto; width: 100%; }
+  .screener-controls .seg button { white-space: nowrap; }
+}
