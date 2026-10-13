@@ -1,11 +1,16 @@
 // 腾讯、东方财富与汇率的服务端上游读取边界。
 // TRADE §5.3 / ASHARE §3：缓存命中免预算，所有市场共享每请求 30 次 fetch。
 // 合成缓存键、8 秒超时；只缓存成功解码的数据，不缓存错误响应。
-export async function upstream(url, ttl, decode, budget) {
+export function cacheIsFresh(response, ttl, now = Date.now()) {
+  // 第五轮修复 / PLATFORM §5.2.2：Cache API 的过期行为不能替代获取时间检查，旧条目必须重取。
+  const fetchedAt = Number(response?.headers?.get('X-Fetched-At'));
+  return Number.isFinite(fetchedAt) && fetchedAt > 0 && now >= fetchedAt && now - fetchedAt < ttl * 1000;
+}
+export async function upstream(url, ttl, decode, budget, fresh = false) {
   const key = new Request('https://trade-cache.game.inc.re/external?url=' + encodeURIComponent(url));
   const cache = globalThis.caches?.default;
-  const cached = cache && await cache.match(key);
-  if (cached) return cached.json();
+  const cached = !fresh && cache && await cache.match(key);
+  if (cacheIsFresh(cached, ttl)) return cached.json();
   if (budget) {
     if (budget.used >= (budget.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
     budget.used++;
@@ -16,8 +21,9 @@ export async function upstream(url, ttl, decode, budget) {
     const response = await fetch(url, { signal: controller.signal, headers: { Accept: '*/*' } });
     if (!response.ok) throw Error('upstream');
     const value = await decode(response);
-    if (cache) await cache.put(key, new Response(JSON.stringify(value), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl },
+    if (!fresh && cache) await cache.put(key, new Response(JSON.stringify(value), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl,
+        'X-Fetched-At': String(Date.now()) },
     }));
     return value;
   } catch { throw { status: 503, code: 'market_unavailable' }; }

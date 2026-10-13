@@ -169,7 +169,7 @@ async function orderValues(state, data, gate) {
     ? priceValue(data.stopPrice, spec) : 0n;
   const position = state.futures.positions[data.symbol];
   if (data.reduceOnly && (!position || (position.side === 'long') === (data.side === 'buy'))) fail('reduce_only');
-  const ticker = await gate.futuresTicker(data.symbol);
+  const ticker = await gate.futuresTicker(data.symbol, true);
   // 规格 7.5：市价单附带止盈止损相对标记价，限价单相对限价，止盈止损单相对触发价。
   validateTPSL(data.side, data.tp, data.sl, data.type === 'market' ? parse(ticker[0]?.mark_price) : price, spec);
   return { spec, qty, price, ticker: ticker[0] };
@@ -180,7 +180,7 @@ export async function placeFuturesOrder(state, data, gate, now) {
   const { spec, qty, price, ticker } = await orderValues(state, data, gate);
   if (state.orders.length >= 50) fail('too_many_orders');
   const order = makeFuturesOrder(state, data, leverageFor(state, data.symbol, spec), now);
-  const book = data.type === 'stop_market' ? null : await gate.futuresBook(data.symbol);
+  const book = data.type === 'stop_market' ? null : await gate.futuresBook(data.symbol, true);
   if (book) assertBookFresh(book, now);
   const match = data.type === 'stop_market' ? null : futuresMatch(book, data.side,
     qty, parse(spec.quanto_multiplier), price);
@@ -236,14 +236,14 @@ export async function closeFutures(state, data, gate, now) {
 export async function changeTPSL(state, data, gate, now) {
   const position = positionFor(state, data.symbol), spec = await gate.contract(data.symbol);
   if (data.tp === undefined || data.sl === undefined) fail('bad_request');
-  const ticker = await gate.futuresTicker(data.symbol);
+  const ticker = await gate.futuresTicker(data.symbol, true);
   validateTPSL(position.side === 'long' ? 'buy' : 'sell', data.tp, data.sl, parse(ticker[0]?.mark_price), spec);
   position.tp = data.tp; position.sl = data.sl; position.updatedAt = now;
 }
 export async function changeMargin(state, data, gate, now) {
   const position = positionFor(state, data.symbol), amount = parse(data.amount);
   if (!['add', 'remove'].includes(data.action) || amount <= 0n || credit(amount) !== amount) fail('bad_request');
-  const ticker = await gate.futuresTicker(data.symbol), mark = parse(ticker[0]?.mark_price);
+  const ticker = await gate.futuresTicker(data.symbol, true), mark = parse(ticker[0]?.mark_price);
   if (data.action === 'remove' && amount > removable(position, mark)) fail('margin_limit');
   const delta = data.action === 'add' ? amount : -amount;
   walletChange(state, -delta); position.margin = toStr(parse(position.margin) + delta);

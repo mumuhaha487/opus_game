@@ -29,7 +29,7 @@ async function settleOrder(state, order, client, now, notices) {
   if (order.checkFrom >= now) return;
   const end = Math.min(now, order.expiresAt), start = order.checkFrom;
   if (end <= start) return;
-  const quote = await client.quote(order.code);
+  const quote = await client.quote(order.code, true);
   const cursorDate = dayKey(start), date = dayKey(quote.time);
   const minuteStart = Math.ceil(start / 60000) * 60000;
   // ASHARE §3.2：当日 details 没有日期；历史首分钟缺逐笔时保守跳过，不借用整根 K 线回填。
@@ -54,7 +54,7 @@ async function settleOrder(state, order, client, now, notices) {
 export async function settleAshare(state, client, now, notices) {
   if (!hasAshareWork(state, now)) return false;
   try {
-    const index = await client.quote('sh000001');
+    const index = await client.quote('sh000001', true);
     // ASHARE §3.3：T+1 可卖转换先于成交检查。
     unlockHoldings(state, index, now); state.ashare.marketTime = index.time;
     const orders = state.orders.filter(order => order.market === 'ashare').sort((left, right) => left.checkFrom - right.checkFrom);

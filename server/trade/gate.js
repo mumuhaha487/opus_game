@@ -1,6 +1,7 @@
 // Gate.io 公开行情客户端与 Cloudflare Cache 接口。
 // 请求预算按一次 Worker 调用共享，条件写重试也不重置预算。
 // 规格 5.3：合成缓存 URL、8 秒超时、最多 30 次上游请求。
+import { cacheIsFresh } from './upstream.js';
 export function assertBookFresh(book, now) {
   // PLATFORM §5.2.2：盘口 current 为毫秒；缺失、无效、超过 10 秒或远未来均不可成交。
   const time = typeof book?.current === 'number' || typeof book?.current === 'string' ? Number(book.current) : NaN;
@@ -10,19 +11,21 @@ export function assertBookFresh(book, now) {
 }
 export class GateClient {
   constructor(now = Date.now()) { this.now = now; this.used = 0; this.pending = new Map(); }
-  async get(path, query = {}, ttl = 5) {
+  async get(path, query = {}, ttl = 5, fresh = false) {
     const parameters = new URLSearchParams(Object.entries(query).map(([name, value]) => [name, String(value)]));
     const suffix = path + (parameters.size ? '?' + parameters : '');
-    if (this.pending.has(suffix)) return this.pending.get(suffix);
-    const promise = this.load(suffix, ttl);
-    this.pending.set(suffix, promise);
+    // 第五轮修复 / PLATFORM §5.2.2：成交直连与缓存读取分开复用，直连只共享本请求的结果。
+    const pendingKey = (fresh ? 'live:' : '') + suffix;
+    if (this.pending.has(pendingKey)) return this.pending.get(pendingKey);
+    const promise = this.load(suffix, ttl, fresh);
+    this.pending.set(pendingKey, promise);
     return promise;
   }
-  async load(suffix, ttl) {
+  async load(suffix, ttl, fresh) {
     const key = new Request('https://trade-cache.game.inc.re' + suffix);
     const cache = globalThis.caches?.default;
-    const cached = cache && await cache.match(key);
-    if (cached) return cached.json();
+    const cached = !fresh && cache && await cache.match(key);
+    if (cacheIsFresh(cached, ttl)) return cached.json();
     // 规格 5.3：Cache 命中不计预算，并发请求在 fetch 前同步领取额度。
     if (this.used >= (this.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
     this.used++;
@@ -34,16 +37,17 @@ export class GateClient {
       });
       if (!response.ok) throw new Error('upstream');
       const value = await response.json();
-      if (cache) await cache.put(key, new Response(JSON.stringify(value), {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl },
+      if (!fresh && cache) await cache.put(key, new Response(JSON.stringify(value), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl,
+          'X-Fetched-At': String(Date.now()) },
       }));
       return value;
     } catch { throw { status: 503, code: 'market_unavailable' }; }
     finally { clearTimeout(timer); }
   }
   spec(symbol) { return this.get('/spot/currency_pairs/' + symbol, {}, 3600); }
-  book(symbol) { return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1); }
-  ticker(symbol) { return this.get('/spot/tickers', { currency_pair: symbol }, 2); }
+  book(symbol, fresh = false) { return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1, fresh); }
+  ticker(symbol, fresh = false) { return this.get('/spot/tickers', { currency_pair: symbol }, 2, fresh); }
   async preloadTickers(symbols, futures = false) {
     // PLATFORM §6.4：多资产估值一次批量报价，避免39个市场耗尽每请求30次上游预算。
     const unique = [...new Set(symbols)];
@@ -67,13 +71,13 @@ export class GateClient {
     return this.get('/spot/trades', { currency_pair: symbol, from, to, limit: 1000, page }, 5);
   }
   contract(symbol) { return this.get('/futures/usdt/contracts/' + symbol, {}, 3600); }
-  async futuresBook(symbol) {
-    const book = await this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1);
+  async futuresBook(symbol, fresh = false) {
+    const book = await this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1, fresh);
     // PLATFORM §5.2.2 / §6.4：真实合约current是带小数的Unix秒，读取边界统一为毫秒再查10秒新鲜度。
     const current = Number(book.current);
     return { ...book, current: current > 0 && current < 1e11 ? current * 1000 : book.current };
   }
-  futuresTicker(symbol) { return this.get('/futures/usdt/tickers', { contract: symbol }, 2); }
+  futuresTicker(symbol, fresh = false) { return this.get('/futures/usdt/tickers', { contract: symbol }, 2, fresh); }
   futuresCandles(symbol, interval, from, to, mark = false) {
     const ttl = to < Math.floor(this.now / 60000) * 60 ? 300 : 5;
     return this.get('/futures/usdt/candlesticks', { contract: (mark ? 'mark_' : '') + symbol, interval, from, to }, ttl);

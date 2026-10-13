@@ -186,7 +186,7 @@ export async function settleFutures(state, gate, now, notices, plan) {
         } else {
           // 规格 7.8：首个不完整分钟不使用 mark 高低价，历史补完后用当前 ticker 点检一次。
           if (state.futures.positions[queue.symbol]) {
-            const ticker = await gate.futuresTicker(queue.symbol), mark = parse(ticker[0]?.mark_price);
+            const ticker = await gate.futuresTicker(queue.symbol, true), mark = parse(ticker[0]?.mark_price);
             markEvent(state, queue.symbol, { t: now, end: now + 1, open: mark, high: mark, low: mark, point: true },
               queue.spec, notices);
           }

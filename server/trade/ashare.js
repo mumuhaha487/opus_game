@@ -102,7 +102,7 @@ function remainingLock(order) {
 export async function placeAshareOrder(state, data, client, now) {
   const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
   if (previous) return structuredClone(previous.result);
-  const quotes = await client.quotes([data.code, 'sh000001']), quote = quotes[data.code], index = quotes.sh000001;
+  const quotes = await client.quotes([data.code, 'sh000001'], true), quote = quotes[data.code], index = quotes.sh000001;
   unlockHoldings(state, index, now);
   const values = validateAshare(data, quote, state.ashare.holdings[data.code]), market = marketStatus(now, index);
   if (state.orders.length >= 50) fail('too_many_orders');

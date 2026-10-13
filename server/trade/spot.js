@@ -108,7 +108,7 @@ export async function placeOrder(state, data, gate, now) {
   const order = createOrder(state, data, now);
   if (data.type === 'stop_limit') {
     checkNotional(mul(values.price, values.qty, 'floor'), specification);
-    const tickers = await gate.ticker(data.symbol), latest = parse(tickers[0]?.last);
+    const tickers = await gate.ticker(data.symbol, true), latest = parse(tickers[0]?.last);
     // 规格 6.6：触发方向只依据服务端从 Gate.io 读取的最新价。
     order.stopDir = parse(data.stopPrice) > latest ? 'up' : 'down';
     freezeOrder(state, order, values); state.orders.push(order);
@@ -118,15 +118,20 @@ export async function placeOrder(state, data, gate, now) {
   return result;
 }
 async function placeBookOrder(state, order, values, specification, gate, now) {
-  const book = await gate.book(order.symbol);
+  // 第五轮修复 / TRADE §6.3：金额市价委托检查原始 quoteQty，数量取整不能降低委托门槛。
+  if (values.quoteOrder) checkNotional(values.quoteQty, specification);
+  const book = await gate.book(order.symbol, true);
   assertBookFresh(book, now);
   const match = eatBook(book, order.side, values.qty, values.quoteQty, Number(specification.amount_precision), values.price);
   if (order.type === 'limit') {
     checkNotional(mul(values.price, values.qty, 'floor'), specification);
     freezeOrder(state, order, values); state.orders.push(order);
   } else {
-    if (!match.filled) failure('no_liquidity');
-    checkNotional(match.quote, specification);
+    if (!match.filled) {
+      if (values.quoteOrder) throw { status: 400, code: 'bad_qty', quoteOrder: true };
+      failure('no_liquidity');
+    }
+    if (!values.quoteOrder) checkNotional(match.quote, specification);
     // 规格 6.3：市价买入按吃单估算成交额 ceil8 检查可用余额。
     const required = debit(order.side === 'buy' ? match.quote : match.filled);
     if (parse(balance(state, order.lock.asset).free) < required) failure('insufficient_balance');

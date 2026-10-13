@@ -84,24 +84,27 @@ export function parseDetails(data, date) {
 }
 export class AshareClient {
   constructor(budget, now = Date.now()) {
-    this.budget = budget; this.now = now; this.pending = new Map(); this.quoteMap = {};
+    this.budget = budget; this.now = now; this.pending = new Map(); this.quoteMap = {}; this.liveQuoteMap = {};
   }
-  load(url, ttl, decode) {
-    if (!this.pending.has(url)) this.pending.set(url, upstream(url, ttl, decode, this.budget));
-    return this.pending.get(url);
+  load(url, ttl, decode, fresh = false) {
+    const pendingKey = (fresh ? 'live:' : '') + url;
+    if (!this.pending.has(pendingKey)) this.pending.set(pendingKey, upstream(url, ttl, decode, this.budget, fresh));
+    return this.pending.get(pendingKey);
   }
-  async quotes(codes) {
+  async quotes(codes, fresh = false) {
     codes.forEach(validateCode);
-    const missing = [...new Set(codes)].filter(code => !this.quoteMap[code]).sort();
+    // 第五轮修复 / PLATFORM §5.2.2：成交报价不能复用普通查询的边缘缓存结果。
+    const quoteMap = fresh ? this.liveQuoteMap : this.quoteMap;
+    const missing = [...new Set(codes)].filter(code => !quoteMap[code]).sort();
     if (missing.length) {
       const result = await this.load('https://qt.gtimg.cn/q=' + missing.join(','), 1, async response =>
-        parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())));
+        parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())), fresh);
       if (missing.some(code => !result[code])) throw { status: 503, code: 'market_unavailable' };
-      Object.assign(this.quoteMap, result);
+      Object.assign(quoteMap, result);
     }
-    return this.quoteMap;
+    return quoteMap;
   }
-  async quote(code) { return (await this.quotes([code]))[code]; }
+  async quote(code, fresh = false) { return (await this.quotes([code], fresh))[code]; }
   async details(code, date) {
     const url = 'https://push2.eastmoney.com/api/qt/stock/details/get?secid=' + secidFor(code)
       + '&fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54,f55&pos=-50';

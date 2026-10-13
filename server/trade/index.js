@@ -90,20 +90,20 @@ export async function handleTrade(request, env, session, data, services) {
       if (ordering && ordersToday >= 500) throw { status: 429, code: 'daily_order_limit' };
       const fx = route === 'transfer' && [data.from, data.to].includes('ashare') ? await getFx(now, gate) : null;
       if (route === 'ashare/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
-        await ashare.quotes([data.code, 'sh000001']);
+        await ashare.quotes([data.code, 'sh000001'], true);
       }
       // 规格 5.3、5.5：先取得本次下单行情，剩余预算留给结算，部分结算后仍能执行操作。
       if (route === 'spot/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
         marketFor(data.symbol);
         await Promise.all([gate.spec(data.symbol), data.type === 'stop_limit'
-          ? gate.ticker(data.symbol) : gate.book(data.symbol)]);
+          ? gate.ticker(data.symbol, true) : gate.book(data.symbol, true)]);
       }
       if (route.startsWith('futures/') && route !== 'futures/cancel') {
         marketFor(data.symbol);
         const reads = [gate.contract(data.symbol)];
-        if (route !== 'futures/leverage') reads.push(gate.futuresTicker(data.symbol));
+        if (route !== 'futures/leverage') reads.push(gate.futuresTicker(data.symbol, true));
         if (['futures/order', 'futures/close'].includes(route) && data.type !== 'stop_market') {
-          reads.push(gate.futuresBook(data.symbol));
+          reads.push(gate.futuresBook(data.symbol, true));
         }
         await Promise.all(reads);
       }
@@ -146,7 +146,8 @@ export async function handleTrade(request, env, session, data, services) {
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';
     const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT`
-      : code === 'max_position' ? `超出该合约的最大持仓价值 ${error.maximum} USDT` : MESSAGES[code];
+      : code === 'bad_qty' && error.quoteOrder ? '金额太小，按数量精度无法成交'
+        : code === 'max_position' ? `超出该合约的最大持仓价值 ${error.maximum} USDT` : MESSAGES[code];
     return reply(error?.status || 503, { error: code, message: message || MESSAGES.market_unavailable });
   }
 }
