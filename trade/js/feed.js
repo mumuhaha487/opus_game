@@ -161,7 +161,8 @@ export class Feed {
     return rows.map(row => ({ id: String(row.id), price: Number(row.price),
       qty: this.market === 'spot' ? Number(row.amount) : Math.abs(Number(row.size)) * this.multiplier(),
       side: this.market === 'spot' ? row.side : Number(row.size) > 0 ? 'buy' : 'sell',
-      time: Number(row.create_time_ms || Number(row.create_time) * 1000),
+      // Gate 合约 REST 的 create_time_ms 实测仍是秒；现货 / WS 的毫秒值保留原值（规格 4.2、4.3）。
+      time: Number(row.create_time_ms || row.create_time) * (Number(row.create_time_ms || row.create_time) < 1e12 ? 1000 : 1),
     })).sort((left, right) => right.time - left.time).slice(0, 60);
   }
   saveTicker(market, ticker) {

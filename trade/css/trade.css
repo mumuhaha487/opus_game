@@ -159,8 +159,30 @@ select { border: 0; background: var(--input); padding: 2px 4px; border-radius: 4
 .spot-column > .primary { height: 40px; }
 .register-link { font-size: 12px; color: var(--muted); }
 .stepper, .side-tabs, .mobile-order-type { display: none; }
-.futures-placeholder { min-height: 334px; height: 100%; display: flex; justify-content: center; align-items: center;
-  font-size: 14px; color: var(--muted); }
+.futures-tags { display: flex; gap: 8px; padding: 8px 16px 0; }
+.futures-tags button { height: 28px; background: var(--panel-2); border-radius: 4px; font-size: 12px; }
+.futures-columns { display: grid; grid-template-columns: minmax(0, 60fr) minmax(0, 40fr); gap: 16px; padding: 8px 16px 16px; }
+.futures-inputs { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.futures-account { background: var(--panel-2); border-radius: 8px; padding: 12px; align-self: start; }
+.account-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.futures-account .secondary { width: 100%; height: 32px; }
+.futures-checkbox { display: flex; align-items: center; gap: 4px; }
+.futures-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.futures-actions button { width: 100%; height: 40px; }
+.futures-cost { white-space: pre-line; font-size: 12px; margin-top: 4px; }
+.futures-liq { color: var(--liq); font-size: 12px; }
+.futures-field-tp, .futures-field-sl { flex-wrap: wrap; height: auto; min-height: 56px; padding-top: 4px; padding-bottom: 4px; }
+.futures-field-tp .field-label, .futures-field-sl .field-label { width: 100%; font-size: 11px; }
+.futures-field-tp input, .futures-field-sl input { flex: 1; width: 40px; }
+.position-actions { display: flex; gap: 8px; }
+.position-card { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.position-card .position-data { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.position-card .position-data span { display: block; }
+.position-card .position-actions { flex-wrap: wrap; }
+.leverage-control { display: flex; justify-content: center; align-items: center; gap: 32px; }
+.leverage-control b { font-size: 28px; }
+.trade-modal input[type=range] { width: 100%; accent-color: var(--brand); }
+.leverage-ticks { display: flex; justify-content: space-between; color: var(--muted); }
 .orders-tabs { height: 44px; display: flex; align-items: stretch; gap: 24px; padding: 0 16px; }
 .orders-tabs button { font-size: 14px; color: var(--muted); padding: 0; white-space: nowrap; }
 .orders-tabs .selected { color: var(--text); border-bottom: 2px solid var(--brand); }
@@ -277,6 +299,16 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
   .spot-columns { display: block; padding: 0 8px 12px; }
   .spot-column.mobile-hidden { display: none; }
   .spot-column { gap: 12px; }
+  .futures-tags { padding: 8px; }
+  .futures-columns { display: block; padding: 0 8px 12px; }
+  .futures-account { display: none; }
+  .futures-actions { grid-template-columns: minmax(0, 1fr); }
+  .futures-actions > div { min-width: 0; }
+  .futures-actions button { font-size: 14px; }
+  .futures-cost, .futures-liq { font-size: 11px; overflow-wrap: anywhere; }
+  .futures-field-price { flex-wrap: wrap; height: auto; min-height: 40px; }
+  .futures-field-price .field-label { width: 100%; }
+  .futures-field-price input { flex: 1; width: 40px; }
   .input-row { padding: 0 4px; gap: 2px; font-size: 12px; }
   .input-row input, .quantity-unit { font-size: 12px; }
   .stepper { display: block; padding: 0 2px; color: var(--muted); font-size: 14px; }

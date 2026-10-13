@@ -17,7 +17,7 @@ export class GateClient {
     const cached = cache && await cache.match(key);
     if (cached) return cached.json();
     // 规格 5.3：Cache 命中不计预算，并发请求在 fetch 前同步领取额度。
-    if (this.used >= 30) throw { code: 'upstream_budget' };
+    if (this.used >= (this.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
     this.used++;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
@@ -43,5 +43,18 @@ export class GateClient {
   }
   trades(symbol, from, to, page = 1) {
     return this.get('/spot/trades', { currency_pair: symbol, from, to, limit: 1000, page }, 5);
+  }
+  contract(symbol) { return this.get('/futures/usdt/contracts/' + symbol, {}, 3600); }
+  futuresBook(symbol) { return this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1); }
+  futuresTicker(symbol) { return this.get('/futures/usdt/tickers', { contract: symbol }, 2); }
+  futuresCandles(symbol, interval, from, to, mark = false) {
+    const ttl = to < Math.floor(this.now / 60000) * 60 ? 300 : 5;
+    return this.get('/futures/usdt/candlesticks', { contract: (mark ? 'mark_' : '') + symbol, interval, from, to }, ttl);
+  }
+  futuresTrades(symbol, from, to, offset = 0) {
+    return this.get('/futures/usdt/trades', { contract: symbol, from, to, limit: 1000, offset }, 5);
+  }
+  funding(symbol, from, to, limit = 1000) {
+    return this.get('/futures/usdt/funding_rate', { contract: symbol, from, to, limit }, 300);
   }
 }

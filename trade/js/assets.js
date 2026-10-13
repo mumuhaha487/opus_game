@@ -2,6 +2,7 @@
 // 规格 9.9：估算总值、签到 / 划转 / 交易三按钮和登录入口。
 // 估值使用浏览器 Gate.io 行情；余额始终来自已认证 Worker。
 import { element, button, money, quantity, time } from './format.js';
+import { futuresEquity } from './futures.js';
 export function assetAmount(feed, asset, value) {
   if (asset === 'USDT') return money(value);
   const precision = feed.specs.get('spot:' + asset + '_USDT')?.value.amount_precision;
@@ -17,8 +18,7 @@ export class Assets {
   }
   refreshValues(state) {
     if (!state || !this.totalValue) return;
-    const spot = this.spotValue(state), futures = Number(state.futures.wallet) + Number(state.futures.locked)
-      + state.futures.positions.reduce((total, position) => total + Number(position.margin), 0);
+    const spot = this.spotValue(state), futures = futuresEquity(this.feed, state.futures).equity;
     this.totalValue.textContent = money(spot + futures) + ' USDT';
     this.spotAccountValue.textContent = money(spot) + ' USDT';
     this.futuresAccountValue.textContent = money(futures) + ' USDT';
@@ -35,15 +35,15 @@ export class Assets {
     this.signature = signature;
     const ledgerSignature = JSON.stringify([this.api.generation, state?.recent.ledger]);
     if (ledgerSignature !== this.ledgerSignature) {
-      this.ledgerSignature = ledgerSignature; this.ledgerElement = null;
+      this.ledgerSignature = ledgerSignature;
+      if (this.ledgerElement && this.ledgerControl) this.ledgerElement.replaceChildren(this.ledgerControl);
     }
     if (!state) {
       this.totalValue = null;
       const card = element('div', '登录后领取每日签到奖励', 'asset-login');
       card.append(button('登录', () => this.modals.login(), 'primary')); panel.replaceChildren(card); return;
     }
-    const futures = Number(state.futures.wallet) + Number(state.futures.locked)
-      + state.futures.positions.reduce((total, position) => total + Number(position.margin), 0);
+    const futures = futuresEquity(this.feed, state.futures).equity;
     const spot = this.spotValue(state), header = element('div', '', 'asset-total');
     header.append(element('div', '估算总值', 'muted'), element('b', money(spot + futures) + ' USDT'));
     this.totalValue = header.lastChild;
@@ -77,7 +77,8 @@ export class Assets {
   }
   ledgerView() {
     const ledger = this.ledgerElement || element('div', '', 'asset-ledger');
-    if (!this.ledgerElement) ledger.append(button('资金流水', async () => {
+    if (!this.ledgerElement) {
+      this.ledgerControl = button('资金流水', async () => {
       const generation = this.api.generation;
       try {
         const histories = await Promise.all([this.api.history('ledger', 'spot'), this.api.history('ledger', 'futures')]);
@@ -93,7 +94,8 @@ export class Assets {
         }
         ledger.replaceChildren(ledgerTable);
       } catch (error) { if (generation === this.api.generation) this.modals.error(error); }
-    }, 'accent'));
+      }, 'accent'); ledger.append(this.ledgerControl);
+    }
     this.ledgerElement = ledger;
     return ledger;
   }

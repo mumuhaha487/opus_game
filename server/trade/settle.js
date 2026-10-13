@@ -3,6 +3,7 @@
 // 预算耗尽保留精确进度，下一次 state 接着处理，避免漏结算。
 import { parse, mul } from './decimal.js';
 import { applyFill, completeOrder } from './spot.js';
+import { settleFutures } from './futures-settle.js';
 const MINUTE = 60000, HOUR = 3600000, DAY = 86400000;
 export function settlementPlan(from, now) {
   const plan = [];
@@ -78,6 +79,7 @@ export function processEvent(state, order, event, notices) {
 }
 async function settleSpot(state, gate, now, notices) {
   const queues = state.orders.filter(order => order.market === 'spot')
+    .sort((left, right) => left.checkFrom - right.checkFrom)
     .map(order => ({ order, segments: settlementPlan(order.checkFrom, now) }));
   // 规格 5.3、6.5：每轮每张委托只推进一段，让多个交易对共享预算且都能保存进度。
   while (queues.some(queue => queue.segments.length && queue.order.status !== 'filled')) {
@@ -103,10 +105,16 @@ async function settleSpot(state, gate, now, notices) {
 }
 export async function settle(state, gate, now, force = false) {
   const notices = [];
-  // 本轮验收修正规格 6.5：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
+  // 规格 6.5、7.8：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
   if (!state.orders.length && !Object.keys(state.futures.positions).length) return { partial: false, notices };
   if (!force && now - (state.lastSettlement || 0) < 2000) return { partial: false, notices };
+  const hasSpot = state.orders.some(order => order.market === 'spot');
+  const hasFutures = state.orders.some(order => order.market === 'futures') || Object.keys(state.futures.positions).length;
+  // 规格 5.3、7.8：两类市场共用 30 次预算，混合积压时给合约保留一半剩余额度。
+  if (hasSpot && hasFutures) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / 2);
   let partial = await settleSpot(state, gate, now, notices);
+  gate.budgetLimit = 30;
+  if (hasFutures) partial = await settleFutures(state, gate, now, notices, settlementPlan) || partial;
   const symbols = new Set(state.orders.filter(order => order.market === 'spot').map(order => order.symbol));
   for (const symbol of symbols) {
     const pending = state.orders.filter(order => order.symbol === symbol && order.market === 'spot');

@@ -8,9 +8,12 @@ import { checkin } from './checkin.js';
 import { placeOrder, cancelOrder, cancelAll } from './spot.js';
 import { settle } from './settle.js';
 import { marketFor } from './markets.js';
+import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
+  'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
+  'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
 };
 const MESSAGES = {
   bad_request: '请求格式错误', unknown_symbol: '不支持的交易对', bad_price: '价格不符合精度要求',
@@ -18,6 +21,8 @@ const MESSAGES = {
   order_not_found: '委托不存在或已结束', already_checked_in: '今天已经签到过了',
   market_unavailable: '行情服务暂时不可用，请稍后再试', no_liquidity: '当前盘口深度不足，未能成交',
   rate_limited: '操作太频繁，请稍后再试', not_found: '接口不存在', method_not_allowed: '请求方法不支持',
+  leverage_locked: '有仓位或委托时无法调整杠杆', reduce_only: '只减仓委托会增加仓位，已拒绝',
+  position_not_found: '没有该合约的仓位', bad_tpsl: '止盈止损价格不合理', margin_limit: '超出可调整的保证金范围',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -57,6 +62,15 @@ export async function handleTrade(request, env, session, data) {
         await Promise.all([gate.spec(data.symbol), data.type === 'stop_limit'
           ? gate.ticker(data.symbol) : gate.book(data.symbol)]);
       }
+      if (route.startsWith('futures/') && route !== 'futures/cancel') {
+        marketFor(data.symbol);
+        const reads = [gate.contract(data.symbol)];
+        if (route !== 'futures/leverage') reads.push(gate.futuresTicker(data.symbol));
+        if (['futures/order', 'futures/close'].includes(route) && data.type !== 'stop_market') {
+          reads.push(gate.futuresBook(data.symbol));
+        }
+        await Promise.all(reads);
+      }
       // 规格 5.5：GET 在副本结算；只有真实上游失败才返回原状态并且零账户写入。
       const candidate = method === 'GET' ? structuredClone(state) : state;
       let settlement;
@@ -73,6 +87,12 @@ export async function handleTrade(request, env, session, data) {
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);
       if (route === 'spot/cancel-all') cancelAll(state, data.symbol, now);
+      if (route === 'futures/order') order = await placeFuturesOrder(state, data, gate, now);
+      if (route === 'futures/close') order = await closeFutures(state, data, gate, now);
+      if (route === 'futures/cancel') cancelFuturesOrder(state, data.id, now);
+      if (route === 'futures/leverage') await changeLeverage(state, data, gate);
+      if (route === 'futures/tpsl') await changeTPSL(state, data, gate, now);
+      if (route === 'futures/margin') await changeMargin(state, data, gate, now);
       return { ...settlement, order, reward };
     }, now);
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),
@@ -80,7 +100,8 @@ export async function handleTrade(request, env, session, data) {
       ...(result.order ? { order: result.order } : {}), ...(result.reward ? { reward: result.reward } : {}) });
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';
-    const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT` : MESSAGES[code];
+    const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT`
+      : code === 'max_position' ? `超出该合约的最大持仓价值 ${error.maximum} USDT` : MESSAGES[code];
     return reply(error?.status || 503, { error: code, message: message || MESSAGES.market_unavailable });
   }
 }

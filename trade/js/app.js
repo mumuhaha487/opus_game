@@ -1,5 +1,5 @@
 // 交易所启动、hash 路由、桌面与手机布局协调。
-// 规格 9.11、13：非法交易对回默认路由；合约仅开放真实行情。
+// 规格 9.11、13：非法交易对回默认路由；现货和合约共用真实行情。
 // 一个 requestAnimationFrame 循环统一渲染，盘口最多每秒 10 帧（规格 4.3）。
 import { Feed } from './feed.js';
 import { Chart } from './chart.js';
@@ -8,6 +8,7 @@ import { Tape } from './tape.js';
 import { MarketList } from './marketlist.js';
 import { TradeApi } from './api.js';
 import { Spot } from './spot.js';
+import { Futures } from './futures.js';
 import { Orders } from './orders.js';
 import { Assets } from './assets.js';
 import { Modals } from './modals.js';
@@ -18,7 +19,8 @@ let modals;
 const api = new TradeApi(() => { feed.dirty = true; }, text => modals.toast(text));
 modals = new Modals(api);
 const spot = new Spot(node('spot-form'), feed, api, modals);
-const book = new Book(node('book'), feed, value => spot.setPrice(value));
+const futures = new Futures(node('futures-form'), feed, api, modals);
+const book = new Book(node('book'), feed, value => (feed.market === 'spot' ? spot : futures).setPrice(value));
 const tape = new Tape(node('tape'), feed);
 const side = new MarketList(node('side'), feed);
 const markets = new MarketList(node('markets-page'), feed, true);
@@ -153,7 +155,7 @@ function status() {
 function mobileChartActions() {
   node('chart-mobile-actions').replaceChildren(...[['buy', page === 'futures' ? '开多' : '买入'],
     ['sell', page === 'futures' ? '开空' : '卖出']].map(([side, label]) => button(label, () => {
-    spot.side = side; closeChart();
+    (page === 'futures' ? futures : spot).side = side; closeChart();
   }, side === 'buy' ? 'buy-button' : 'sell-button')));
 }
 async function route() {
@@ -171,6 +173,7 @@ async function route() {
     if (['spot', 'futures'].includes(link.dataset.route)) link.href = '#/' + link.dataset.route + '/' + (symbol || feed.symbol);
   }
   orders.signature = ''; api.previousPrice = null;
+  api.previousMark = null; orders.tab = page === 'futures' ? 'positions' : 'open';
   if (marketPage) await feed.activate(page, symbol, '15m');
   else if (!feed.spec || feed.market === 'futures') await feed.activate('spot', feed.symbol, '15m');
   if (page === 'futures') side.selectTab('futures'); else side.selectTab('spot');
@@ -186,7 +189,7 @@ function renderFrame(timestamp) {
     else if (page === 'assets') assets.render(api.state);
     else {
       bar(); book.render(); chart.render(api.state); tape.render(api.state); side.render();
-      if (page === 'spot') spot.render(); orders.render(api.state); api.crossing(feed);
+      if (page === 'spot') spot.render(); else futures.render(); orders.render(api.state); api.crossing(feed);
     }
     pickerList?.render();
   }

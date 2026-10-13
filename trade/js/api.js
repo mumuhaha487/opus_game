@@ -56,10 +56,18 @@ export class TradeApi {
   crossing(feed) {
     const current = Number(feed.tickers[feed.market].get(feed.symbol)?.last);
     const previous = this.previousPrice; this.previousPrice = current;
-    if (!this.state || !previous || !current || previous === current) return;
+    const mark = Number(feed.tickers[feed.market].get(feed.symbol)?.mark_price), previousMark = this.previousMark;
+    this.previousMark = mark;
+    if (!this.state) return;
     const levels = this.state.openOrders.filter(order => order.symbol === feed.symbol && order.market === feed.market)
-      .map(order => Number(order.type === 'stop_limit' && order.status === 'new' ? order.stopPrice : order.price));
-    if (!levels.some(level => (previous <= level && current >= level) || (previous >= level && current <= level))) return;
+      .map(order => Number(['stop_limit', 'stop_market'].includes(order.type) && order.status === 'new'
+        ? order.stopPrice : order.price));
+    const position = this.state.futures.positions.find(entry => entry.symbol === feed.symbol);
+    const markLevels = feed.market === 'futures' && position ? [position.liq, position.tp, position.sl].map(Number).filter(Boolean) : [];
+    const crossed = (before, after, level) => before && after && before !== after
+      && ((before <= level && after >= level) || (before >= level && after <= level));
+    if (!levels.some(level => crossed(previous, current, level))
+      && !markLevels.some(level => crossed(previousMark, mark, level))) return;
     clearTimeout(this.crossTimer);
     this.crossTimer = setTimeout(() => {
       if (Date.now() - this.lastRequest >= 3000 && !document.hidden) this.refresh();

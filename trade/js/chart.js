@@ -156,15 +156,21 @@ export class Chart {
   }
   priceLines(state) {
     const orders = (state?.openOrders || []).filter(order => order.market === this.feed.market && order.symbol === this.feed.symbol);
-    const signature = JSON.stringify(orders.map(order => [order.id, order.price, order.stopPrice, order.status]));
-    if (signature === this.lineSignature && this.lines.length === orders.length) return;
+    const position = this.feed.market === 'futures' ? state?.futures.positions.find(entry => entry.symbol === this.feed.symbol) : null;
+    const signature = JSON.stringify([orders.map(order => [order.id, order.price, order.stopPrice, order.status]), position]);
+    if (signature === this.lineSignature) return;
     for (const line of this.lines) this.main.removePriceLine(line);
     this.lines = []; this.lineSignature = signature;
     for (const order of orders) {
-      const stop = order.type === 'stop_limit' && order.status === 'new', buy = order.side === 'buy';
+      const stop = ['stop_limit', 'stop_market'].includes(order.type) && order.status === 'new', buy = order.side === 'buy';
       this.lines.push(this.main.createPriceLine({ price: Number(stop ? order.stopPrice : order.price),
         color: buy ? '#0ECB81' : '#F6465D', lineStyle: 2, axisLabelVisible: true,
         title: (stop ? '触发 ' : '限价 ') + (buy ? '买入' : '卖出') + (stop ? '' : ' ' + order.qty) }));
+    }
+    if (position) for (const [field, title, color] of [['entry', '开仓', '#848E9C'], ['liq', '强平', '#FF9332'],
+      ['tp', '止盈', '#0ECB81'], ['sl', '止损', '#F6465D']]) {
+      if (!(Number(position[field]) > 0)) continue;
+      this.lines.push(this.main.createPriceLine({ price: Number(position[field]), color, lineStyle: 2, axisLabelVisible: true, title }));
     }
   }
   paintLegend(candle) {
