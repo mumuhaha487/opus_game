@@ -30,6 +30,9 @@ export class Orders {
         ['orders', '历史委托'], ['trades', '历史成交'], ['ledger', '资金流水']];
   }
   async render(state) {
+    // DESIGN §4.6：未登录及空记录的 dock 仅120px。
+    this.panel.classList.toggle('empty-dock', !state);
+    this.panel.closest('.trade')?.classList.toggle('empty-dock', !state);
     const generation = this.api.generation;
     const signature = JSON.stringify([this.feed.market, this.feed.symbol, this.tab, this.hideOthers.checked,
       state?.openOrders, state?.recent, state?.spot, state?.futures,
@@ -49,7 +52,7 @@ export class Orders {
     });
     this.controls.hidden = this.tab !== 'open' || !state || this.feed.market !== 'spot';
     if (!state) {
-      this.body.replaceChildren(element('div', '登录后查看委托与资产', 'empty-message'),
+      this.body.replaceChildren(element('div', '登录后查看委托与持仓', 'empty-message'),
         button('登录', () => this.modals.login(), 'primary empty-login')); return;
     }
     let rows;

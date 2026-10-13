@@ -1,31 +1,41 @@
 <!DOCTYPE html>
 <!-- 模拟交易所单页入口，复用全站 GameAccount 会话。
-     样式与文案来自规格第 9 节，行情直连 Gate.io。
+     DESIGN §4、§6：常驻视图外壳，行情直连 Gate.io、腾讯和东方财富。
      Lightweight Charts 原样 vendored，全部动态 DOM 由模块安全写入。 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0B0E11">
+  <meta name="theme-color" content="#0B0D11">
   <title>模拟交易所 · GAME.INC.RE</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/trade.css">
 </head>
 <body>
-  <header class="trade-header" id="header">
-    <a class="trade-brand" href="#/spot/BTC_USDT">
-      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-        <path fill="#FCD535" d="M12 1 23 12 12 23 1 12Z"/>
-        <path fill="#181A20" d="M12 6 18 12 12 18 6 12Z"/>
-        <path fill="#FCD535" d="M12 9.5 14.5 12 12 14.5 9.5 12Z"/>
+  <aside class="rail">
+    <a class="trade-brand" href="../index.html" title="游戏汇总">
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">
+        <path fill="#F2C66D" d="M12 1 23 12 12 23 1 12Z"/>
+        <path fill="#13161C" d="M12 6 18 12 12 18 6 12Z"/>
+        <path fill="#F2C66D" d="M12 9.5 14.5 12 12 14.5 9.5 12Z"/>
       </svg>
-      <span>模拟交易所<small>GAME.INC.RE</small></span>
     </a>
     <nav class="desktop-nav" aria-label="交易所" id="desktop-nav"></nav>
+    <i class="rail-indicator" id="rail-indicator"></i>
+    <div class="rail-bottom" id="rail-actions"></div>
+  </aside>
+  <header class="trade-header top" id="header">
+    <span id="page-title">总览</span>
+    <div class="global-search">
+      <input id="global-search" placeholder="搜索股票或币种：代码 / 名称 / 拼音" aria-label="搜索股票或币种">
+      <kbd>/</kbd><div id="search-results" hidden></div>
+    </div>
     <div class="header-actions" id="header-actions"></div>
   </header>
   <main>
-    <div class="desk" id="desk">
+    <section id="overview-page" class="overview-page" aria-label="总览" hidden></section>
+    <section id="ashare-page" class="ashare-page cn-market" aria-label="A股行情" hidden></section>
+    <div class="desk trade" id="desk" hidden>
       <section class="panel bar" id="bar" aria-label="交易对"></section>
       <section class="panel book" id="book" aria-label="订单簿"></section>
       <section class="panel chart" id="chart" aria-label="K 线"></section>
@@ -40,12 +50,14 @@
       </div>
       <section class="panel orders" id="orders" aria-label="委托与资产"></section>
     </div>
+    <div id="stock-page" class="trade cn-market" aria-label="A股交易" hidden></div>
     <section class="panel market-page" id="markets-page" aria-label="行情" hidden></section>
     <section class="panel assets-page" id="assets-page" aria-label="资产" hidden></section>
   </main>
   <footer class="trade-footer">
-    <div><i class="connection-dot" id="connection-dot"></i><span id="connection-status">行情重连中…</span> · 数据来源 Gate.io</div>
-    <div>资产为 GAME.INC.RE 模拟资产，仅用于站内交易体验 <a href="../index.html">游戏汇总</a></div>
+    <div><i class="connection-dot" id="connection-dot"></i><span id="connection-status">行情重连中…</span>
+      · 数据来源 Gate.io · 腾讯财经 · 东方财富</div>
+    <div>仅教学练习 · 不构成投资建议 · 模拟资产不可兑现</div>
   </footer>
   <nav class="mobile-nav" aria-label="交易所" id="mobile-nav"></nav>
   <div class="chart-mobile-actions" id="chart-mobile-actions"></div>

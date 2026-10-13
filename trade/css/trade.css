@@ -1,17 +1,23 @@
-/* 模拟交易所的深色主题与三个视口布局。
- * Token 和固定尺寸来自规格 9.1、9.3、9.5、9.9、9.10。
- * 只允许颜色过渡；字体使用系统字体，金额使用等宽数字。 */
+/* DESIGN §4.1：石墨交易终端，共用品牌金；旧模块别名指向同一token。 */
+@font-face { font-family: FusionPixel; src: url('../../hub/fusion-pixel-12.woff2') format('woff2'); font-display: swap; }
 :root {
-  --bg: #0B0E11; --panel: #181A20; --panel-2: #1E2329; --input: #2B3139; --line: #2B3139; --line-2: #474D57;
-  --text: #EAECEF; --text-2: #B7BDC6; --muted: #848E9C; --dim: #5E6673;
-  --up: #0ECB81; --down: #F6465D; --up-btn: #2EBD85; --up-btn-hover: #32D993;
-  --down-btn: #F6465D; --down-btn-hover: #FF707E;
-  --up-bg: rgba(14, 203, 129, 0.12); --down-bg: rgba(246, 70, 93, 0.12);
-  --brand: #FCD535; --brand-hover: #F8D12F; --brand-text: #202630; --accent: #F0B90B; --liq: #FF9332;
-  --radius: 8px; --gap: 4px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+  --bg: #0B0D11; --surface: #13161C; --surface-2: #1A1E26; --surface-3: #222732;
+  --line: #232833; --line-2: #313847; --text: #E8EAEE; --text-2: #B4BBC7; --muted: #7D8696; --dim: #59616F;
+  --gold: #F2C66D; --gold-hover: #F6D488; --gold-ink: #1B1405;
+  --green: #22B573; --red: #E5484D; --amber: #F2A93B; --blue: #5B8DEF; --purple: #A78BFA; --liq: #FF9332;
+  --rise: var(--green); --fall: var(--red);
+  --rise-bg: rgba(34,181,115,0.14); --fall-bg: rgba(229,72,77,0.14);
+  --r-panel: 12px; --r-ctrl: 8px; --gap: 8px;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     Roboto, Arial, sans-serif;
+  --px: FusionPixel, monospace; --font: var(--sans); --radius: var(--r-panel);
+  --panel: var(--surface); --panel-2: var(--surface-2); --input: var(--surface-2);
+  --up: var(--rise); --down: var(--fall); --up-bg: var(--rise-bg); --down-bg: var(--fall-bg);
+  --up-btn: var(--rise); --down-btn: var(--fall); --up-btn-hover: var(--rise); --down-btn-hover: var(--fall);
+  --brand: var(--gold); --brand-hover: var(--gold-hover); --brand-text: var(--gold-ink); --accent: var(--gold);
 }
+.cn-market { --rise: var(--red); --fall: var(--green);
+  --rise-bg: rgba(229,72,77,0.14); --fall-bg: rgba(34,181,115,0.14); }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.5 var(--font); font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
@@ -383,3 +389,96 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
   .chart-mobile-actions button { flex: 1; }
   .mobile-chart .chart-legend { font-size: 10px; left: 8px; }
 }
+
+/* DESIGN §4.2–4.3：外壳和公共组件；手机保留原交易布局。 */
+body { font-size: 13px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.px-label { font: 11px var(--px); color: var(--gold); letter-spacing: 1px; }
+.panel-title { height: 32px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.panel-title b { font-size: 14px; font-weight: 600; }
+.seg { display: flex; background: var(--surface-2); border-radius: 8px; padding: 3px; }
+.seg button { height: 28px; padding: 0 12px; color: var(--muted); }
+.seg button.selected { background: var(--surface-3); color: var(--text); border-radius: 6px; }
+.chg { padding: 3px 8px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.chg.up { color: var(--rise); background: var(--rise-bg); }
+.chg.down { color: var(--fall); background: var(--fall-bg); }
+.primary, .buy-button, .sell-button { height: 48px; border-radius: 8px; font-size: 15px; }
+.buy-button:hover, .sell-button:hover { filter: brightness(1.08); }
+th { height: 36px; position: sticky; top: 0; background: var(--surface); }
+td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
+.trade-modal { border-radius: 14px; border: 1px solid var(--line-2); box-shadow: 0 24px 48px rgba(0,0,0,0.45); }
+#toasts { left: auto; right: 16px; transform: none; top: 68px; }
+.toast { width: 320px; background: var(--surface-3); border-radius: 10px; border-left: 3px solid var(--green); }
+.toast.error { border-left-color: var(--red); }
+.rail { display: none; }
+.global-search { position: relative; width: 420px; max-width: 40vw; }
+.global-search input { width: 100%; height: 36px; border: 0; border-radius: 8px;
+  background: var(--surface-2); padding: 0 32px 0 12px; }
+.global-search kbd { position: absolute; right: 12px; top: 8px; color: var(--muted); }
+#search-results { position: absolute; top: 40px; width: 100%; background: var(--surface-2); z-index: 20; }
+#search-results a { display: block; padding: 10px 12px; }
+#search-results a.selected { background: var(--surface-3); }
+.top { background: var(--bg); position: sticky; top: 0; z-index: 15; padding: 0 16px; gap: 24px; }
+#page-title { font-size: 16px; font-weight: 600; flex: none; }
+.top .checkin-button { height: 32px; border: 1px solid var(--gold); border-radius: 8px; }
+.trade-footer { height: 32px; background: var(--bg); color: var(--muted); }
+.overview-page, .ashare-page { min-height: calc(100vh - 112px); }
+@media (min-width: 1024px) and (min-height: 500px) {
+  .rail { display: flex; flex-direction: column; position: fixed; inset: 0 auto 0 0; width: 72px;
+    background: var(--surface); border-right: 1px solid var(--line); z-index: 30; }
+  .rail .trade-brand { height: 56px; justify-content: center; }
+  .desktop-nav { display: flex; flex-direction: column; gap: 0; }
+  .desktop-nav a { width: 72px; height: 60px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px; font-size: 11px; color: var(--muted); }
+  .desktop-nav a.selected { color: var(--gold); background: var(--surface-2); }
+  .desktop-nav a:hover { color: var(--text); }
+  .rail-indicator { position: absolute; left: 0; top: 56px; width: 3px; height: 60px;
+    background: var(--gold); transition: transform 180ms; pointer-events: none; }
+  .rail-bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 16px; }
+  .top, main, .trade-footer { margin-left: 72px; }
+  main { padding: 12px 16px 24px; }
+  .trade { display: grid; gap: 8px; padding: 0;
+    grid-template-columns: minmax(0,1fr) 280px 320px; grid-template-rows: auto 520px minmax(300px,auto);
+    grid-template-areas: 'head head head' 'chart book ticket' 'dock dock ticket'; }
+  .trade.empty-dock { grid-template-rows: auto 520px 120px; }
+  .bar { grid-area: head; height: 76px; padding: 12px 16px; gap: 28px; flex-wrap: nowrap; overflow: hidden; }
+  .latest-price { font-size: 28px; }
+  .bar-stat span { font-size: 11px; } .bar-stat b { font-size: 13px; }
+  .chart { grid-area: chart; padding: 0; }
+  .book { grid-area: book; padding: 0; overflow: auto; }
+  .form { grid-area: ticket; padding: 16px; }
+  .orders { grid-area: dock; padding: 0; min-height: 0; }
+  .aux { display: none; }
+  .market-page, .assets-page { margin: 0; min-height: calc(100vh - 112px); }
+  .chart-toolbar { height: 44px; }
+}
+@media (min-width: 1440px) and (min-height: 500px) {
+  .trade { grid-template-columns: minmax(0,1fr) 300px 340px; }
+}
+@media (min-width: 1024px) and (max-width: 1199px) and (min-height: 500px) {
+  .trade { grid-template-columns: minmax(0,1fr) 320px;
+    grid-template-areas: 'head head' 'chart ticket' 'dock ticket'; }
+  .trade > .book { display: none; }
+  .bar-stat:nth-last-child(-n+4) { display: none; }
+}
+.empty-dock.orders { height: 120px; }
+.empty-dock .orders-tabs, .empty-dock .order-controls { display: none; }
+.empty-dock .orders-body { min-height: 0; height: 118px; display: flex;
+  flex-direction: column; justify-content: center; align-items: center; }
+.empty-dock .empty-message { margin: 0; }
+.empty-dock .empty-login { height: 44px; margin: 8px 0 0; }
+@media (max-width: 767px), (max-height: 499px) {
+  .top { gap: 8px; padding: 0 12px; }
+  .global-search { display: none; }
+  .top .header-actions { gap: 8px; font-size: 12px; }
+  .header-actions > a { display: none; }
+  main { padding: 8px; }
+  .desk { padding: 0; }
+  .desk > .book, .desk > .form, .desk > .bar { padding: 0; }
+  .chart { padding: 0; }
+  .trade-modal { margin: auto 0 0; width: 100%; max-height: 85vh; border-radius: 16px 16px 0 0;
+    animation: sheet-in 220ms; }
+  @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+}
+@media (prefers-reduced-motion: reduce) { .rail-indicator { transition: none; } .trade-modal { animation: none; } }

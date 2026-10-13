@@ -89,13 +89,14 @@ export class Feed {
       if (this.connections.futures) this.connections.futures.paused = false;
       this.connect('futures');
     }
-    else this.close('futures');
+    // DESIGN §6：导航只调整订阅意图，保留已经建立的连接；隐藏满60秒才关闭。
   }
   close(market) {
     const connection = this.connections[market]; if (!connection) return;
     connection.paused = true; clearTimeout(connection.retry); clearInterval(connection.heartbeat); connection.socket?.close();
   }
   async activate(market, symbol, interval = this.interval) {
+    if (market === this.market && symbol === this.symbol && interval === this.interval && this.spec) return;
     clearTimeout(this.snapshotRetry);
     this.subscription(this.market, 'unsubscribe', true);
     this.market = market; this.symbol = symbol; this.interval = interval; this.revision++;
