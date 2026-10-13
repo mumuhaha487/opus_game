@@ -49,7 +49,8 @@ export function runSelfcheck() {
   assert(checkin(state, now) === REWARDS[0], 'first reward');
   assert(nextStreak(state.checkin, now + 60000) === 2, 'CST cross year');
   assert(nextStreak(state.checkin, now + 2 * 86400000) === 1, 'missed day');
-  for (let i = 1; i < 8; i++) assert(checkin(state, now + i * 86400000) === REWARDS[i % 7], 'reward cycle');
+  // PLATFORM §3：新奖励表逐日递增，第七天以后保持 50 USD。
+  for (let i = 1; i < 10; i++) assert(checkin(state, now + i * 86400000) === REWARDS[Math.min(i, 6)], 'reward cap');
   return { checks: ['decimal', 'rounding:1000', 'spot-fee', 'liquidation-formula', 'futures-fee', 'futures-margin', 'checkin-calendar'] };
 }
 runSelfcheck();

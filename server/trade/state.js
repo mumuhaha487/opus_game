@@ -10,7 +10,7 @@ export function defaultState(now = Date.now()) {
     v: 2, created: now, updated: now, seq: 0,
     // PLATFORM §2.1：统一钱包、A 股现金及每日委托计数；旧字段继续保留。
     wallet: { usd: '0' }, ashare: { cash: { free: '0', locked: '0' }, holdings: {} },
-    disclaimerAt: null, agent: { ordersToday: 0, day: null },
+    disclaimerAt: null, agent: { ordersToday: 0, day: null }, notices: [],
     spot: { balances: { USDT: { free: '0', locked: '0' } } },
     futures: { wallet: '0', locked: '0', leverage: {}, positions: {} },
     orders: [], history: { orders: [], trades: [], ledger: [] },
@@ -29,8 +29,22 @@ export function normalize(state, now) {
   return state;
 }
 export async function readState(bucket, uid, now = Date.now()) {
-  const object = await bucket.get(tradeKey(uid));
-  return { state: normalize(object ? await object.json() : null, now), etag: object?.etag || null };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const object = await bucket.get(tradeKey(uid));
+    if (!object) return { state: defaultState(now), etag: null };
+    const original = await object.text(), stored = JSON.parse(original);
+    if (stored.v !== 1) return { state: normalize(stored, now), etag: object.etag };
+    // PLATFORM §2.5：原始字节只归档一次，迁移与其它请求竞争时重新读取 etag。
+    await bucket.put(`trade-archive/${uid}-v1.json`, original, { onlyIf: absent() });
+    const migrated = defaultState(now);
+    migrated.checkin.last = stored.checkin?.last ?? null;
+    migrated.checkin.streak = stored.checkin?.streak ?? 0;
+    migrated.notices.push({ t: now, kind: 'migration',
+      text: '交易所已升级为统一钱包，旧版模拟资产已归档，签到奖励按新规则发放。' });
+    const written = await bucket.put(tradeKey(uid), JSON.stringify(migrated), { onlyIf: { etagMatches: object.etag } });
+    if (written) return { state: migrated, etag: written.etag };
+  }
+  throw { status: 503, code: 'market_unavailable' };
 }
 export async function updateState(bucket, uid, action, now = Date.now()) {
   for (let i = 0; i < 4; i++) {
@@ -84,7 +98,7 @@ export function stateView(state, now, partial = false, notices = []) {
     ashare: { cash: state.ashare.cash, holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })) },
     futures: { ...state.futures, positions: Object.entries(state.futures.positions).map(([symbol, value]) => ({ symbol, ...value })) },
     openOrders: state.orders, recent: Object.fromEntries(Object.entries(state.history).map(([kind, rows]) => [kind, rows.slice(0, 30)])),
-    notices,
+    notices: [...state.notices, ...notices],
   };
 }
 export function transfer(state, data, now, fx) {
