@@ -36,11 +36,13 @@ export class Futures {
     this.select.onchange = () => this.setType(this.select.value); panel.append(this.select);
     const columns = element('div', '', 'futures-columns'); this.form = element('div', '', 'futures-inputs');
     this.account = element('div', '', 'futures-account'); columns.append(this.form, this.account); panel.append(columns);
+    this.accountPrompt = element('div', '登录后查看合约账户', 'muted'); this.accountDetails = element('div');
+    this.account.append(this.accountPrompt, this.accountDetails);
     this.accountValues = ['保证金余额', '钱包余额', '未实现盈亏', '可用'].map(label => {
       const row = element('div', '', 'account-row'), value = element('b'); row.append(element('span', label, 'muted'), value);
-      this.account.append(row); return value;
+      this.accountDetails.append(row); return value;
     });
-    this.account.append(button('划转', () => this.modals.transfer(), 'secondary'));
+    this.accountDetails.append(button('划转', () => this.modals.transfer(), 'secondary'));
     this.available = element('div', '', 'available'); this.form.append(this.available);
     this.field('price', '价格', 'USDT'); this.field('qty', '数量', 'BTC'); this.slider();
     this.tpsl = this.checkbox('止盈/止损', 'futures-tpsl');
@@ -53,6 +55,10 @@ export class Futures {
       box.append(control, cost, liq); this.actions.append(box); this.buttons[side] = { control, cost, liq };
     }
     this.form.append(this.actions);
+    // 规格 9.7、9.8：未登录保留输入，仅显示一个登录入口和注册链接。
+    this.guest = element('div', '', 'futures-login');
+    this.guest.append(button('登录', () => this.modals.login(), 'primary'),
+      button('没有账号？注册', () => this.modals.login(true), 'register-link')); this.form.append(this.guest);
   }
   field(name, label, unit) {
     const row = element('label', '', 'input-row futures-field-' + name), text = element('span', label, 'field-label');
@@ -111,16 +117,18 @@ export class Futures {
     if (this.type === 'market') field.input.value = '';
     this.fields.tp.row.hidden = this.fields.sl.row.hidden = !this.tpsl.checked;
     const priceValue = this.orderPrice(), qty = Number(this.fields.qty.input.value || 0);
+    this.actions.hidden = !logged; this.guest.hidden = logged;
+    this.accountDetails.hidden = !logged; this.accountPrompt.hidden = logged;
     for (const [side, entry] of Object.entries(this.buttons)) {
-      entry.control.textContent = this.busy ? '提交中…' : !logged ? '登录'
+      entry.control.textContent = !logged ? '' : this.busy ? '提交中…'
         : this.reduce.checked ? side === 'buy' ? '平空' : '平多' : side === 'buy' ? '开多' : '开空';
       entry.control.disabled = !!this.busy;
-      entry.cost.textContent = '成本 ' + money(this.reduce.checked ? 0 : priceValue * qty * (1 / leverage + 0.0005))
-        + ' USDT\n最大 ' + quantity(this.maximum(), this.feed.quantityPrecision()) + ' ' + coin;
+      entry.cost.textContent = logged ? '成本 ' + money(this.reduce.checked ? 0 : priceValue * qty * (1 / leverage + 0.0005))
+        + ' USDT\n最大 ' + quantity(this.maximum(), this.feed.quantityPrecision()) + ' ' + coin : '';
       const projected = { entry: String(priceValue), qty: String(qty), margin: String(priceValue * qty / leverage),
         mmr: this.feed.spec?.maintenance_rate || '0', side: side === 'buy' ? 'long' : 'short' };
       const liq = qty && priceValue ? positionMetrics(projected, priceValue).liq : 0;
-      entry.liq.textContent = '预估强平价 ' + (liq > 0 && !this.reduce.checked ? price(liq, this.feed.precision()) : '--');
+      entry.liq.textContent = logged ? '预估强平价 ' + (liq > 0 && !this.reduce.checked ? price(liq, this.feed.precision()) : '--') : '';
     }
     const account = this.api.state?.futures, equity = futuresEquity(this.feed, account);
     [equity.equity, wallet, equity.unrealized, wallet].forEach((value, index) => { this.accountValues[index].textContent = money(value); });

@@ -40,13 +40,13 @@ function quantityValue(value, spec) {
   if (amount <= 0n || amount % parse(spec.quanto_multiplier)) fail('bad_qty');
   return amount;
 }
-export function validateTPSL(side, tp, sl, mark, spec) {
-  // 规格 7.9：止盈止损价按服务端标记价格校验，多空方向相反，null 表示清除。
+export function validateTPSL(side, tp, sl, reference, spec) {
+  // 规格 7.5、7.9：附带止盈止损按委托参考价，仓位设置按标记价；多空方向相反，null 表示清除。
   for (const [name, value] of [['tp', tp], ['sl', sl]]) {
     if (value === null || value === undefined) continue;
     const trigger = priceValue(value, spec, 'bad_tpsl');
     const above = side === 'buy' ? name === 'tp' : name === 'sl';
-    if (above ? trigger <= mark : trigger >= mark) fail('bad_tpsl');
+    if (above ? trigger <= reference : trigger >= reference) fail('bad_tpsl');
   }
 }
 function walletChange(state, delta) {
@@ -82,7 +82,7 @@ export function futuresMatch(book, side, qty, multiplier, limit = 0n) {
   }
   return { filled, quote, average: filled ? div(quote, filled, 'half') : 0n };
 }
-function positionAfterFill(state, order, filled, price, now, spec) {
+function positionAfterFill(state, order, filled, price, closeFee, now, spec) {
   let position = state.futures.positions[order.symbol], remaining = filled, realizedPnl = 0n;
   const direction = order.side === 'buy' ? 'long' : 'short';
   if (position && position.side !== direction) {
@@ -91,9 +91,13 @@ function positionAfterFill(state, order, filled, price, now, spec) {
     const released = closed === oldQty ? parse(position.margin)
       : credit(div(mul(parse(position.margin), closed, 'floor'), oldQty, 'floor'));
     const difference = (price - parse(position.entry)) * (position.side === 'long' ? 1n : -1n);
-    const realized = credit(mul(difference, closed, 'floor'));
+    let realized = credit(mul(difference, closed, 'floor'));
+    // 规格 7.6 逐仓穿仓上限：平仓净回款最低为零，费用最多扣释放保证金，差额由保险基金承担、不记账。
+    const underwater = released + realized - closeFee < 0n;
+    if (underwater) { closeFee = min(released, closeFee); realized = -(released - closeFee); }
     realizedPnl = realized;
-    walletChange(state, released + realized); ledger(state, 'realized_pnl', 'USDT', realized, '已实现盈亏', now, 'futures');
+    walletChange(state, released + realized - closeFee);
+    ledger(state, 'realized_pnl', 'USDT', realized, underwater ? '已实现盈亏（穿仓）' : '已实现盈亏', now, 'futures');
     position.margin = toStr(parse(position.margin) - released); position.qty = toStr(oldQty - closed); remaining -= closed;
     if (closed === oldQty) { delete state.futures.positions[order.symbol]; position = null; }
   }
@@ -114,7 +118,7 @@ function positionAfterFill(state, order, filled, price, now, spec) {
     if (order.tp !== null) position.tp = order.tp; if (order.sl !== null) position.sl = order.sl;
   }
   if (position) { position.checkFrom = now; position.updatedAt = now; position.liq = toStr(liquidation(position)); }
-  return realizedPnl;
+  return { realizedPnl, closeFee };
 }
 export function fillFutures(state, order, quantity, quote, role, now, spec) {
   const position = state.futures.positions[order.symbol];
@@ -129,10 +133,14 @@ export function fillFutures(state, order, quantity, quote, role, now, spec) {
   const oldRemaining = parse(order.qty) - parse(order.filled), oldLock = parse(order.lock.amount);
   const release = quantity === oldRemaining ? oldLock : credit(div(mul(oldLock, quantity, 'floor'), oldRemaining, 'floor'));
   lockChange(state, order, oldLock - release);
-  const average = div(quote, quantity, 'half');
-  const realizedPnl = positionAfterFill(state, order, quantity, average, now, spec);
-  // 规格 7.4、5.2：Maker 0.02%、Taker 0.05%，手续费 ceil8，从钱包扣。
-  const fee = debit(mul(quote, role === 'maker' ? MAKER : TAKER, 'ceil')); walletChange(state, -fee);
+  const average = div(quote, quantity, 'half'), rate = role === 'maker' ? MAKER : TAKER;
+  // 规格 7.4、5.2：成交费 ceil8，反手按平仓数量分配费用，其余仍作为开仓费从钱包扣。
+  const totalFee = debit(mul(quote, rate, 'ceil'));
+  const closed = position && (position.side === 'long') !== (order.side === 'buy') ? min(quantity, parse(position.qty)) : 0n;
+  const closeQuote = closed === quantity ? quote : div(mul(quote, closed, 'ceil'), quantity, 'ceil');
+  const closeFee = min(totalFee, debit(mul(closeQuote, rate, 'ceil'))), openFee = totalFee - closeFee;
+  const result = positionAfterFill(state, order, quantity, average, closeFee, now, spec);
+  const { realizedPnl } = result, fee = result.closeFee + openFee; walletChange(state, -openFee);
   const filled = parse(order.filled) + quantity, totalQuote = parse(order.executedQuote) + quote;
   order.filled = toStr(filled); order.executedQuote = toStr(totalQuote); order.avgPrice = toStr(div(totalQuote, filled, 'half'));
   order.fee = toStr(parse(order.fee) + fee); order.updatedAt = now;
@@ -161,7 +169,8 @@ async function orderValues(state, data, gate) {
   const position = state.futures.positions[data.symbol];
   if (data.reduceOnly && (!position || (position.side === 'long') === (data.side === 'buy'))) fail('reduce_only');
   const ticker = await gate.futuresTicker(data.symbol);
-  validateTPSL(data.side, data.tp, data.sl, parse(ticker[0]?.mark_price), spec);
+  // 规格 7.5：市价单附带止盈止损相对标记价，限价单相对限价，止盈止损单相对触发价。
+  validateTPSL(data.side, data.tp, data.sl, data.type === 'market' ? parse(ticker[0]?.mark_price) : price, spec);
   return { spec, qty, price, ticker: ticker[0] };
 }
 export async function placeFuturesOrder(state, data, gate, now) {
@@ -176,13 +185,21 @@ export async function placeFuturesOrder(state, data, gate, now) {
   const estimate = data.type === 'market' ? match.average : price;
   const notional = mul(estimate, qty, 'ceil');
   if (!data.reduceOnly && notional > parse(spec.risk_limit_base)) fail('max_position', { maximum: spec.risk_limit_base });
-  // 规格 7.5：整笔委托冻结名义/杠杆加 Taker 费，市价按盘口估算价。
-  if (!order.reduceOnly) lockChange(state, order, debit(div(notional, parse(String(order.leverage)), 'ceil')
+  const position = state.futures.positions[data.symbol];
+  const closesNow = match?.filled && position && (position.side === 'long') !== (data.side === 'buy');
+  // 规格 7.5、7.6：反向即时成交先平旧仓、再扣实际开仓成本，平仓不受预冻结余额限制。
+  if (!order.reduceOnly && !closesNow) lockChange(state, order, debit(div(notional, parse(String(order.leverage)), 'ceil')
     + mul(notional, TAKER, 'ceil')));
   state.orders.push(order);
   if (data.type === 'stop_market') order.stopDir = price > parse(ticker.last) ? 'up' : 'down';
   else if (match.filled) fillFutures(state, order, match.filled, match.quote, 'taker', now, spec);
   if (data.type === 'market' && state.orders.includes(order)) finishFuturesOrder(state, order, 'partial_canceled', now);
+  // 规格 7.5：反向即时成交后，仍挂单的非只减仓余量按整笔剩余数量保守冻结。
+  if (!order.reduceOnly && closesNow && state.orders.includes(order)) {
+    const remainingNotional = mul(estimate, parse(order.qty) - parse(order.filled), 'ceil');
+    lockChange(state, order, debit(div(remainingNotional, parse(String(order.leverage)), 'ceil')
+      + mul(remainingNotional, TAKER, 'ceil')));
+  }
   const result = structuredClone(order); state.clientIds.unshift({ clientId: data.clientId, result }); return result;
 }
 export function cancelFuturesOrder(state, id, now) {
