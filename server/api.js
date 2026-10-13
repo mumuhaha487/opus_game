@@ -3,6 +3,7 @@ import { absent, userKey, saveKey, readSave, publicSave, rateWindow } from './st
 import { GAMES } from './games/index.js';
 import { likeable, getLikes, addLike } from './likes.js';
 import { handleTrade } from './trade/index.js';
+import { regionView } from './trade/fx.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -33,6 +34,12 @@ async function body(request) {
 }
 export async function handle(request, env) {
   try {
+    // PLATFORM §2.3：公开只读地区接口，地区只决定显示货币。
+    if (new URL(request.url).pathname === '/api/region') {
+      if (request.method !== 'GET') return fail(405, 'method_not_allowed', { Allow: 'GET' });
+      try { return reply(200, await regionView(request), { 'Cache-Control': 'private, max-age=60' }); }
+      catch { return reply(503, { error: 'fx_unavailable', message: '汇率暂时不可用，请稍后再试' }); }
+    }
     if (!env?.ACCOUNTS || typeof env.AUTH_SECRET !== 'string' || env.AUTH_SECRET.length < 32 || typeof env.PW_PEPPER !== 'string' || env.PW_PEPPER.length < 32) return fail(500, 'server_error');
     const url = new URL(request.url), path = url.pathname, method = request.method;
     if (method === 'POST' || method === 'PUT') {

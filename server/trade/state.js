@@ -2,12 +2,15 @@
 // 规格 5.4：etag 条件写、最多四次重试、历史与 clientId 有上限。
 // 余额调整通过定点十进制完成，读写边界保持字符串。
 import { absent } from '../store.js';
-import { parse, toStr, credit, debit } from './decimal.js';
+import { parse, toStr, mul, div, roundTo } from './decimal.js';
 import { checkinView } from './checkin.js';
 export const tradeKey = uid => `trade/${uid}.json`;
 export function defaultState(now = Date.now()) {
   return {
-    v: 1, created: now, updated: now, seq: 0,
+    v: 2, created: now, updated: now, seq: 0,
+    // PLATFORM §2.1：统一钱包、A 股现金及每日委托计数；旧字段继续保留。
+    wallet: { usd: '0' }, ashare: { cash: { free: '0', locked: '0' }, holdings: {} },
+    disclaimerAt: null, agent: { ordersToday: 0, day: null },
     spot: { balances: { USDT: { free: '0', locked: '0' } } },
     futures: { wallet: '0', locked: '0', leverage: {}, positions: {} },
     orders: [], history: { orders: [], trades: [], ledger: [] },
@@ -77,25 +80,40 @@ export function stateView(state, now, partial = false, notices = []) {
     .map(([asset, funds]) => ({ asset, ...funds }));
   return {
     serverTime: now, partial, checkin: checkinView(state.checkin, now), spot: { balances },
+    wallet: state.wallet, disclaimerAt: state.disclaimerAt,
+    ashare: { cash: state.ashare.cash, holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })) },
     futures: { ...state.futures, positions: Object.entries(state.futures.positions).map(([symbol, value]) => ({ symbol, ...value })) },
     openOrders: state.orders, recent: Object.fromEntries(Object.entries(state.history).map(([kind, rows]) => [kind, rows.slice(0, 30)])),
     notices,
   };
 }
-export function transfer(state, data, now) {
-  if (!['spot', 'futures'].includes(data.from) || !['spot', 'futures'].includes(data.to) || data.from === data.to) {
+export function transfer(state, data, now, fx) {
+  const accounts = ['wallet', 'spot', 'futures', 'ashare'];
+  if (!accounts.includes(data.from) || !accounts.includes(data.to) || data.from === data.to) {
     throw { status: 400, code: 'bad_request' };
   }
   const amount = parse(data.amount);
-  if (amount <= 0n || amount !== credit(amount)) throw { status: 400, code: 'bad_request' };
-  if (data.from === 'spot') {
-    adjustBalance(state, 'USDT', 'free', -debit(amount));
-    state.futures.wallet = toStr(parse(state.futures.wallet) + credit(amount));
-  } else {
-    if (parse(state.futures.wallet) < amount) throw { status: 400, code: 'insufficient_balance' };
-    state.futures.wallet = toStr(parse(state.futures.wallet) - debit(amount));
-    adjustBalance(state, 'USDT', 'free', credit(amount));
-  }
-  ledger(state, 'transfer_out', 'USDT', -amount, '划转', now, data.from);
-  ledger(state, 'transfer_in', 'USDT', amount, '划转', now, data.to);
+  const decimals = data.from === 'ashare' ? 2 : 8;
+  if (amount <= 0n || amount !== roundTo(amount, decimals, 'floor')) throw { status: 400, code: 'bad_request' };
+  const exchanging = data.from === 'ashare' || data.to === 'ashare';
+  // PLATFORM §2.2：出账单位扣 0.1% 费用（ceil），随后换算，到账按目标精度 floor。
+  if (exchanging && (!fx || now - fx.rateTime > 600000)) throw { status: 503, code: 'fx_unavailable' };
+  const fee = exchanging ? roundTo(mul(amount, parse('0.001'), 'ceil'), decimals, 'ceil') : 0n;
+  const net = amount - fee, rate = exchanging ? parse(fx.rate) : parse('1');
+  if (net <= 0n || rate <= 0n) throw { status: 400, code: 'bad_request' };
+  const converted = !exchanging ? net : data.to === 'ashare' ? mul(net, rate, 'floor') : div(net, rate, 'floor');
+  const received = roundTo(converted, data.to === 'ashare' ? 2 : 8, 'floor');
+  if (!received) throw { status: 400, code: 'bad_request' };
+  const location = account => account === 'wallet' ? [state.wallet, 'usd']
+    : account === 'spot' ? [balance(state, 'USDT'), 'free']
+    : account === 'futures' ? [state.futures, 'wallet'] : [state.ashare.cash, 'free'];
+  const [source, sourceField] = location(data.from), [target, targetField] = location(data.to);
+  if (parse(source[sourceField]) < amount) throw { status: 400, code: 'insufficient_balance' };
+  source[sourceField] = toStr(parse(source[sourceField]) - amount);
+  target[targetField] = toStr(parse(target[targetField]) + received);
+  const asset = account => account === 'ashare' ? 'CNY' : account === 'wallet' ? 'USD' : 'USDT';
+  ledger(state, 'transfer_out', asset(data.from), -net, '划转', now, data.from);
+  ledger(state, 'transfer_in', asset(data.to), received, '划转', now, data.to);
+  if (fee) ledger(state, 'fx_fee', asset(data.from), -fee, '换汇费', now, data.from);
+  return { rate: toStr(rate), rateTime: fx?.rateTime ?? null, fee: toStr(fee), received: toStr(received) };
 }

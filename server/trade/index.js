@@ -8,9 +8,11 @@ import { checkin } from './checkin.js';
 import { placeOrder, cancelOrder, cancelAll } from './spot.js';
 import { settle } from './settle.js';
 import { marketFor } from './markets.js';
+import { getFx } from './fx.js';
 import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
+  disclaimer: 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
@@ -23,6 +25,7 @@ const MESSAGES = {
   rate_limited: '操作太频繁，请稍后再试', not_found: '接口不存在', method_not_allowed: '请求方法不支持',
   leverage_locked: '有仓位或委托时无法调整杠杆', reduce_only: '只减仓委托会增加仓位，已拒绝',
   position_not_found: '没有该合约的仓位', bad_tpsl: '止盈止损价格不合理', margin_limit: '超出可调整的保证金范围',
+  fx_unavailable: '汇率暂时不可用，请稍后再试', disclaimer_required: '请先阅读并确认使用须知',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -56,6 +59,10 @@ export async function handleTrade(request, env, session, data) {
     }
     const gate = new GateClient(now);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
+      // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
+      if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
+      if (method === 'POST' && !state.disclaimerAt) throw { status: 403, code: 'disclaimer_required' };
+      const fx = route === 'transfer' && [data.from, data.to].includes('ashare') ? await getFx(now, gate) : null;
       // 规格 5.3、5.5：先取得本次下单行情，剩余预算留给结算，部分结算后仍能执行操作。
       if (route === 'spot/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
         marketFor(data.symbol);
@@ -81,9 +88,9 @@ export async function handleTrade(request, env, session, data) {
         return { partial: true, stale: true, notices: [] };
       }
       if (method === 'GET') Object.assign(state, candidate);
-      let order, reward;
+      let order, reward, transferred;
       if (route === 'checkin') reward = checkin(state, now);
-      if (route === 'transfer') transfer(state, data, now);
+      if (route === 'transfer') transferred = transfer(state, data, now, fx);
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);
       if (route === 'spot/cancel-all') cancelAll(state, data.symbol, now);
@@ -93,9 +100,10 @@ export async function handleTrade(request, env, session, data) {
       if (route === 'futures/leverage') await changeLeverage(state, data, gate);
       if (route === 'futures/tpsl') await changeTPSL(state, data, gate, now);
       if (route === 'futures/margin') await changeMargin(state, data, gate, now);
-      return { ...settlement, order, reward };
+      return { ...settlement, order, reward, transferred };
     }, now);
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),
+      ...result.transferred,
       ...(result.stale ? { stale: true } : {}),
       ...(result.order ? { order: result.order } : {}), ...(result.reward ? { reward: result.reward } : {}) });
   } catch (error) {
