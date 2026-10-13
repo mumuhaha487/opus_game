@@ -142,10 +142,6 @@
     try { apply(await A.request('/api/likes')); paintAll(); reorderSoon(); } catch { /* keep the last numbers */ }
   }
 
-  // ---------- carousel ----------
-  const track = $('car-track'), dots = $('car-dots'), prog = $('car-prog'), num = $('car-num'), car = $('car');
-  const DUR = 6500;
-  let tick = 0, lastT = 0, slides = [];
   function cover(g, cls, opts = {}) {
     const a = el('a', { cls, attrs: { href: g.href, 'aria-label': '开始游戏：' + g.name } });
     a.append(el('img', { attrs: { src: g.cover, alt: g.coverAlt || g.name, width: '960', height: '540', loading: opts.lazy ? 'lazy' : 'eager', decoding: 'async' } }));
@@ -161,73 +157,11 @@
   const tags = g => el('ul', { cls: 'tags px' }, g.tags.map(t => el('li', { text: t })));
   function playBtn(g, small) { return el('a', { cls: 'btn px' + (small ? ' sm' : ''), attrs: { href: g.href } }, [arrow(), document.createTextNode(small ? '开始' : '开始游戏')]); }
   function detailBtn(g) { const b = el('button', { cls: 'ghost', text: '详情', attrs: { type: 'button' } }); b.addEventListener('click', () => openDetail(g)); return b; }
-  function buildCarousel() {
-    const keep = S.order[S.slide];
-    S.order = hotOrder();
-    S.slide = Math.max(0, S.order.indexOf(keep));
-    track.replaceChildren(); dots.replaceChildren(); slides = [];
-    S.order.forEach((id, i) => {
-      const g = GAMES.find(x => x.id === id);
-      const info = el('div', { cls: 's-info' }, [
-        kicker(g),
-        el('h3', { cls: 'px', text: g.name }, [el('small', { text: g.en })]),
-        el('p', { cls: 'pitch', text: g.pitch }),
-        tags(g),
-        el('div', { cls: 'meta px' }, [likeButton(g), heatLabel(g)]),
-        el('div', { cls: 'acts' }, [playBtn(g), detailBtn(g)]),
-      ]);
-      const li = el('li', { cls: 'slide', style: { '--c': g.accent }, attrs: { 'aria-roledescription': 'slide', 'aria-label': `${i + 1} / ${S.order.length}：${g.name}` } }, [cover(g, 's-cover', { rank: i + 1 }), info]);
-      track.append(li); slides.push(li);
-      const d = el('button', { attrs: { type: 'button', 'aria-label': `第 ${i + 1} 款：${g.name}` }, style: { '--c': g.accent } });
-      d.addEventListener('click', () => go(i, true));
-      dots.append(el('li', {}, [d]));
-    });
-    go(S.slide, false, true);
-  }
-  function go(i, user, instant) {
-    const n = S.order.length;
-    S.slide = (i + n) % n;
-    if (instant) { track.style.transition = 'none'; requestAnimationFrame(() => { track.style.transition = ''; }); }
-    track.style.transform = `translateX(${-S.slide * 100}%)`;
-    slides.forEach((s, k) => { s.inert = k !== S.slide; s.setAttribute('aria-hidden', String(k !== S.slide)); });
-    [...dots.querySelectorAll('button')].forEach((d, k) => d.setAttribute('aria-current', String(k === S.slide)));
-    num.replaceChildren(el('b', { text: String(S.slide + 1) }), document.createTextNode(' / ' + n));
-    tick = 0;
-    if (user) S.paused = Math.max(S.paused, 0);
-  }
-  $('car-prev').addEventListener('click', () => go(S.slide - 1, true));
-  $('car-next').addEventListener('click', () => go(S.slide + 1, true));
-  car.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') { go(S.slide - 1, true); e.preventDefault(); } else if (e.key === 'ArrowRight') { go(S.slide + 1, true); e.preventDefault(); } });
-  car.addEventListener('mouseenter', () => { S.hover = true; });
-  car.addEventListener('mouseleave', () => { S.hover = false; });
-  car.addEventListener('focusin', () => { S.hover = true; });
-  car.addEventListener('focusout', () => { S.hover = false; });
-  // swipe on touch
-  let sx = null, sy = 0;
-  car.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { sx = e.clientX; sy = e.clientY; } });
-  car.addEventListener('pointerup', e => {
-    if (sx === null) return;
-    const dx = e.clientX - sx, dy = e.clientY - sy; sx = null;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.4) go(S.slide + (dx < 0 ? 1 : -1), true);
-  });
-  function loop(t) {
-    const dt = lastT ? t - lastT : 0; lastT = t;
-    const hold = S.hover || document.hidden || $('gd').open || $('acct').open || reduce || S.order.length < 2;
-    if (!hold) { tick += dt; if (tick >= DUR) go(S.slide + 1); }
-    prog.style.width = (Math.min(1, tick / DUR) * 100).toFixed(1) + '%';
-    requestAnimationFrame(loop);
-  }
-  // rebuild only when the ranking actually changed and nobody is looking at a slide
+  // Refresh ranking without duplicating game cards.
   let reorderTimer = 0;
   function reorderSoon() {
     clearTimeout(reorderTimer);
-    reorderTimer = setTimeout(() => {
-      const next = hotOrder();
-      if (next.join() === S.order.join()) { paintAll(); return; }
-      if (S.hover) { reorderSoon(); return; }
-      likeEls.clear(); heatEls.clear();
-      buildCarousel(); renderAll();
-    }, 400);
+    reorderTimer = setTimeout(() => { if (S.sort === 'hot') renderAll(); else paintAll(); }, 400);
   }
 
   // ---------- all games ----------
@@ -313,10 +247,8 @@
   $('gd').addEventListener('close', () => { for (const [id, list] of likeEls) likeEls.set(id, list.filter(x => x.btn.isConnected)); });
 
   // ---------- boot ----------
-  const cnt = $('count');
-  cnt.replaceChildren(document.createTextNode('已收录 '), el('b', { text: String(GAMES.length) }), document.createTextNode(' 款 · 持续更新'));
-  chips(); buildCarousel(); renderAll();
-  requestAnimationFrame(loop);
+  $('door-count').textContent = GAMES.length + ' 款游戏 · 横版动作 · 挂机刷宝 · 云存档同步';
+  chips(); renderAll();
   refresh();
   setInterval(() => { if (!document.hidden) refresh(); }, 45000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });

@@ -101,6 +101,7 @@ const HUB_GAMES = [{
       if (expired) { changeTab(0); username.value = profile.name; say('登录已过期，请重新登录。', 'err'); }
       if (C.file) say('本地文件模式下只能使用本机存档。');
     }
+    document.dispatchEvent(new Event('hub-account-change'));
   }
   async function verify() {
     const profile = C.profile();

@@ -1,40 +1,135 @@
-// 汇总页模拟交易所的四币行情卡片。
-// 规格 10.2：浏览器并发直连 Gate.io，可见时每十秒刷新，失败三十秒重试。
-// 只使用 textContent 与属性赋值，沿用汇总页像素组件。
-(() => {
-  const markets = [['BTC', '比特币'], ['ETH', '以太坊'], ['SOL', 'Solana'], ['DOGE', '狗狗币']];
-  const container = document.getElementById('xch-tk');
-  if (!container) return;
-  let timer, loading = false;
-  const rows = markets.map(([coin, name]) => {
-    const row = document.createElement('li'), link = document.createElement('a');
-    link.href = 'trade/index.html#/spot/' + coin + '_USDT';
-    const symbol = document.createElement('b'), price = document.createElement('span');
-    const title = document.createElement('small'), change = document.createElement('span');
-    symbol.textContent = coin; title.textContent = name; price.textContent = '--'; change.textContent = '--';
-    price.className = 'p'; change.className = 'c'; link.append(symbol, price, title, change); row.append(link); container.append(row);
-    return { coin, price, change };
-  });
-  async function refresh() {
-    if (document.hidden || loading) return;
-    loading = true; let failed = false;
-    await Promise.all(rows.map(async row => {
-      try {
-        const response = await fetch('https://api.gateio.ws/api/v4/spot/tickers?currency_pair=' + row.coin + '_USDT',
-          { signal: AbortSignal.timeout(8000) });
-        if (!response.ok) throw Error('gate');
-        const [ticker] = await response.json(), digits = (ticker.last.split('.')[1] || '').length;
-        row.price.textContent = Number(ticker.last).toLocaleString('en-US',
-          { minimumFractionDigits: digits, maximumFractionDigits: digits });
-        const percentage = Number(ticker.change_percentage);
-        row.change.textContent = (percentage > 0 ? '+' : '') + percentage.toFixed(2) + '%';
-        row.change.className = 'c ' + (percentage > 0 ? 'up' : percentage < 0 ? 'down' : '');
-      } catch { row.price.textContent = '--'; row.change.textContent = '--'; failed = true; }
-    }));
-    loading = false; clearTimeout(timer); timer = setTimeout(refresh, failed ? 30000 : 10000);
+// DESIGN §1.4/1.6/1.7：直连市场数据、像素阶梯走势、签到与统一钱包；可见时15秒刷新。
+import { parseTencent, parseBars } from '../trade/js/ashare/feed.js';
+import { WalletView, valuations, totalValue } from '../trade/js/wallet.js';
+const indices = [['sh000001', '上证指数'], ['sz399001', '深证成指'], ['sz399006', '创业板指'], ['sh000300', '沪深300']];
+const coins = ['BTC', 'ETH', 'SOL', 'DOGE'];
+const ns = 'http://www.w3.org/2000/svg', rows = [], mini = new Map();
+let state = null, quotes = {}, cryptoQuotes = new Map(), futuresQuotes = new Map(), timer, loading = false, revision = 0;
+const wallet = new WalletView(renderAccount);
+const node = (tag, text = '', cls = '') => {
+  const value = document.createElement(tag); value.textContent = text; value.className = cls; return value;
+};
+const number = value => value == null ? '--' : Number(value).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const pct = value => value == null ? '--' : (value > 0 ? '+' : '') + Number(value).toFixed(2) + '%';
+const tone = (value, cn) => value > 0 ? cn ? '#e0485e' : '#63c74d' : value < 0 ? cn ? '#63c74d' : '#e0485e' : 'var(--ink)';
+function svgChart(svg, values, color, filled = false) {
+  const points = values.filter(Number.isFinite); if (points.length < 2) return;
+  const height = filled ? 96 : 32, width = filled ? 500 : 160;
+  const low = Math.min(...points), range = Math.max(...points) - low || 1;
+  const line = points.map((value, index) => (index ? 'H' + (index * width / (points.length - 1)) + 'V' : 'M0 ')
+    + (height - 2 - (value - low) * (height - 4) / range)).join(' ');
+  svg.replaceChildren();
+  if (filled) {
+    const area = document.createElementNS(ns, 'path'); area.setAttribute('d', line + 'V96H0Z');
+    area.setAttribute('fill', 'rgba(242,198,109,0.08)'); svg.append(area);
   }
-  document.addEventListener('visibilitychange', () => {
-    clearTimeout(timer); if (!document.hidden) refresh();
-  });
-  refresh();
-})();
+  const path = document.createElementNS(ns, 'path'); path.setAttribute('d', line); path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', color); path.setAttribute('stroke-width', filled ? '2' : '1.5'); svg.append(path);
+}
+function makeQuote(code, name, cn, compact) {
+  const card = node(compact ? 'div' : 'a', '', compact ? 'door-quote' : 'tk frame');
+  if (!compact) card.href = '/trade/index.html#/' + (cn ? 'stock/' + code : 'spot/' + code + '_USDT');
+  const heading = node('div', '', 'tk-heading'), value = node('b', '--', 'tk-price px'), change = node('span', '--', 'tk-change px');
+  heading.append(node('span', name, 'px'));
+  if (!compact) heading.append(node('small', code, 'px'));
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 160 32');
+  svg.setAttribute('class', 'tk-spark'); svg.setAttribute('aria-hidden', 'true');
+  card.append(heading, value, change); if (!compact) card.append(svg);
+  rows.push({ code, name, cn, value, change, svg, compact }); return card;
+}
+const door = document.getElementById('door-quotes');
+if (door) door.append(...[indices[0], indices[3]].map(([code, name]) => makeQuote(code, name, true, true)),
+  ...coins.slice(0, 2).map(coin => makeQuote(coin, coin, false, true)));
+const strip = document.getElementById('market-tickers');
+if (strip) strip.append(...indices.map(([code, name]) => makeQuote(code, name, true, false)),
+  ...coins.map(coin => makeQuote(coin, coin, false, false)));
+function paintQuotes() {
+  for (const row of rows) {
+    const quote = row.cn ? quotes[row.code] : cryptoQuotes.get(row.code + '_USDT');
+    const percent = row.cn ? quote?.percent : quote?.change_percentage;
+    row.value.textContent = number(quote?.last); row.change.textContent = pct(percent); row.change.style.color = tone(percent, row.cn);
+    if (!row.compact) svgChart(row.svg, mini.get(row.code)?.values || [], tone(percent, row.cn));
+  }
+}
+async function json(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw Error('market'); return response.json();
+}
+async function loadMini(code, cn) {
+  if (Date.now() - (mini.get(code)?.at || 0) < 60000) return;
+  let values;
+  if (cn) {
+    const secid = (code.startsWith('sh') ? '1.' : '0.') + code.slice(2);
+    const data = await json('https://push2.eastmoney.com/api/qt/stock/trends2/get?secid=' + secid
+      + '&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1');
+    values = parseBars(data.data, true).map(row => row.close);
+  } else {
+    const data = await json('https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=' + code + '_USDT&interval=1h&limit=24');
+    values = data.map(row => +row[2]);
+  }
+  mini.set(code, { at: Date.now(), values });
+}
+async function accountChanged() {
+  const token = ++revision; state = null; renderAccount();
+  if (!GameAccount.profile()) return;
+  try {
+    const data = await GameAccount.request('/api/trade/state');
+    if (token !== revision) return; state = data; renderAccount();
+  } catch { /* session or upstream unavailable; keep the login/read prompt */ }
+}
+function renderAccount() {
+  const check = document.getElementById('hub-checkin'), logged = !!GameAccount.profile();
+  if (check) {
+    check.querySelector('i').classList.toggle('xi', logged && !state?.checkin.checkedToday);
+    check.querySelector('span').textContent = state?.checkin.checkedToday ? '已签到'
+      : logged ? '签到 · 第 ' + ((state?.checkin.streak || 0) + 1) + ' 天' : '签到';
+  }
+  const days = document.getElementById('hub-checkin-days');
+  if (days) {
+    days.replaceChildren(...Array.from({ length: 7 }, (_, index) => node('i', '',
+      index < (state?.checkin.streak || 0) ? 'taken' : index === Math.min(6, state?.checkin.streak || 0) ? 'today' : '')));
+    document.getElementById('hub-checkin-detail').textContent = '连续 ' + (state?.checkin.streak || 0)
+      + ' 天 · 下次 +' + wallet.display(+(state?.checkin.nextReward || 20));
+  }
+  const assets = document.getElementById('hub-assets'); if (!assets) return;
+  if (!logged) {
+    const login = node('button', '登录', 'btn sm px'); login.onclick = () => document.getElementById('acct-open').click();
+    assets.replaceChildren(node('p', '登录后查看资产'), login); return;
+  }
+  if (!state) { assets.replaceChildren(node('p', '正在读取资产…')); return; }
+  const feed = { tickers: { spot: cryptoQuotes, futures: futuresQuotes }, specs: new Map() };
+  const values = valuations(state, feed, { quotes });
+  assets.replaceChildren(node('b', wallet.display(totalValue(values, wallet), wallet.currency), 'tile-total px'),
+    node('p', '钱包 ' + wallet.display(values.wallet)),
+    node('p', '加密 ' + wallet.display(values.spot == null || values.futures == null ? null : values.spot + values.futures)),
+    node('p', 'A 股 ' + wallet.display(values.ashare, 'CNY')));
+}
+async function refresh() {
+  if (document.hidden || loading) return; loading = true;
+  try {
+    const codes = [...new Set([...indices.map(([code]) => code), ...(state?.ashare.holdings || []).map(row => row.code)])];
+    await Promise.allSettled([
+      (async () => {
+        const response = await fetch('https://qt.gtimg.cn/q=' + codes.join(','), { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) throw Error('quotes');
+        quotes = parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer()));
+      })(),
+      (async () => {
+        const data = await json('https://api.gateio.ws/api/v4/spot/tickers');
+        cryptoQuotes = new Map(data.map(row => [row.currency_pair, row]));
+      })(),
+      ...(state?.futures.positions.length ? [(async () => {
+        const data = await json('https://api.gateio.ws/api/v4/futures/usdt/tickers');
+        futuresQuotes = new Map(data.map(row => [row.contract, row]));
+      })()] : []),
+      ...indices.map(([code]) => loadMini(code, true)), ...coins.map(coin => loadMini(coin, false)),
+    ]);
+    paintQuotes(); renderAccount();
+    const chart = document.getElementById('door-chart');
+    if (chart) svgChart(chart, mini.get('sh000001')?.values || [], '#F2C66D', true);
+  } finally { loading = false; clearTimeout(timer); timer = setTimeout(refresh, 15000); }
+}
+document.addEventListener('hub-account-change', accountChanged);
+GameAccount.onProfileChange(accountChanged);
+document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden) refresh(); });
+accountChanged(); refresh();
