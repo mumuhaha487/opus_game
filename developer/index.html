@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!-- DESIGN §5：共用游戏馆像素外壳、账号弹窗和开发者密钥管理。 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>开发者 API · GAME.INC.RE</title>
+  <meta name="description" content="管理 API 密钥，让 AI Agent 使用你的账号练习 A 股和加密货币模拟交易。">
+  <meta name="theme-color" content="#0f0b16">
+  <link rel="icon" type="image/svg+xml" href="../hub/favicon.svg">
+  <link rel="preload" href="../hub/fusion-pixel-12.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="../hub/site.css">
+</head>
+<body>
+  <div id="sky" aria-hidden="true"></div>
+  <div class="hills" aria-hidden="true">
+    <svg viewBox="0 0 160 40" preserveAspectRatio="none" shape-rendering="crispEdges">
+      <path fill="#1c1428" d="M0 40V26h6v-2h6v-2h8v-2h6v2h6v2h4v-4h6v-2h6v-2h4v2h6v4h6v2h8v-2h6v-4
+        h6v-2h4v-2h6v2h4v4h6v2h6v2h6v-2h8v-4h6v2h4v4h6v2h4v14z"/>
+      <path fill="#140e1e" d="M0 40V32h8v-2h10v2h8v-2h6v-2h8v2h6v2h10v-2h8v-2h6v2h8v2h6v-2h10v-2
+        h8v2h6v2h8v-2h8v2h10v-2h6v2h6v10z"/>
+    </svg>
+  </div>
+  <header class="bar">
+    <div class="wrap bar-inner">
+      <a class="brand px" href="../index.html" aria-label="游戏汇总首页">
+        <img src="../hub/favicon.svg" alt="" width="32" height="32">
+        <span><b>游戏汇总</b><small>GAME.INC.RE</small></span>
+      </a>
+      <nav class="site-nav px" aria-label="主导航">
+        <a href="../index.html">首页</a><a href="../index.html#games">游戏馆</a>
+        <a href="../trade/index.html">交易所</a><a href="index.html" aria-current="page">开发者</a>
+      </nav>
+      <div class="bar-actions">
+        <a class="acct px" href="../trade/index.html#/overview?checkin=1" id="hub-checkin"><i></i><span>签到</span></a>
+        <button class="acct px" id="acct-open" type="button" aria-haspopup="dialog"><i></i><span>登录 / 注册</span></button>
+      </div>
+    </div>
+  </header>
+  <main class="wrap developer-main">
+    <section class="developer-intro">
+      <small class="px">DEVELOPER · 开发者 API</small>
+      <h1 class="px">让 AI 用你的账号模拟交易</h1>
+      <p>创建 API Key，AI Agent 就能查询余额、读取行情、自动买卖 A 股和加密货币。
+        所有交易规则与网页一致，仅供教学练习。</p>
+    </section>
+    <section class="frame keys-panel" aria-labelledby="keys-title">
+      <div class="keys-heading">
+        <h2 class="sec px" id="keys-title">我的密钥</h2>
+        <button class="btn sm px" id="key-create" type="button" hidden>创建密钥</button>
+      </div>
+      <div id="keys-guest"><p>登录后管理 API 密钥</p><button class="btn sm px" id="key-login" type="button">登录</button></div>
+      <p id="keys-message" class="msg" role="status"></p>
+      <div class="table-scroll" id="keys-table" hidden>
+        <table class="developer-table">
+          <thead><tr><th>名称</th><th>前缀</th><th>权限</th><th>创建时间</th><th>到期时间</th><th>最近使用</th><th>操作</th></tr></thead>
+          <tbody id="key-rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <div class="docs-layout">
+      <nav class="docs-nav px" aria-label="API 文档目录" id="docs-nav"></nav>
+      <div class="docs-body" id="docs-body"></div>
+    </div>
+    <footer class="px">GAME.INC.RE · 仅教学练习 · 不构成投资建议</footer>
+  </main>
+  <dialog class="dlg key-dialog" id="key-new" aria-labelledby="key-new-title">
+    <div class="dlg-in frame">
+      <div class="dlg-hd"><h2 class="px" id="key-new-title">创建密钥</h2>
+        <button class="x px" type="button" data-close aria-label="关闭">×</button></div>
+      <form id="key-form">
+        <label class="fld px">名称<input name="name" minlength="1" maxlength="24" required autocomplete="off"></label>
+        <fieldset class="key-options"><legend class="px">权限</legend>
+          <label><input type="checkbox" checked disabled>读取：余额、行情、委托</label>
+          <label><input name="trade" type="checkbox">交易：下单、撤单、划转</label>
+        </fieldset>
+        <fieldset class="key-options"><legend class="px">有效期</legend><div class="key-expiry">
+          <label><input name="expiry" type="radio" value="30" checked>30 天</label>
+          <label><input name="expiry" type="radio" value="90">90 天</label>
+          <label><input name="expiry" type="radio" value="180">180 天</label>
+        </div></fieldset>
+        <label class="fld px">登录密码<input name="password" type="password" maxlength="64" required
+          autocomplete="current-password"></label>
+        <label class="key-consent"><input name="consent" type="checkbox" required>
+          我已阅读使用须知：仅教学练习，不构成投资建议</label>
+        <button class="btn px" type="submit" id="key-generate" disabled>生成密钥</button>
+      </form>
+      <div id="key-result" hidden>
+        <div class="key-secret" id="key-secret"></div><button class="ghost px" type="button" id="key-copy">复制</button>
+        <p class="key-warning">密钥只显示这一次，请立即保存到安全的地方。</p>
+      </div>
+      <p class="msg" id="key-new-message" role="status"></p>
+    </div>
+  </dialog>
+  <dialog class="dlg log-dialog" id="key-log" aria-labelledby="key-log-title">
+    <div class="dlg-in frame">
+      <div class="dlg-hd"><h2 class="px" id="key-log-title">调用记录</h2>
+        <button class="x px" type="button" data-close aria-label="关闭">×</button></div>
+      <p class="msg" id="key-log-message" role="status"></p>
+      <div class="table-scroll"><table class="developer-table">
+        <thead><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>来源 IP 段</th></tr></thead>
+        <tbody id="key-log-rows"></tbody>
+      </table></div>
+    </div>
+  </dialog>
+  <dialog class="dlg" id="key-revoke" aria-labelledby="key-revoke-title">
+    <div class="dlg-in frame">
+      <div class="dlg-hd"><h2 class="px" id="key-revoke-title">撤销密钥</h2>
+        <button class="x px" type="button" data-close aria-label="关闭">×</button></div>
+      <p id="key-revoke-detail"></p><button class="btn px" type="button" id="key-revoke-confirm">确认撤销</button>
+      <p class="msg" id="key-revoke-message" role="status"></p>
+    </div>
+  </dialog>
+  <dialog class="dlg" id="acct" aria-labelledby="acct-title">
+    <div class="dlg-in frame">
+      <div class="dlg-hd">
+        <div><h2 class="px" id="acct-title">账号</h2><small class="px">GAME.INC.RE 通用账号</small></div>
+        <button class="x px" type="button" aria-label="关闭">×</button>
+      </div>
+      <div id="acct-guest">
+        <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true">登录</button>
+          <button class="tab" role="tab" aria-selected="false">注册</button></div>
+        <form novalidate>
+          <label class="fld px">用户名<input name="username" autocomplete="username" autocapitalize="off"
+            autocorrect="off" spellcheck="false" maxlength="16" placeholder="3–16 位字母、数字或下划线"></label>
+          <label class="fld px">密码<input name="password" type="password" maxlength="64"
+            autocomplete="current-password" placeholder="8–64 位"></label>
+          <label class="fld px" hidden>确认密码<input name="confirm" type="password" maxlength="64"
+            autocomplete="new-password" placeholder="再输入一次密码"></label>
+          <button class="btn px" type="submit">登录</button>
+        </form>
+      </div>
+      <div id="acct-user" hidden>
+        <p class="who px"><span>已登录</span><b></b></p><h3 class="sec px">游戏存档</h3>
+        <ul class="saves"></ul><button class="btn2 px" type="button">退出登录</button>
+      </div>
+      <p class="msg" role="status" aria-live="polite"></p><p class="note px"></p>
+    </div>
+  </dialog>
+  <script src="../hub/account-core.js"></script>
+  <script src="../hub/account-ui.js"></script>
+  <script type="module" src="../hub/xch.js"></script>
+  <script type="module" src="developer.js"></script>
+</body>
+</html>

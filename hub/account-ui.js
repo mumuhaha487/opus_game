@@ -1,10 +1,11 @@
+// DESIGN §3：游戏存档与统一钱包、API 密钥共用账号弹窗。
 'use strict';
 const HUB_GAMES = [{
-  id: 'entropy-blade', name: '熵刃', href: 'entropy-blade/index.html', guestKey: 'entropy_blade_save_v1',
+  id: 'entropy-blade', name: '熵刃', href: '/entropy-blade/index.html', guestKey: 'entropy_blade_save_v1',
   summary: data => `挑战 ${data.stats?.runs || 0} 次 · 通关 ${data.stats?.wins || 0} 次 · 熵晶 ${data.crystals || 0}`,
   guestHasProgress: data => (data?.stats?.runs || 0) > 0 || (data?.crystals || 0) > 0,
 }, {
-  id: 'tbmh', name: '悬赏怪物猎人', href: 'tbmh/index.html', guestKey: 'tbmh_save_v3',
+  id: 'tbmh', name: '悬赏怪物猎人', href: '/tbmh/index.html', guestKey: 'tbmh_save_v3',
   summary: data => data.v === 3
     ? `${['普通', '噩梦', '地狱', '折磨'][data.prog?.d || 0]} ${data.prog?.a || 1}-${data.prog?.s || 1} · 最高 ${Math.max(1, ...Object.values(data.heroes || {}).map(h => h?.lv || 1))} 级 · 通关 ${(data.prog?.best || []).reduce((a, x) => a + (x || 0), 0)} 关`
     : data.v === 2 ? '第二版存档 · 进入游戏带着猎人开始 3.0 的旅程' : '早期存档 · 进入游戏开始 3.0 的旅程',
@@ -56,35 +57,47 @@ const HUB_GAMES = [{
       link.append(name, status, summary); row.appendChild(link); saves.appendChild(row);
     }
   }
-  // 规格 10.3：交易所账号行只读取 summary。
-  function renderTradeRow(summary, state = '') {
+  // DESIGN §3 / PLATFORM §2.3：钱包按显示货币估值，签到状态来自同源 state。
+  function renderTradeRow(summary, region, state = '') {
     const row = document.createElement('li'), link = document.createElement('a');
-    link.className = 'gsave'; link.href = 'trade/index.html#/assets';
+    link.className = 'gsave'; link.href = '/trade/index.html#/assets';
     const name = document.createElement('span'), status = document.createElement('span');
     const detail = document.createElement('span');
     name.className = 'gname px'; name.textContent = '模拟交易所';
     status.className = 'gstat px'; detail.className = 'gsum';
     if (summary) {
-      status.textContent = summary.checkedToday ? '今日已签到' : '今日未签到';
-      status.classList.toggle('warn', !summary.checkedToday);
-      const money = amount => Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      detail.textContent =
-        `现货 USDT ${money(summary.spotUSDT)} · 合约 USDT ${money(summary.futuresUSDT)}`
-        + ` · 持有 ${summary.assets} 种币 · ${summary.positions} 个仓位`;
+      let currency; try { currency = localStorage.getItem('gameinc_currency_v1'); } catch { /* unavailable */ }
+      if (!['CNY', 'USD'].includes(currency)) currency = region?.currency || 'USD';
+      const value = currency === 'CNY' ? region?.usdcny ? +summary.wallet.usd * +region.usdcny : null : +summary.wallet.usd;
+      const money = value == null ? '--' : value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      detail.textContent = '钱包 ' + (currency === 'CNY' ? '¥' : '$') + money
+        + ' · ' + (summary.checkin.checkedToday ? '今日已签到' : '未签到');
     } else detail.textContent = state === 'loading' ? '正在读取…' : '无法连接服务器，请稍后再试';
     link.append(name, status, detail); row.append(link); saves.append(row);
+  }
+  function renderKeyRow(data, state = '') {
+    const row = document.createElement('li'), link = document.createElement('a');
+    link.className = 'gsave'; link.href = '/developer/index.html';
+    const name = document.createElement('span'), detail = document.createElement('span');
+    name.className = 'gname px'; name.textContent = 'API 密钥'; detail.className = 'gsum';
+    detail.textContent = data ? data.keys.filter(key => !key.revoked && key.expires > Date.now()).length + ' 个有效'
+      : state === 'loading' ? '正在读取…' : '无法连接服务器，请稍后再试';
+    link.append(name, detail); row.append(link); saves.append(row);
   }
   async function loadSaves() {
     const token = ++revision;
     renderRows(null, 'loading');
-    renderTradeRow(null, 'loading');
-    const results = await Promise.allSettled([C.request('/api/saves'), C.request('/api/trade/summary')]);
+    renderTradeRow(null, null, 'loading'); renderKeyRow(null, 'loading');
+    const results = await Promise.allSettled([C.request('/api/saves'), C.request('/api/trade/state'),
+      C.request('/api/region'), C.request('/api/keys')]);
     if (token !== revision) return;
-    const [gamesResult, tradeResult] = results;
+    const [gamesResult, tradeResult, regionResult, keysResult] = results;
     renderRows(gamesResult.status === 'fulfilled' ? gamesResult.value.games : null,
       gamesResult.status === 'fulfilled' ? '' : 'error');
     renderTradeRow(tradeResult.status === 'fulfilled' ? tradeResult.value : null,
+      regionResult.status === 'fulfilled' ? regionResult.value : null,
       tradeResult.status === 'fulfilled' ? '' : 'error');
+    renderKeyRow(keysResult.status === 'fulfilled' ? keysResult.value : null, keysResult.status === 'fulfilled' ? '' : 'error');
   }
   function render() {
     const profile = C.profile(), logged = !!profile && !expired;

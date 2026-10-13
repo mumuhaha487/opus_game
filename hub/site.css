@@ -449,3 +449,65 @@
   .door .btn { margin-top: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .gcard { transition: none; } }
+
+/* DESIGN §3/5：开发者文档和密钥弹窗沿用像素 frame/btn/dlg，表格可在面板内滚动。 */
+.developer-main { padding-top: 32px; }
+.developer-intro { margin-bottom: 32px; }
+.developer-intro > small { color: var(--gold); font-size: 12px; letter-spacing: 2px; }
+.developer-intro h1 { font-size: 32px; line-height: 40px; font-weight: normal; color: #fff; margin: 16px 0; }
+.developer-intro p { font-size: 14px; line-height: 24px; color: var(--muted); max-width: 800px; }
+.keys-panel { padding: 24px; }
+.keys-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.keys-heading .sec { margin: 0; }
+.keys-heading .sec::after { display: none; }
+.keys-panel .msg:empty { margin: 0; min-height: 0; }
+.keys-panel .table-scroll { margin-top: 20px; }
+.table-scroll { overflow-x: auto; max-width: 100%; }
+.developer-table { width: 100%; border-collapse: collapse; font: 12px/20px var(--sans); text-align: left; }
+.developer-table th { color: var(--muted); font-weight: normal; padding: 10px 12px; }
+.developer-table td { padding: 12px; border-top: 2px dashed var(--line); vertical-align: middle; }
+.developer-table th, .developer-table td { white-space: nowrap; }
+.developer-table code { font: 12px/20px monospace; }
+.key-scopes, .key-actions { display: flex; align-items: center; gap: 8px; }
+.key-scope { padding: 4px 6px; background: var(--chip); color: var(--gold); font-size: 11px; }
+.key-inactive { color: var(--dim); }
+.docs-layout { display: grid; grid-template-columns: 200px minmax(0,1fr); gap: 32px; margin-top: 48px; }
+.docs-nav { position: sticky; top: 88px; align-self: start; width: 200px; display: grid; }
+.docs-nav a { display: flex; align-items: center; min-height: 40px; text-decoration: none; font-size: 12px; color: var(--muted); }
+.docs-nav a:hover { color: var(--gold); }
+.docs-body { min-width: 0; }
+.doc-section { scroll-margin-top: 120px; margin-bottom: 40px; }
+.doc-section h2 { font-size: 24px; line-height: 32px; font-weight: normal; color: var(--gold); margin: 0 0 16px; }
+.doc-section p { font-size: 14px; line-height: 24px; color: var(--muted); overflow-wrap: anywhere; }
+.doc-section h4 { margin: 16px 0 10px; font-weight: normal; font-size: 12px; color: var(--muted); }
+.doc-code { position: relative; background: #0c0912; padding: 16px; }
+.doc-code > button { position: absolute; top: 8px; right: 8px; min-height: 28px; }
+.doc-code pre { margin: 0; padding-top: 24px; overflow-x: auto; font: 13px/20px monospace; }
+.doc-sample { border-bottom: 2px dashed var(--line); padding: 8px 0 16px; }
+.doc-sample summary { cursor: pointer; font-size: 14px; line-height: 24px; color: var(--ink); padding: 8px 0; }
+.doc-source { font-size: 12px; color: var(--dim); }
+.key-dialog { width: min(560px,100% - 40px); }
+.log-dialog { width: min(1000px,100% - 40px); }
+.key-dialog .dlg-in, .log-dialog .dlg-in, #acct .dlg-in { max-height: calc(100dvh - 40px); overflow-y: auto; }
+.key-options { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
+.key-options legend { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.key-options > label, .key-consent { display: flex; align-items: center; gap: 10px; font-size: 14px; line-height: 22px; }
+.key-options input, .key-consent input { accent-color: var(--gold); flex: none; }
+.key-expiry { display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; }
+.key-expiry label { display: flex; align-items: center; gap: 6px; }
+.key-consent { margin-top: 24px; }
+.key-secret { font: 14px/24px monospace; background: #0c0912; padding: 16px; margin: 24px 2px 16px;
+  overflow-wrap: anywhere; box-shadow: 0 -2px 0 var(--line), 0 2px 0 var(--line), -2px 0 0 var(--line), 2px 0 0 var(--line); }
+.key-warning { color: var(--gold); font-size: 14px; line-height: 24px; }
+@media (max-width: 1023px) {
+  .docs-layout { display: block; }
+  .docs-nav { display: none; }
+}
+@media (max-width: 859px) {
+  .doc-code > button { min-height: 44px; }
+  .doc-code pre { padding-top: 36px; }
+  .key-options label, .key-consent { min-height: 44px; }
+  .key-dialog .dlg-in, .log-dialog .dlg-in { padding: 24px 20px; }
+  .keys-panel { padding: 24px; }
+  .key-expiry { gap: 8px; }
+}

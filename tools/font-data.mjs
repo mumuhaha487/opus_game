@@ -92,7 +92,11 @@ export function collectCharacters(files) {
   return [...chars].sort((a, b) => a.codePointAt(0) - b.codePointAt(0)).join('');
 }
 export function collectHubCharacters(root) {
-  return collectCharacters([path.join(root, 'index.html'), ...readdirSync(path.join(root, 'hub')).filter(name => name.endsWith('.js')).sort().map(name => path.join(root, 'hub', name))]);
+  // DESIGN §1.7：共享字体包含开发者页面与两个目录里的动态文案。
+  const scripts = directory => readdirSync(path.join(root, directory)).filter(name => name.endsWith('.js'))
+    .sort().map(name => path.join(root, directory, name));
+  return collectCharacters([path.join(root, 'index.html'), path.join(root, 'developer/index.html'),
+    ...scripts('hub'), ...scripts('developer')]);
 }
 // characters a font subset is missing (empty when it covers everything)
 export function missingGlyphs(font, text) {

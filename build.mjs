@@ -12,7 +12,7 @@ import { QUOTE_FIELDS as clientQuoteFields } from './trade/js/ashare/feed.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'trade'];
+const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'trade', 'developer'];
 
 // ---------- release checks (no dependencies) ----------
 const problems = [];
