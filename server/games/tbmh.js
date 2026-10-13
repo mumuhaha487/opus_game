@@ -99,6 +99,7 @@ const MATS = new Set(matIds());
 const isGem = id => typeof id === 'string' && MATS.has(id) && id.startsWith('gem');
 const isPart = id => typeof id === 'string' && MATS.has(id) && id.startsWith('part');
 
+import { SAVE_DATA } from './plausibility-data.js';
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const num = (v, lo, hi, d = lo) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const int = (v, lo, hi, d = lo) => Math.floor(num(v, lo, hi, d));
@@ -124,6 +125,62 @@ function item(v, slot) {
   out.si = sock(v.si, K[3], x => Array.isArray(x) && INSCRIBE.includes(x[0]) && Number.isFinite(x[1])).map(x => (x ? [x[0], num(x[1], 0, 10, 0)] : null));
   if (v.k) out.k = 1;
   return out;
+}
+const HUNTER = SAVE_DATA.hunter;
+const refuse = reason => ({ ok: false, reason });
+function experience(hero) {
+  return HUNTER.exp.slice(0, (hero?.lv || 1) - 1).reduce((sum, value) => sum + value, 0) + (hero?.exp || 0);
+}
+function runeSpent(save) {
+  return Object.entries(save?.runes || {}).reduce((sum, [id, level]) =>
+    sum + HUNTER.runes[id].slice(0, level).reduce((subtotal, cost) => subtotal + cost, 0), 0);
+}
+function inventoryValue(save) {
+  const items = [...(save?.inv || []), ...Object.values(save?.heroes || {}).flatMap(hero => Object.values(hero.eq))];
+  const gear = items.filter(Boolean).reduce((sum, item) =>
+    sum + Math.round(HUNTER.grades[item.g] * Math.pow(1.15, (item.l - 1) * 0.6)), 0);
+  const mats = Object.entries(save?.mats || {}).reduce((sum, [id, count]) => sum + HUNTER.mats[id] * count, 0);
+  return (gear + mats) * (1 + HUNTER.runeMax.alchGold);
+}
+export function plausible(previous, next, elapsedMs) {
+  // PLATFORM §5.3：在线窗口按服务端时间；超八小时部分须由实际关卡推进支撑，离线收益最多八小时。
+  const minutes = Math.max(0, elapsedMs) / 60000, best = next.prog.best;
+  for (let difficulty = 0; difficulty < 4; difficulty++) {
+    if (best[difficulty] - (previous?.prog.best[difficulty] || 0) > minutes + 1) return refuse('hunter_stage_jump');
+  }
+  const progressed = best.some((value, difficulty) => value > (previous?.prog.best[difficulty] || 0));
+  const budgetMinutes = (progressed ? minutes : Math.min(minutes, 480)) + 1;
+  // PLATFORM §5.3①②：当前最高已解锁关卡，按最快每 1.6 秒完成整关，再乘规格的三倍。
+  // battle.stageClear 的重开延迟1.6秒；把每只怪都当精英并给每关悬赏首领奖励，保留宽松余量。
+  let goldPerStage = 0, expPerStage = 0, killsPerStage = 0, level = 1, grade = 5;
+  for (let difficulty = 0; difficulty < 4; difficulty++) {
+    if (difficulty && best[difficulty - 1] < 30) break;
+    grade = Math.max(grade, 5 + difficulty);
+    for (const rate of HUNTER.rates[difficulty].slice(0, Math.min(30, best[difficulty] + 1))) {
+      goldPerStage = Math.max(goldPerStage, rate.gold); expPerStage = Math.max(expPerStage, rate.exp);
+      killsPerStage = Math.max(killsPerStage, rate.kills + 1); level = Math.max(level, rate.L);
+    }
+  }
+  const cycles = budgetMinutes * 60 / 1.6 * 3;
+  const maxExp = expPerStage * cycles * HUNTER.partyFactors.exp * (1 + HUNTER.runeMax.bossExp);
+  for (const [id, hero] of Object.entries(next.heroes)) {
+    if (experience(hero) - experience(previous?.heroes[id]) > maxExp) return refuse('hunter_experience_budget');
+  }
+  // PLATFORM §5.3②：新增掉落按每怪三件最高级装备、宝箱金币与材料上限计入；已有背包可全部出售。
+  const sale = Math.round(HUNTER.grades[grade] * Math.pow(1.15, (level - 1) * 0.6));
+  const drops = killsPerStage * 3 * sale * (1 + HUNTER.runeMax.alchGold);
+  const chests = killsPerStage * 150 * 3 * Math.pow(1.15, level - 1) * 8
+    * HUNTER.partyFactors.gold * (1 + HUNTER.runeMax.chestGold);
+  const earnings = cycles * (goldPerStage * HUNTER.partyFactors.gold * (1 + HUNTER.runeMax.bossGold) * 2 + drops + chests);
+  const sales = inventoryValue(previous);
+  if (next.gold - (previous?.gold || 0) > earnings + sales
+    || next.stats.gold - (previous?.stats.gold || 0) > earnings + sales) return refuse('hunter_gold_budget');
+  // PLATFORM §5.3④：实际游戏符文用金币购买，没有独立符文点数；逐级成本不得超过累计获得金币。
+  const spent = runeSpent(next);
+  if (spent > next.stats.gold || next.gold + spent > (previous?.gold || 0) + runeSpent(previous) + earnings + sales) {
+    return refuse('hunter_rune_budget');
+  }
+  return { ok: true };
 }
 function hero(v, cls) {
   const out = { lv: int(v.lv, 1, LIMITS.heroMax, 1), exp: num(v.exp, 0, BIG), eq: {}, sk: {}, act: [null, null] };

@@ -84,6 +84,8 @@ const Cloud = (() => {
         A.status = 'error';
         return false;
       } catch (e) {
+        // PLATFORM 5.3: 保留本地存档；下次 GET 后重新执行原有深度冲突选择。
+        if (e && e.status === 422) { A.pulled = false; A.status = 'rejected'; schedule(60000); return false; }
         A.status = e && e.status === 401 ? 'expired' : 'error';
         if (A.status === 'error') schedule(60000);
         return false;
@@ -96,6 +98,7 @@ const Cloud = (() => {
     if (A.file) return { logged: false, text: '本地文件模式：进度保存在这台设备上', color: PAL.steel };
     if (!A.name) return { logged: false, text: '未登录：进度保存在这台设备上。登录后在所有设备同步', color: PAL.steel };
     const when = A.last ? new Date(A.last).toTimeString().slice(0, 5) : '';
+    if (A.status === 'rejected') return { logged: true, text: `${A.name} · 同步失败`, color: PAL.amber };
     const map = { synced: [`${A.name} · 已同步 ${when}`, PAL.green], syncing: [`${A.name} · 正在同步…`, PAL.cyan], pending: [`${A.name} · 等待同步`, PAL.cream], error: [`${A.name} · 暂时连不上服务器，稍后自动重试`, PAL.amber], expired: [`${A.name} · 登录已过期，请重新登录`, PAL.red] };
     const [text, color] = map[A.status] || map.pending;
     return { logged: A.status !== 'expired', text, color };

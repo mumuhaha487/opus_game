@@ -91,6 +91,8 @@ const Account = (() => {
     if (A.name && A.status !== 'expired' && !A.file) A.timer = setTimeout(() => { A.timer = null; A.sync(); }, delay);
   };
   A.failed = e => {
+    // PLATFORM §5.3：422 保留本地脏缓存，下一次写入先 GET 并沿原冲突合并。
+    if (e.status === 422) { A.pulled = false; A.say('同步失败', '#ff5a5a'); }
     if (e.status === 401) { A.status = 'expired'; A.verified = false; clearTimeout(A.timer); }
     else { A.status = 'error'; A.schedule([15000, 30000, 60000, 120000, 300000][Math.min(A.retry++, 4)]); }
   };
@@ -262,7 +264,10 @@ const Account = (() => {
         A.lastSuccess = Date.now(); A.persist();
       }
       return next;
-    }).catch(() => null).finally(() => { if (A.flushJob === flushed) A.flushJob = null; });
+    }).catch(e => {
+      if (A.cache === cache && e.status === 422) A.failed(e);
+      return null;
+    }).finally(() => { if (A.flushJob === flushed) A.flushJob = null; });
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   window.addEventListener('pagehide', flush);

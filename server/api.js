@@ -4,6 +4,7 @@ import { GAMES } from './games/index.js';
 import { likeable, getLikes, addLike } from './likes.js';
 import { handleTrade } from './trade/index.js';
 import { regionView } from './trade/fx.js';
+import { auditSave } from './save-audit.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -128,6 +129,16 @@ export async function handle(request, env) {
     if (wait) return limited(wait);
     const current = await readSave(bucket, user.uid, game);
     if (current.rev !== data.baseRev) return reply(409, { error: 'conflict', ...publicSave(current) });
+    // PLATFORM §5.3：先检查版本冲突，再检查清洗后的进度；首次保存 elapsedMs 为零。
+    const now = Date.now();
+    const verdict = GAMES[game].plausible(current.data, clean, current.rev ? Math.max(0, now - current.updated) : 0);
+    if (!verdict.ok) {
+      // 并发写已更新云端时走原冲突流程，不记录对旧版本的误拒绝。
+      const latest = await readSave(bucket, user.uid, game);
+      if (latest.etag !== current.etag) return reply(409, { error: 'conflict', ...publicSave(latest) });
+      try { await auditSave(bucket, user.uid, game, verdict.reason, now); } catch { /* keep cloud progress */ }
+      return reply(422, { error: 'implausible_save', message: '云存档校验未通过，已保留云端进度' });
+    }
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };
     const written = await bucket.put(saveKey(user.uid, game), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
     if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
