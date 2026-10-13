@@ -9,10 +9,13 @@ import { placeOrder, cancelOrder, cancelAll } from './spot.js';
 import { settle } from './settle.js';
 import { marketFor } from './markets.js';
 import { getFx } from './fx.js';
+import { AshareClient } from './ashare-data.js';
+import { placeAshareOrder, cancelAshareOrder } from './ashare.js';
 import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   disclaimer: 'POST',
+  'ashare/order': 'POST', 'ashare/cancel': 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
@@ -26,6 +29,9 @@ const MESSAGES = {
   leverage_locked: '有仓位或委托时无法调整杠杆', reduce_only: '只减仓委托会增加仓位，已拒绝',
   position_not_found: '没有该合约的仓位', bad_tpsl: '止盈止损价格不合理', margin_limit: '超出可调整的保证金范围',
   fx_unavailable: '汇率暂时不可用，请稍后再试', disclaimer_required: '请先阅读并确认使用须知',
+  market_closed: '当前不在交易时段', price_out_of_limit: '委托价格超出涨跌停范围',
+  lot_size: '买入数量须为 100 股的整数倍（科创板至少 200 股）',
+  t_plus_one: '可卖数量不足（当日买入的股票下一交易日才能卖出）', suspended: '该股票停牌', not_a_share: '仅支持沪深 A 股',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -52,17 +58,21 @@ export async function handleTrade(request, env, session, data) {
       const { state } = await readState(env.ACCOUNTS, uid, now);
       if (route === 'summary') return reply(200, summary(state, now));
       const kind = url.searchParams.get('kind'), market = url.searchParams.get('market');
-      if (!['orders', 'trades', 'ledger'].includes(kind) || !['spot', 'futures'].includes(market)) {
+      if (!['orders', 'trades', 'ledger'].includes(kind) || !['wallet', 'spot', 'futures', 'ashare'].includes(market)) {
         throw { status: 400, code: 'bad_request' };
       }
       return reply(200, { [kind]: state.history[kind].filter(entry => entry.market === market) });
     }
     const gate = new GateClient(now);
+    const ashare = new AshareClient(gate, now);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
       if (method === 'POST' && !state.disclaimerAt) throw { status: 403, code: 'disclaimer_required' };
       const fx = route === 'transfer' && [data.from, data.to].includes('ashare') ? await getFx(now, gate) : null;
+      if (route === 'ashare/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
+        await ashare.quotes([data.code, 'sh000001']);
+      }
       // 规格 5.3、5.5：先取得本次下单行情，剩余预算留给结算，部分结算后仍能执行操作。
       if (route === 'spot/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
         marketFor(data.symbol);
@@ -82,7 +92,7 @@ export async function handleTrade(request, env, session, data) {
       const candidate = method === 'GET' ? structuredClone(state) : state;
       let settlement;
       try {
-        settlement = await settle(candidate, gate, now, method === 'POST');
+        settlement = await settle(candidate, gate, now, method === 'POST', ashare);
       } catch (error) {
         if (method !== 'GET' || error?.code !== 'market_unavailable') throw error;
         return { partial: true, stale: true, notices: [] };
@@ -90,6 +100,8 @@ export async function handleTrade(request, env, session, data) {
       if (method === 'GET') Object.assign(state, candidate);
       let order, reward, transferred;
       if (route === 'checkin') reward = checkin(state, now);
+      if (route === 'ashare/order') order = await placeAshareOrder(state, data, ashare, now);
+      if (route === 'ashare/cancel') cancelAshareOrder(state, data.id, now);
       if (route === 'transfer') transferred = transfer(state, data, now, fx);
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);

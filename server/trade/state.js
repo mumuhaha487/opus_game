@@ -4,6 +4,7 @@
 import { absent } from '../store.js';
 import { parse, toStr, mul, div, roundTo } from './decimal.js';
 import { checkinView } from './checkin.js';
+import { marketStatus } from './ashare-rules.js';
 export const tradeKey = uid => `trade/${uid}.json`;
 export function defaultState(now = Date.now()) {
   return {
@@ -95,7 +96,9 @@ export function stateView(state, now, partial = false, notices = []) {
   return {
     serverTime: now, partial, checkin: checkinView(state.checkin, now), spot: { balances },
     wallet: state.wallet, disclaimerAt: state.disclaimerAt,
-    ashare: { cash: state.ashare.cash, holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })) },
+    ashare: { cash: state.ashare.cash,
+      holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })),
+      market: { ...marketStatus(now, { time: state.ashare.marketTime ?? now }), checked: state.ashare.marketTime != null } },
     futures: { ...state.futures, positions: Object.entries(state.futures.positions).map(([symbol, value]) => ({ symbol, ...value })) },
     openOrders: state.orders, recent: Object.fromEntries(Object.entries(state.history).map(([kind, rows]) => [kind, rows.slice(0, 30)])),
     notices: [...state.notices, ...notices],

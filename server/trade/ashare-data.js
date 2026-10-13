@@ -20,6 +20,9 @@ function numeric(value, zero = false) {
   if ((value === '' || value === '-') && zero) return '0';
   return toStr(parse(value));
 }
+function signedNumeric(value) {
+  return value.startsWith('-') ? toStr(-parse(value.slice(1))) : numeric(value, true);
+}
 export function parseTencent(text) {
   const quotes = {};
   for (const match of text.matchAll(/v_((?:sh|sz)\d{6})="([^"]*)"/g)) {
@@ -29,6 +32,7 @@ export function parseTencent(text) {
     for (const name of ['last', 'prevClose', 'open', 'volume', 'high', 'low', 'turnover', 'turnoverRate']) {
       quote[name] = numeric(fields[indexes[name]], true);
     }
+    for (const name of ['change', 'percent', 'pe']) quote[name] = signedNumeric(fields[indexes[name]]);
     // ASHARE §1.1：指数限价字段 -1 保留为 null，指数只能用于展示和交易日判断。
     for (const name of ['limitUp', 'limitDown']) {
       quote[name] = fields[indexes[name]] === '-1' ? null : numeric(fields[indexes[name]], true);
@@ -53,8 +57,10 @@ export function parseTrends(data) {
     const fields = row.split(',');
     const high = numeric(fields[3]), low = numeric(fields[4]);
     if (parse(high) < parse(low)) throw Error('invalid bar');
-    return { t: localTimestamp(fields[0]), high, low, candle: true, end: localTimestamp(fields[0]) + 60000 };
-  });
+    // ASHARE §3.2：分时标签是分钟结束时间（09:31 覆盖 09:30–09:31），零量不是成交。
+    const end = localTimestamp(fields[0]);
+    return { t: end - 60000, high, low, candle: true, end, volume: numeric(fields[5]) };
+  }).filter(event => parse(event.volume) > 0n);
 }
 export function parseDaily(data) {
   if (!data || !Array.isArray(data.klines)) throw Error('missing daily bars');
@@ -62,8 +68,8 @@ export function parseDaily(data) {
     const fields = row.split(','), high = numeric(fields[3]), low = numeric(fields[4]);
     if (parse(high) < parse(low)) throw Error('invalid bar');
     const time = localTimestamp(fields[0]);
-    return { t: time, high, low, candle: true, end: time + 19800000 };
-  });
+    return { t: time, high, low, candle: true, end: time + 19800000, volume: numeric(fields[5]) };
+  }).filter(event => parse(event.volume) > 0n);
 }
 export function parseDetails(data, date) {
   if (!data || !Array.isArray(data.details)) throw Error('missing details');
@@ -72,22 +78,27 @@ export function parseDetails(data, date) {
     if (!/^\d{2}:\d{2}:\d{2}$/.test(fields[0])) throw Error('invalid trade time');
     const time = chinaTime(date.replace(/-/g, '') + fields[0].replace(/:/g, ''));
     const price = numeric(fields[1]);
-    return { t: time, low: price, high: price, candle: false, end: time + 1 };
-  });
+    return { t: time, low: price, high: price, candle: false, end: time + 1, volume: numeric(fields[2]) };
+  }).filter(event => parse(event.volume) > 0n);
 }
 export class AshareClient {
-  constructor(budget, now = Date.now()) { this.budget = budget; this.now = now; this.pending = new Map(); }
+  constructor(budget, now = Date.now()) {
+    this.budget = budget; this.now = now; this.pending = new Map(); this.quoteMap = {};
+  }
   load(url, ttl, decode) {
     if (!this.pending.has(url)) this.pending.set(url, upstream(url, ttl, decode, this.budget));
     return this.pending.get(url);
   }
   async quotes(codes) {
     codes.forEach(validateCode);
-    const url = 'https://qt.gtimg.cn/q=' + [...new Set(codes)].sort().join(',');
-    const result = await this.load(url, 1, async response =>
-      parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())));
-    if (codes.some(code => !result[code])) throw { status: 503, code: 'market_unavailable' };
-    return result;
+    const missing = [...new Set(codes)].filter(code => !this.quoteMap[code]).sort();
+    if (missing.length) {
+      const result = await this.load('https://qt.gtimg.cn/q=' + missing.join(','), 1, async response =>
+        parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())));
+      if (missing.some(code => !result[code])) throw { status: 503, code: 'market_unavailable' };
+      Object.assign(this.quoteMap, result);
+    }
+    return this.quoteMap;
   }
   async quote(code) { return (await this.quotes([code]))[code]; }
   async details(code, date) {
