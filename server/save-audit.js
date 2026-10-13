@@ -5,10 +5,11 @@ import { absent } from './store.js';
 export async function auditSave(bucket, uid, game, reason, now) {
   const date = new Date(now).toISOString().slice(0, 10);
   const path = `audit/${date}/${uid}-${game}.json`;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 64; attempt++) {
     const object = await bucket.get(path), entries = object ? await object.json() : [];
     entries.push({ time: now, reason });
     const onlyIf = object ? { etagMatches: object.etag } : absent();
     if (await bucket.put(path, JSON.stringify(entries), { onlyIf })) return;
   }
+  throw { status: 503, code: 'audit_unavailable' };
 }

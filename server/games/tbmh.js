@@ -175,6 +175,8 @@ export function plausible(previous, next, elapsedMs) {
   const sales = inventoryValue(previous);
   if (next.gold - (previous?.gold || 0) > earnings + sales
     || next.stats.gold - (previous?.stats.gold || 0) > earnings + sales) return refuse('hunter_gold_budget');
+  // PLATFORM §5.3②④：出售预算不能由上次伪造的材料/装备扩大，新增可变现金资产也受收入预算约束。
+  if (next.gold + inventoryValue(next) - (previous?.gold || 0) - sales > earnings) return refuse('hunter_asset_budget');
   // PLATFORM §5.3④：实际游戏符文用金币购买，没有独立符文点数；逐级成本不得超过累计获得金币。
   const spent = runeSpent(next);
   if (spent > next.stats.gold || next.gold + spent > (previous?.gold || 0) + runeSpent(previous) + earnings + sales) {

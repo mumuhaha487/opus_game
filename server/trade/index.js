@@ -43,7 +43,7 @@ function reply(status, data, headers = {}) {
     'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   } });
 }
-export async function handleTrade(request, env, session, data) {
+export async function handleTrade(request, env, session, data, services) {
   const url = new URL(request.url), route = url.pathname.slice('/api/trade/'.length);
   if (!Object.hasOwn(ROUTES, route)) return reply(404, { error: 'not_found', message: MESSAGES.not_found });
   const method = ROUTES[route];
@@ -67,12 +67,13 @@ export async function handleTrade(request, env, session, data) {
       }
       return reply(200, { [kind]: state.history[kind].filter(entry => entry.market === market) });
     }
-    const gate = new GateClient(now);
-    const ashare = new AshareClient(gate, now);
+    // PLATFORM §6.4：Agent结算、操作和估值共用同一个上游预算与请求缓存。
+    const gate = services?.gate || new GateClient(now);
+    const ashare = services?.ashare || new AshareClient(gate, now);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
-      if (method === 'POST' && !state.disclaimerAt) throw { status: 403, code: 'disclaimer_required' };
+      if (method === 'POST' && !state.disclaimerAt && !session.apiKey) throw { status: 403, code: 'disclaimer_required' };
       const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order'].includes(route);
       const previous = ordering && state.clientIds.find(entry => entry.clientId === data.clientId);
       // PLATFORM §5.2.4–5：重放不新增委托；每日上限在同一个 etag 事务内检查与增加。

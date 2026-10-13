@@ -6,6 +6,7 @@ import { handleTrade } from './trade/index.js';
 import { regionView } from './trade/fx.js';
 import { auditSave } from './save-audit.js';
 import { manageKeys } from './api-keys.js';
+import { handleAgent } from './agent-api.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -38,6 +39,7 @@ async function body(request) {
 }
 export async function handle(request, env) {
   try {
+    if (new URL(request.url).pathname.startsWith('/api/v1/')) return handleAgent(request, env, body);
     // PLATFORM §6.3–6.4：Bearer只用于Agent接口；带Cookie也不能回退到网页权限。
     if (request.headers.has('Authorization')) {
       return reply(403, { error: 'scope_denied', message: 'API 密钥不能调用此接口' });
@@ -147,7 +149,8 @@ export async function handle(request, env) {
       // 并发写已更新云端时走原冲突流程，不记录对旧版本的误拒绝。
       const latest = await readSave(bucket, user.uid, game);
       if (latest.etag !== current.etag) return reply(409, { error: 'conflict', ...publicSave(latest) });
-      try { await auditSave(bucket, user.uid, game, verdict.reason, now); } catch { /* keep cloud progress */ }
+      try { await auditSave(bucket, user.uid, game, verdict.reason, now); }
+      catch { return reply(503, { error: 'audit_unavailable', message: '审计服务暂时不可用，请稍后再试' }); }
       return reply(422, { error: 'implausible_save', message: '云存档校验未通过，已保留云端进度' });
     }
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };

@@ -44,6 +44,21 @@ export class GateClient {
   spec(symbol) { return this.get('/spot/currency_pairs/' + symbol, {}, 3600); }
   book(symbol) { return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1); }
   ticker(symbol) { return this.get('/spot/tickers', { currency_pair: symbol }, 2); }
+  async preloadTickers(symbols, futures = false) {
+    // PLATFORM §6.4：多资产估值一次批量报价，避免39个市场耗尽每请求30次上游预算。
+    const unique = [...new Set(symbols)];
+    if (!unique.length) return;
+    if (unique.length === 1) { await (futures ? this.futuresTicker(unique[0]) : this.ticker(unique[0])); return; }
+    const path = futures ? '/futures/usdt/tickers' : '/spot/tickers';
+    const field = futures ? 'contract' : 'currency_pair', query = futures ? 'contract' : 'currency_pair';
+    const rows = await this.get(path, {}, 2);
+    if (!Array.isArray(rows)) throw { status: 503, code: 'market_unavailable' };
+    for (const symbol of unique) {
+      const quote = rows.find(row => row[field] === symbol);
+      if (!quote) throw { status: 503, code: 'market_unavailable' };
+      this.pending.set(path + '?' + query + '=' + symbol, Promise.resolve([quote]));
+    }
+  }
   candles(symbol, interval, from, to) {
     const ttl = to < Math.floor(this.now / 60000) * 60 ? 300 : 5;
     return this.get('/spot/candlesticks', { currency_pair: symbol, interval, from, to }, ttl);
@@ -52,7 +67,12 @@ export class GateClient {
     return this.get('/spot/trades', { currency_pair: symbol, from, to, limit: 1000, page }, 5);
   }
   contract(symbol) { return this.get('/futures/usdt/contracts/' + symbol, {}, 3600); }
-  futuresBook(symbol) { return this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1); }
+  async futuresBook(symbol) {
+    const book = await this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1);
+    // PLATFORM §5.2.2 / §6.4：真实合约current是带小数的Unix秒，读取边界统一为毫秒再查10秒新鲜度。
+    const current = Number(book.current);
+    return { ...book, current: current > 0 && current < 1e11 ? current * 1000 : book.current };
+  }
   futuresTicker(symbol) { return this.get('/futures/usdt/tickers', { contract: symbol }, 2); }
   futuresCandles(symbol, interval, from, to, mark = false) {
     const ttl = to < Math.floor(this.now / 60000) * 60 ? 300 : 5;

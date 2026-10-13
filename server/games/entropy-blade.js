@@ -24,7 +24,7 @@ const count = (save, key) => save?.stats?.[key] || 0;
 const reject = reason => ({ ok: false, reason });
 export function plausible(previous, next, elapsedMs) {
   const runs = count(next, 'runs'), total = count(next, 'crystalsTotal');
-  const reset = counters.every(key => !count(next, key)) && !next.crystals
+  const reset = Object.values(next.stats).every(value => value === 0) && !next.crystals && !next.titles.length
     && !Object.values(next.talents).some(Boolean) && !Object.values(next.heroBest).some(Boolean) && !next.history.length;
   if (reset) return { ok: true };
   // PLATFORM §5.3①④：统计只增；一分钟一局，加三局同步容差，首次仍按零时间。
