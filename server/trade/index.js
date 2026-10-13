@@ -7,6 +7,7 @@ import { readState, updateState, stateView, summary, transfer } from './state.js
 import { checkin } from './checkin.js';
 import { placeOrder, cancelOrder, cancelAll } from './spot.js';
 import { settle } from './settle.js';
+import { marketFor } from './markets.js';
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
@@ -50,14 +51,19 @@ export async function handleTrade(request, env, session, data) {
     }
     const gate = new GateClient(now);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
-      // 本轮验收修正规格 5.5：GET 在副本结算，失败或预算耗尽返回原状态，零账户写入。
+      // 规格 5.3、5.5：先取得本次下单行情，剩余预算留给结算，部分结算后仍能执行操作。
+      if (route === 'spot/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
+        marketFor(data.symbol);
+        await Promise.all([gate.spec(data.symbol), data.type === 'stop_limit'
+          ? gate.ticker(data.symbol) : gate.book(data.symbol)]);
+      }
+      // 规格 5.5：GET 在副本结算；只有真实上游失败才返回原状态并且零账户写入。
       const candidate = method === 'GET' ? structuredClone(state) : state;
       let settlement;
       try {
         settlement = await settle(candidate, gate, now, method === 'POST');
-        if (settlement.partial) throw { status: 503, code: 'upstream_budget' };
       } catch (error) {
-        if (method !== 'GET' || !['market_unavailable', 'upstream_budget'].includes(error?.code)) throw error;
+        if (method !== 'GET' || error?.code !== 'market_unavailable') throw error;
         return { partial: true, stale: true, notices: [] };
       }
       if (method === 'GET') Object.assign(state, candidate);

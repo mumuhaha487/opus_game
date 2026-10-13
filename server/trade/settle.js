@@ -76,21 +76,28 @@ export function processEvent(state, order, event, notices) {
     fillRemainder(state, order, limitPrice, 'maker', event.t, notices);
   }
 }
-async function settleOrder(state, order, gate, now, notices) {
-  const segments = settlementPlan(order.checkFrom, now);
-  // 规格 5.3：同一交易对的不同时间序列并发拉取，随后严格按时间顺序处理。
-  const results = await Promise.allSettled(segments.map(segment => loadSegment(gate, order.symbol, segment)));
-  for (let i = 0; i < segments.length; i++) {
-    const result = results[i], segment = segments[i];
-    if (result.status === 'rejected') {
-      if (result.reason?.code === 'upstream_budget') return true;
-      throw result.reason;
+async function settleSpot(state, gate, now, notices) {
+  const queues = state.orders.filter(order => order.market === 'spot')
+    .map(order => ({ order, segments: settlementPlan(order.checkFrom, now) }));
+  // 规格 5.3、6.5：每轮每张委托只推进一段，让多个交易对共享预算且都能保存进度。
+  while (queues.some(queue => queue.segments.length && queue.order.status !== 'filled')) {
+    const active = queues.filter(queue => queue.segments.length && queue.order.status !== 'filled');
+    const results = await Promise.allSettled(active.map(queue => loadSegment(gate, queue.order.symbol, queue.segments[0])));
+    let partial = false;
+    for (let i = 0; i < active.length; i++) {
+      const { order, segments } = active[i], result = results[i], segment = segments[0];
+      if (result.status === 'rejected') {
+        if (result.reason?.code !== 'upstream_budget') throw result.reason;
+        partial = true; continue;
+      }
+      for (const event of eventsFor(segment, result.value)) {
+        processEvent(state, order, event, notices);
+        if (order.status === 'filled') break;
+      }
+      if (order.status !== 'filled') order.checkFrom = segment.to;
+      segments.shift();
     }
-    for (const event of eventsFor(segment, result.value)) {
-      processEvent(state, order, event, notices);
-      if (order.status === 'filled') return false;
-    }
-    order.checkFrom = segment.to;
+    if (partial) return true;
   }
   return false;
 }
@@ -99,11 +106,9 @@ export async function settle(state, gate, now, force = false) {
   // 本轮验收修正规格 6.5：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
   if (!state.orders.length && !Object.keys(state.futures.positions).length) return { partial: false, notices };
   if (!force && now - (state.lastSettlement || 0) < 2000) return { partial: false, notices };
-  let partial = false;
+  let partial = await settleSpot(state, gate, now, notices);
   const symbols = new Set(state.orders.filter(order => order.market === 'spot').map(order => order.symbol));
   for (const symbol of symbols) {
-    const orders = state.orders.filter(order => order.market === 'spot' && order.symbol === symbol);
-    for (const order of orders) partial = await settleOrder(state, order, gate, now, notices) || partial;
     const pending = state.orders.filter(order => order.symbol === symbol && order.market === 'spot');
     // 规格 6.5.6、5.3：完整结算记 now，部分结算只记录确实处理到的游标。
     state.settledAt['spot:' + symbol] = pending.length ? Math.min(...pending.map(order => order.checkFrom)) : now;
