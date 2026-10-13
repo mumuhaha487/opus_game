@@ -482,3 +482,74 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
 }
 @media (prefers-reduced-motion: reduce) { .rail-indicator { transition: none; } .trade-modal { animation: none; } }
+
+/* DESIGN §4.4、§4.8：总览12列网格，资产4+2+2+2+2，原生余额与换算并列。 */
+.overview-page { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 12px; align-content: start; }
+.overview-wallet { grid-column: span 5; }
+.overview-checkin { grid-column: span 3; }
+.overview-status { grid-column: span 4; }
+.overview-tickers, .overview-holdings { grid-column: span 12; }
+.overview-ashare, .overview-crypto { grid-column: span 6; }
+.overview-tickers { display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); padding: 0; border: 0; gap: 12px; }
+.wallet-total { display: block; font-size: 32px; font-weight: 600; }
+.wallet-statistics { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.wallet-statistics b, .wallet-statistics small { display: block; }
+.card-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.checkin-squares { display: flex; gap: 6px; margin-top: 12px; }
+.checkin-squares span { width: 24px; height: 24px; border-radius: 4px; background: var(--line); flex: none; }
+.checkin-squares .taken { background: var(--gold); }
+.checkin-squares .today { border: 1px solid var(--gold); }
+.ticker-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.ticker-card > span:first-child { display: block; white-space: nowrap; }
+.ticker-card b { display: block; font-size: 18px; margin: 8px 0; }
+.spark { width: 100%; height: 32px; display: block; margin-top: 8px; }
+.ranking-list a { display: grid; grid-template-columns: minmax(0,1fr) 100px 90px; gap: 8px; align-items: center; height: 40px; }
+.ranking-list small { display: block; font-size: 11px; }
+.ranking-list .chg { justify-self: end; }
+.market-status { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  background: var(--surface-2); padding: 6px 12px; }
+.market-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.market-status.open::before { background: var(--green); }
+.market-status.lunch::before { background: var(--amber); }
+.asset-summary { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+.asset-summary .asset-total { grid-column: span 4; }
+.asset-summary .asset-account { grid-column: span 2; padding: 16px; background: var(--surface); }
+.asset-account small { display: block; }
+.assets-page { padding: 0; border: 0; background: transparent; }
+.table-scroll { overflow: auto; }
+.badge-circle { width: 36px; height: 36px; border-radius: 50%; display: inline-flex;
+  align-items: center; justify-content: center; color: white; flex: none; }
+.wallet-chip { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+.header-actions { gap: 12px; font-size: 13px; }
+.header-actions .seg button { padding: 0 8px; font-size: 11px; }
+.rail .avatar, .rail summary { display: flex; width: 32px; height: 32px; background: var(--surface-3);
+  border-radius: 50%; align-items: center; justify-content: center; overflow: hidden; }
+.rail .user-menu div { left: 44px; right: auto; top: 0; }
+.rail-checkin { position: relative; }
+.rail-checkin.unchecked::after { content: ''; width: 6px; height: 6px; background: var(--red);
+  border-radius: 50%; position: absolute; top: 0; right: 0; }
+.disclaimer-copy { font-size: 14px; line-height: 1.8; }
+.consent-label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.trade-modal .primary:disabled { opacity: 0.45; }
+.transfer-accounts label { flex: 1; min-width: 0; }
+.transfer-accounts select { display: block; width: 100%; height: 44px; margin-top: 6px; }
+.modal-field input { height: 44px; background: var(--surface-2); border-color: var(--line-2); }
+.transfer-preview { padding: 12px; background: var(--surface-3); border-radius: 8px; }
+@media (min-width: 768px) and (max-width: 1199px) {
+  .overview-wallet { grid-column: span 6; } .overview-checkin, .overview-status { grid-column: span 3; }
+  .checkin-squares { gap: 3px; } .checkin-squares span { width: 18px; height: 18px; }
+  .overview-tickers { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .asset-summary .asset-total { grid-column: span 12; } .asset-summary .asset-account { grid-column: span 3; }
+  .global-search { width: 280px; }
+}
+@media (max-width: 767px), (max-height: 499px) {
+  .overview-page { display: flex; flex-direction: column; }
+  .overview-tickers { display: flex; overflow-x: auto; }
+  .ticker-card { min-width: 140px; }
+  .asset-summary { grid-template-columns: 1fr 1fr; }
+  .asset-summary .asset-total { grid-column: span 2; } .asset-summary .asset-account { grid-column: span 1; }
+  .header-actions .seg, .top .checkin-button, .wallet-chip > span { display: none; }
+  .mobile-account { min-height: 44px; }
+  .top .wallet-chip { height: 44px; }
+}

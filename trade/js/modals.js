@@ -3,27 +3,67 @@
 // GameAccount 负责认证，密码只在本次提交中使用。
 import { element, button, money, number } from './format.js';
 import { positionMetrics, markFor } from './futures.js';
+import { ACCOUNTS, availableFunds, transferEstimate } from './wallet.js';
 export class Modals {
   constructor(api) {
     this.api = api; this.dialog = document.getElementById('modal'); this.content = document.getElementById('modal-content');
-    this.dialog.addEventListener('click', event => { if (event.target === this.dialog) this.dialog.close(); });
+    this.dialog.addEventListener('click', event => { if (event.target === this.dialog && !this.locked) this.dialog.close(); });
+    this.dialog.addEventListener('cancel', event => { if (this.locked) event.preventDefault(); });
     this.dialog.addEventListener('close', () => {
       for (const input of this.content.querySelectorAll('input[type=password]')) input.value = '';
     });
   }
   toast(text, error = false) {
-    const box = document.getElementById('toasts'), node = element('div', '', 'toast');
+    const box = document.getElementById('toasts'), node = element('div', '', 'toast' + (error ? ' error' : ''));
     node.append(element('span', error ? '×' : '✓', error ? 'down' : 'up'), element('span', text));
     box.append(node); while (box.children.length > 3) box.firstChild.remove(); setTimeout(() => node.remove(), 3000);
   }
   error(error) { this.toast(error.data?.message || GameAccount.errorText(error), true); }
   open(title) {
+    if (this.locked) return this.content;
     this.dialog.classList.toggle('checkin-modal', title === '每日签到');
     this.content.replaceChildren();
     const header = element('div', '', 'modal-header'); header.append(element('h2', title), button('×', () => this.dialog.close()));
     this.content.append(header); if (!this.dialog.open) this.dialog.showModal(); return this.content;
   }
   focus() { (this.content.querySelector('input') || this.content.querySelector('.primary'))?.focus(); }
+  disclaimer() {
+    if (this.consent) return this.consent;
+    // PLATFORM §4：逐字文案，禁止Esc/遮罩关闭；服务器确认跨设备有效。
+    const box = this.open('使用须知'); this.locked = true;
+    box.querySelector('.modal-header button').hidden = true;
+    this.dialog.classList.add('disclaimer-modal');
+    const copy = element('p', '', 'disclaimer-copy');
+    copy.append(document.createTextNode('模拟交易所使用真实行情数据，所有资产均为模拟资产，'),
+      element('strong', '仅供教学与练习，不是真实证券或数字资产，不构成任何投资建议，不能用于实际开户、入金或交易。'),
+      document.createTextNode(' 行情数据来自 Gate.io、腾讯财经、东方财富等公开接口，可能存在延迟或中断。'));
+    const label = element('label', '我已阅读并理解以上内容', 'consent-label'), checkbox = element('input');
+    checkbox.type = 'checkbox'; label.prepend(checkbox);
+    const submit = button('进入交易所', null, 'primary'); submit.disabled = true;
+    const errorText = element('p', '', 'down'); box.append(copy, label, submit, errorText);
+    checkbox.onchange = () => { submit.disabled = !checkbox.checked; };
+    this.consent = new Promise(resolve => {
+      submit.onclick = async () => {
+        if (!checkbox.checked || submit.disabled) return; submit.disabled = true;
+        try {
+          if (this.api.logged()) await this.api.post('disclaimer', {});
+          try { localStorage.setItem('gameinc_disclaimer_v1', '1'); } catch { /* unavailable */ }
+          this.locked = false; this.consent = null; this.dialog.classList.remove('disclaimer-modal');
+          this.dialog.close(); resolve();
+        } catch (error) { errorText.textContent = error.data?.message || GameAccount.errorText(error); submit.disabled = false; }
+      };
+    }); return this.consent;
+  }
+  async initialDisclaimer() {
+    await this.api.refresh();
+    if (this.api.state?.disclaimerAt) {
+      try { localStorage.setItem('gameinc_disclaimer_v1', '1'); } catch { /* unavailable */ }
+      return;
+    }
+    let confirmed = false;
+    try { confirmed = localStorage.getItem('gameinc_disclaimer_v1') === '1'; } catch { /* unavailable */ }
+    if (!confirmed) await this.disclaimer();
+  }
   field(container, label, type = 'text') {
     const field = element('label', label, 'modal-field'), input = element('input');
     input.type = type; input.name = label; input.autocomplete = type === 'password' ? 'current-password' : 'username';
@@ -66,9 +106,10 @@ export class Modals {
     const box = this.open('每日签到'), cards = element('div', '', 'day-cards'), data = state.checkin;
     data.rewards.forEach((reward, index) => {
       const card = element('div', '', 'day-card');
-      const taken = index < data.dayIndex || data.checkedToday && index === data.dayIndex;
-      if (taken) card.classList.add('taken'); else if (index === data.dayIndex) card.classList.add('today');
-      card.append(element('span', '第' + (index + 1) + '天'), element('b', number(reward, 0)), element('small', 'USDT'));
+      const day = data.checkedToday ? data.streak : data.streak + 1;
+      const taken = data.checkedToday ? index < data.streak : index < data.streak;
+      if (taken) card.classList.add('taken'); else if (index === Math.min(6, day - 1)) card.classList.add('today');
+      card.append(element('span', '第' + (index + 1) + '天'), element('b', this.wallet.display(+reward)));
       if (taken) card.append(element('i', '✓', 'up')); cards.append(card);
     });
     box.append(cards);
@@ -76,35 +117,49 @@ export class Modals {
       submit.disabled = true;
       try {
         const result = await this.api.post('checkin', {});
-        this.toast('签到成功，+' + number(result.reward, 0) + ' USDT'); await this.checkin();
+        this.toast('签到成功，+' + this.wallet.display(+result.reward)); await this.checkin();
       } catch (error) { this.error(error); submit.disabled = false; }
     }, 'primary'); submit.disabled = data.checkedToday; box.append(submit);
-    box.append(element('p', `已连续签到 ${data.streak} 天 · 奖励发放到现货账户 · 断签后从第 1 天重新开始`, 'muted'));
+    box.append(element('p', '连续签到奖励逐日递增，第 7 天起每天 ' + this.wallet.display(+data.cap)
+      + '，断签后从第 1 天重新开始。奖励进入账号钱包。', 'muted'));
     this.focus();
   }
-  async transfer() {
+  async transfer(defaultFrom = 'wallet', defaultTo = 'ashare') {
     if (!this.api.logged()) { this.login(); return; }
-    if (!this.api.state) await this.api.refresh(); if (!this.api.state) return;
-    const box = this.open('划转'); let from = 'spot';
-    const accounts = element('div', '', 'transfer-accounts'), source = element('div'), target = element('div');
-    const available = element('p', '', 'muted');
-    const repaint = () => {
-      source.textContent = '从 ' + (from === 'spot' ? '现货账户' : '合约账户');
-      target.textContent = '到 ' + (from === 'spot' ? '合约账户' : '现货账户');
-      available.textContent = '可划转 ' + money(funds()) + ' USDT';
-    };
-    const funds = () => from === 'spot' ? this.api.state.spot.balances.find(entry => entry.asset === 'USDT')?.free || '0'
-      : this.api.state.futures.wallet;
-    accounts.append(source, button('⇅', () => { from = from === 'spot' ? 'futures' : 'spot'; repaint(); }), target);
-    box.append(accounts, element('p', 'USDT'));
-    const amount = this.field(box, '数量'); amount.autocomplete = 'off'; amount.inputMode = 'decimal';
-    amount.parentElement.append(button('全部', () => { amount.value = funds(); })); box.append(available);
+    await this.api.refresh(); await this.wallet.refresh(); if (!this.api.state) return;
+    const box = this.open('划转'), accounts = element('div', '', 'transfer-accounts');
+    const from = element('select'), to = element('select');
+    for (const [select, label] of [[from, '从'], [to, '到']]) {
+      select.setAttribute('aria-label', label);
+      for (const [id, name, unit] of ACCOUNTS) {
+        const option = element('option', name + ' (' + unit + ')'); option.value = id; select.append(option);
+      }
+      const field = element('label', label); field.append(select); accounts.append(field);
+    }
+    from.value = defaultFrom; to.value = defaultTo; box.append(accounts);
+    const amount = this.field(box, '金额'); amount.autocomplete = 'off'; amount.inputMode = 'decimal';
+    const available = element('p', '', 'muted'), preview = element('div', '', 'transfer-preview');
+    const funds = () => availableFunds(this.api.state, from.value);
+    const unit = account => ACCOUNTS.find(([id]) => id === account)[2];
     const submit = button('确认划转', async () => {
       submit.disabled = true;
-      try { await this.api.post('transfer', { from, to: from === 'spot' ? 'futures' : 'spot', amount: amount.value });
-        this.dialog.close(); }
-      catch (error) { this.error(error); } finally { submit.disabled = false; }
-    }, 'primary'); box.append(submit); repaint(); this.focus();
+      try {
+        await this.api.post('transfer', { from: from.value, to: to.value, amount: amount.value }); this.dialog.close();
+      } catch (error) { this.error(error); } finally { repaint(); }
+    }, 'primary');
+    const repaint = () => {
+      available.textContent = '可划转 ' + money(funds()) + ' ' + unit(from.value);
+      const estimate = transferEstimate(amount.value, from.value, to.value, this.wallet.rate);
+      const exchanging = [from.value, to.value].includes('ashare');
+      preview.replaceChildren();
+      if (exchanging) preview.append(element('p', this.wallet.rate ? '汇率 1 USD = ' + this.wallet.rate + ' CNY' : '汇率暂时不可用'),
+        element('p', '换汇费 0.2% · ' + (estimate?.fee || '--') + ' ' + unit(from.value)));
+      preview.append(element('p', '预计到账 ' + (estimate?.received || '--') + ' ' + unit(to.value)));
+      submit.disabled = !estimate || Number(amount.value) > Number(funds());
+    };
+    amount.parentElement.append(button('全部', () => { amount.value = funds(); repaint(); }));
+    from.onchange = to.onchange = amount.oninput = repaint;
+    box.append(available, preview, submit); repaint(); this.focus();
   }
   action(box, text, run) {
     const submit = button(text, async () => {

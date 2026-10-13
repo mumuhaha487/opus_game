@@ -13,12 +13,19 @@ import { Orders } from './orders.js';
 import { Assets } from './assets.js';
 import { Modals } from './modals.js';
 import { Navigation } from './navigation.js';
+import { AshareFeed } from './ashare/feed.js';
+import { WalletView } from './wallet.js';
+import { Overview } from './overview.js';
+import { segment } from './ui.js';
 import { element, button, icon, gift, price, percent, quantity, large, countdown, direction } from './format.js';
 const node = id => document.getElementById(id);
 const feed = new Feed();
+const ashare = new AshareFeed(() => { feed.dirty = true; });
+const wallet = new WalletView(() => { feed.dirty = true; });
 let modals;
 const api = new TradeApi(() => { feed.dirty = true; }, text => modals.toast(text));
 modals = new Modals(api);
+modals.wallet = wallet; api.onDisclaimer = () => modals.disclaimer();
 const spot = new Spot(node('spot-form'), feed, api, modals);
 const futures = new Futures(node('futures-form'), feed, api, modals);
 const book = new Book(node('book'), feed, value => (feed.market === 'spot' ? spot : futures).setPrice(value));
@@ -26,7 +33,7 @@ const tape = new Tape(node('tape'), feed);
 const side = new MarketList(node('side'), feed);
 const markets = new MarketList(node('markets-page'), feed, true);
 const orders = new Orders(node('orders'), feed, api, modals);
-const assets = new Assets(node('assets-page'), feed, api, modals);
+const assets = new Assets(node('assets-page'), feed, api, modals, ashare, wallet, hash => navigation.go(hash));
 const chart = new Chart(node('chart'), feed, interval => feed.activate(feed.market, feed.symbol, interval), toggleChart);
 const NAVIGATION = [['overview', '总览'], ['ashare', 'A股'], ['crypto', '加密'],
   ['futures', '合约'], ['assets', '资产'], ['api', 'API']];
@@ -40,7 +47,7 @@ const NAV_ICONS = [
 let page = 'overview', picker, pickerList, accountSignature = '';
 const navigation = new Navigation({ overview: node('overview-page'), ashare: node('ashare-page'),
   crypto: node('markets-page'), assets: node('assets-page'), desk: node('desk'), stock: node('stock-page') }, route);
-node('overview-page').append(element('span', 'WALLET', 'px-label'), element('h1', '总览'));
+const overview = new Overview(node('overview-page'), feed, ashare, api, modals, wallet, hash => navigation.go(hash));
 node('ashare-page').append(element('span', 'SCREENER', 'px-label'), element('h1', 'A 股行情'));
 const barElements = createBar();
 for (const id of ['desktop-nav', 'mobile-nav']) NAVIGATION.forEach(([route, label], index) => {
@@ -83,12 +90,18 @@ function openPicker() {
 }
 function closePicker() { picker?.remove(); picker = null; pickerList = null; }
 function header() {
-  const signature = JSON.stringify([GameAccount.profile(), api.state?.checkin.checkedToday]);
+  const signature = JSON.stringify([GameAccount.profile(), api.state?.checkin.checkedToday, api.state?.wallet,
+    wallet.currency, wallet.rate]);
   if (signature === accountSignature) return; accountSignature = signature;
   const checkin = button('', () => modals.checkin(), 'checkin-button');
   checkin.append(gift(), element('span', '每日签到'));
   checkin.classList.toggle('unchecked', !api.state?.checkin.checkedToday);
-  const controls = [checkin], profile = GameAccount.profile();
+  const chip = element('a', '', 'wallet-chip'); chip.href = '#/assets';
+  chip.append(element('span', '钱包', 'muted'), element('b', wallet.display(+(api.state?.wallet.usd || 0))));
+  const currency = segment([['CNY', 'CNY'], ['USD', 'USD']], value => wallet.select(value), wallet.currency || 'USD');
+  const controls = [chip, currency, checkin], profile = GameAccount.profile();
+  const railControls = [button('签到', () => modals.checkin(), 'rail-checkin')];
+  railControls[0].classList.toggle('unchecked', !api.state?.checkin.checkedToday);
   if (profile) {
     const menu = element('details', '', 'user-menu'), options = element('div'); menu.append(element('summary', profile.name));
     for (const [label, target] of [['资产', '#/assets'], ['返回游戏汇总', '../index.html']]) {
@@ -96,10 +109,15 @@ function header() {
     }
     options.append(button('退出登录', async () => {
       try { await GameAccount.logout(); api.accountChanged(); } catch (error) { modals.error(error); }
-    })); menu.append(options); controls.push(menu);
-  } else controls.push(button('登录', () => modals.login()), button('注册', () => modals.login(true), 'primary'));
-  const hub = element('a', '游戏汇总', 'muted'); hub.href = '../index.html'; controls.push(hub);
+    })); menu.append(options); controls.push(menu); railControls.push(menu.cloneNode(true));
+    // 克隆菜单不复制事件，顶部账号菜单直接移入rail；手机保留顶部登录入口。
+    railControls.pop(); railControls.push(menu);
+  } else {
+    controls.push(button('登录', () => modals.login(), 'mobile-account'));
+    railControls.push(button('登录', () => modals.login(), 'avatar'));
+  }
   node('header-actions').replaceChildren(...controls);
+  node('rail-actions').replaceChildren(...railControls);
 }
 function createBar() {
   const pair = element('div', '', 'pair-control');
@@ -177,6 +195,7 @@ async function route() {
     navigation.go('#/overview'); return;
   }
   closePicker(); closeChart(); page = requested;
+  ashare.configure(page, page === 'stock' ? symbol : null, api.state?.ashare.holdings.map(row => row.code) || []);
   navigation.show(marketPage ? 'desk' : page, page);
   node('spot-form').hidden = page === 'futures'; node('futures-form').hidden = page !== 'futures';
   for (const link of document.querySelectorAll('[data-route]')) {
@@ -202,6 +221,7 @@ function renderFrame(timestamp) {
     lastRender = timestamp; feed.dirty = false;
     header(); status();
     if (page === 'crypto') markets.render();
+    else if (page === 'overview') overview.render(api.state);
     else if (page === 'assets') assets.render(api.state);
     else if (['spot', 'futures'].includes(page)) {
       bar(); book.render(); chart.render(api.state); tape.render(api.state); side.render();
@@ -223,3 +243,6 @@ window.addEventListener('resize', () => {
 });
 setInterval(() => { feed.dirty = true; }, 1000);
 route(); api.refresh(); requestAnimationFrame(renderFrame);
+modals.initialDisclaimer().then(() => {
+  if (location.hash.includes('checkin=1')) modals.checkin();
+});

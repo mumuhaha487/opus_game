@@ -36,7 +36,15 @@ export class TradeApi {
   }
   async post(path, data) {
     const generation = this.generation;
-    const result = await GameAccount.request('/api/trade/' + path, 'POST', data);
+    let result;
+    try { result = await GameAccount.request('/api/trade/' + path, 'POST', data); }
+    catch (error) {
+      // PLATFORM §4：拒绝发生在交易前，确认同一个声明后保留原委托参数与clientId再提交。
+      if (error.data?.error !== 'disclaimer_required' || !this.onDisclaimer) throw error;
+      await this.onDisclaimer();
+      if (generation !== this.generation) throw error;
+      result = await GameAccount.request('/api/trade/' + path, 'POST', data);
+    }
     if (generation === this.generation) { this.historyCache.clear(); this.apply(result); }
     return result;
   }
