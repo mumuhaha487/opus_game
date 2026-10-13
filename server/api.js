@@ -5,6 +5,7 @@ import { likeable, getLikes, addLike } from './likes.js';
 import { handleTrade } from './trade/index.js';
 import { regionView } from './trade/fx.js';
 import { auditSave } from './save-audit.js';
+import { manageKeys } from './api-keys.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -37,6 +38,10 @@ async function body(request) {
 }
 export async function handle(request, env) {
   try {
+    // PLATFORM §6.3–6.4：Bearer只用于Agent接口；带Cookie也不能回退到网页权限。
+    if (request.headers.has('Authorization')) {
+      return reply(403, { error: 'scope_denied', message: 'API 密钥不能调用此接口' });
+    }
     // PLATFORM §2.3：公开只读地区接口，地区只决定显示货币。
     if (new URL(request.url).pathname === '/api/region') {
       if (request.method !== 'GET') return fail(405, 'method_not_allowed', { Allow: 'GET' });
@@ -56,8 +61,10 @@ export async function handle(request, env) {
     const likeMatch = /^\/api\/like\/([a-z0-9-]{1,32})$/.exec(path);
     const liked = likeMatch && likeable(likeMatch[1]) ? likeMatch[1] : null;
     const trading = path.startsWith('/api/trade/');
+    const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/revoke': 'POST', '/api/keys/log': 'GET' };
+    const managingKeys = Object.hasOwn(keyMethods, path);
     const allow = trading ? method
-      : game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;
+      : managingKeys ? keyMethods[path] : game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;
     if (!allow) return fail(404, path.startsWith('/api/save/') || path.startsWith('/api/like/') ? 'unknown_game' : 'not_found');
     if (!allow.split(', ').includes(method)) return fail(405, 'method_not_allowed', { Allow: allow });
     const data = method === 'POST' || method === 'PUT' ? await body(request) : null;
@@ -107,6 +114,10 @@ export async function handle(request, env) {
     const session = await verifySession(request, env);
     if (!session) return fail(401, 'unauthorized', { 'Set-Cookie': sessionCookie('', true) });
     if (trading) return handleTrade(request, env, session, data);
+    if (managingKeys) {
+      const result = await manageKeys(request, env, session, data);
+      return reply(result.status, result.body, result.headers);
+    }
     const user = session.user;
     if (path === '/api/me') {
       const headers = session.expires - Date.now() / 1000 < 1296000 ? { 'Set-Cookie': sessionCookie(await signSession(user, env.AUTH_SECRET)) } : {};
@@ -144,6 +155,9 @@ export async function handle(request, env) {
     if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
     return reply(200, { rev: next.rev, updated: next.updated });
   } catch (e) {
+    if (new URL(request.url).pathname.startsWith('/api/keys') && e?.code) {
+      return reply(e.status || 503, { error: e.code, message: e.message || '请求格式错误' });
+    }
     if (new URL(request.url).pathname.startsWith('/api/trade/') && e?.code === 'bad_request') {
       return reply(e.status, { error: e.code, message: '请求格式错误' });
     }

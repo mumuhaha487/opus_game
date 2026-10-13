@@ -12,10 +12,15 @@ export async function rateWindow(bucket, kind, key, seconds, limit, count = fals
   const now = Math.floor(Date.now() / 1000), window = Math.floor(now / seconds);
   const hash = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(kind + ':' + key))));
   const path = `rl/${kind}/${hash}/${window}`;
-  const object = await bucket.get(path);
-  const n = object ? Number(await object.text()) || 0 : 0;
   const retryAfter = seconds - now % seconds;
-  if (n >= limit) return retryAfter;
-  if (count) await bucket.put(path, String(n + 1));
-  return 0;
+  // PLATFORM §6.5：跨isolate硬上限以R2条件写计数；并发冲突重读，耗尽重试时拒绝。
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const object = await bucket.get(path);
+    const n = object ? Number(await object.text()) || 0 : 0;
+    if (n >= limit) return retryAfter;
+    if (!count) return 0;
+    const onlyIf = object ? { etagMatches: object.etag } : absent();
+    if (await bucket.put(path, String(n + 1), { onlyIf })) return 0;
+  }
+  return retryAfter;
 }
