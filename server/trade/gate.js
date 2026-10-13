@@ -5,7 +5,8 @@ import { cacheIsFresh } from './upstream.js';
 export function assertBookFresh(book, now) {
   // PLATFORM §5.2.2：盘口 current 为毫秒；缺失、无效、超过 10 秒或远未来均不可成交。
   const time = typeof book?.current === 'number' || typeof book?.current === 'string' ? Number(book.current) : NaN;
-  if (!Number.isFinite(time) || time <= 0 || Math.abs(now - time) > 10000) {
+  const maxAge = book?.bookSource === 'ws' ? 3000 : 10000;
+  if (!Number.isFinite(time) || time <= 0 || Math.abs(now - time) > maxAge) {
     throw { status: 503, code: 'market_stale' };
   }
 }
@@ -47,6 +48,77 @@ export class GateClient {
   }
   spec(symbol) { return this.get('/spot/currency_pairs/' + symbol, {}, 3600); }
   book(symbol, fresh = false) { return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1, fresh); }
+  executionBook(symbol) {
+    // 第五轮 WS 修复 / PLATFORM §5.2.2：现货 REST 可能滞后，同一调用每个交易对只取一次 WS 快照。
+    const key = 'execution-book:' + symbol;
+    if (!this.pending.has(key)) this.pending.set(key, this.loadExecutionBook(symbol));
+    return this.pending.get(key);
+  }
+  async loadExecutionBook(symbol) {
+    try { return await this.websocketBook(symbol); }
+    catch (error) {
+      if (error?.code === 'upstream_budget') throw error;
+      const book = await this.book(symbol, true);
+      assertBookFresh(book, Date.now());
+      return { ...book, bookSource: 'rest' };
+    }
+  }
+  websocketBook(symbol) {
+    // TRADE §5.3：升级连接也占一次上游预算；四秒包含握手和等待快照，终态关闭连接。
+    if (this.used >= (this.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
+    this.used++;
+    const controller = new AbortController();
+    return new Promise((resolve, reject) => {
+      let socket, settled = false;
+      const close = () => { try { socket?.close(1000, 'snapshot complete'); } catch {} };
+      const finish = (book, error) => {
+        if (settled) return;
+        settled = true; clearTimeout(timer);
+        socket?.removeEventListener('message', message);
+        socket?.removeEventListener('error', failed);
+        socket?.removeEventListener('close', failed);
+        if (error) controller.abort();
+        close();
+        if (error) reject(error); else resolve(book);
+      };
+      const failed = () => finish(null, { status: 503, code: 'market_unavailable' });
+      const message = event => {
+        try {
+          const data = JSON.parse(event.data), result = data.result;
+          if (data.error) { failed(); return; }
+          if (data.channel !== 'spot.order_book' || data.event !== 'update') return;
+          if (result?.s && result.s !== symbol) return;
+          if (!Array.isArray(result?.bids) || !result.bids.length || !Array.isArray(result?.asks) || !result.asks.length) return;
+          const levels = rows => rows.map(row => {
+            const price = String(Array.isArray(row) ? row[0] : row.p), size = String(Array.isArray(row) ? row[1] : row.s);
+            if (!Number.isFinite(Number(price)) || Number(price) <= 0 || !Number.isFinite(Number(size)) || Number(size) <= 0) {
+              throw Error('invalid level');
+            }
+            return [price, size];
+          });
+          const current = Number(result.t), age = Date.now() - current;
+          if (!Number.isFinite(current) || current <= 0 || age < 0 || age > 3000) {
+            finish(null, { status: 503, code: 'market_stale' }); return;
+          }
+          finish({ bids: levels(result.bids), asks: levels(result.asks), current, bookSource: 'ws' });
+        } catch { failed(); }
+      };
+      const timer = setTimeout(failed, 4000);
+      Promise.resolve().then(() => fetch('https://api.gateio.ws/ws/v4/', {
+        headers: { Upgrade: 'websocket' }, signal: controller.signal,
+      })).then(response => {
+        socket = response.webSocket;
+        if (!socket) { failed(); return; }
+        socket.accept();
+        if (settled) { close(); return; }
+        socket.addEventListener('message', message);
+        socket.addEventListener('error', failed);
+        socket.addEventListener('close', failed);
+        socket.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: 'spot.order_book', event: 'subscribe',
+          payload: [symbol, '50', '100ms'] }));
+      }).catch(failed);
+    });
+  }
   ticker(symbol, fresh = false) { return this.get('/spot/tickers', { currency_pair: symbol }, 2, fresh); }
   async preloadTickers(symbols, futures = false) {
     // PLATFORM §6.4：多资产估值一次批量报价，避免39个市场耗尽每请求30次上游预算。

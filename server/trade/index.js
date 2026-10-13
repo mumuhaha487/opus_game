@@ -96,7 +96,7 @@ export async function handleTrade(request, env, session, data, services) {
       if (route === 'spot/order' && !state.clientIds.some(entry => entry.clientId === data.clientId)) {
         marketFor(data.symbol);
         await Promise.all([gate.spec(data.symbol), data.type === 'stop_limit'
-          ? gate.ticker(data.symbol, true) : gate.book(data.symbol, true)]);
+          ? gate.ticker(data.symbol, true) : gate.executionBook(data.symbol)]);
       }
       if (route.startsWith('futures/') && route !== 'futures/cancel') {
         marketFor(data.symbol);
@@ -139,10 +139,12 @@ export async function handleTrade(request, env, session, data, services) {
       if (ordering) state.agent = { ...state.agent, day, ordersToday: ordersToday + 1 };
       return { ...settlement, order, reward, transferred };
     }, now);
+    const { bookSource, ...order } = result.order || {};
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),
       ...result.transferred,
       ...(result.stale ? { stale: true } : {}),
-      ...(result.order ? { order: result.order } : {}), ...(result.reward ? { reward: result.reward } : {}) });
+      ...(result.order ? { order, ...(bookSource ? { bookSource } : {}) } : {}),
+      ...(result.reward ? { reward: result.reward } : {}) });
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';
     const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT`

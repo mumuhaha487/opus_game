@@ -70,8 +70,8 @@ async function quoteView(url, gate, ashare, now) {
   const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
   if (market === 'crypto') {
     marketFor(symbol);
-    const [ticker, book] = await Promise.all([gate.ticker(symbol), gate.book(symbol)]);
-    assertBookFresh(book, now);
+    const [ticker, book] = await Promise.all([gate.ticker(symbol), gate.executionBook(symbol)]);
+    assertBookFresh(book, Date.now());
     return { market, symbol, last: toStr(positivePrice(ticker[0]?.last)),
       bid: book.bids[0]?.[0] || '0', ask: book.asks[0]?.[0] || '0', time: Number(book.current) };
   }

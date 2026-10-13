@@ -106,22 +106,25 @@ export async function placeOrder(state, data, gate, now) {
   const specification = await gate.spec(data.symbol), values = validateOrder(data, specification);
   if (state.orders.length >= 50) failure('too_many_orders');
   const order = createOrder(state, data, now);
+  let bookSource;
   if (data.type === 'stop_limit') {
     checkNotional(mul(values.price, values.qty, 'floor'), specification);
     const tickers = await gate.ticker(data.symbol, true), latest = parse(tickers[0]?.last);
     // 规格 6.6：触发方向只依据服务端从 Gate.io 读取的最新价。
     order.stopDir = parse(data.stopPrice) > latest ? 'up' : 'down';
     freezeOrder(state, order, values); state.orders.push(order);
-  } else await placeBookOrder(state, order, values, specification, gate, now);
+  } else bookSource = await placeBookOrder(state, order, values, specification, gate, now);
   const result = structuredClone(order);
+  // 第五轮 WS 修复：来源只随下单结果返回，订单本体和历史记录不保存调试字段。
+  if (bookSource) result.bookSource = bookSource;
   state.clientIds.unshift({ clientId: data.clientId, result });
   return result;
 }
 async function placeBookOrder(state, order, values, specification, gate, now) {
   // 第五轮修复 / TRADE §6.3：金额市价委托检查原始 quoteQty，数量取整不能降低委托门槛。
   if (values.quoteOrder) checkNotional(values.quoteQty, specification);
-  const book = await gate.book(order.symbol, true);
-  assertBookFresh(book, now);
+  const book = await gate.executionBook(order.symbol);
+  assertBookFresh(book, Date.now());
   const match = eatBook(book, order.side, values.qty, values.quoteQty, Number(specification.amount_precision), values.price);
   if (order.type === 'limit') {
     checkNotional(mul(values.price, values.qty, 'floor'), specification);
@@ -143,6 +146,7 @@ async function placeBookOrder(state, order, values, specification, gate, now) {
     // 规格 6.3：深度不足只成交可吃到的部分，余量取消。
     completeOrder(state, order, finished ? 'filled' : 'partial_canceled', now);
   } else if (match.filled === values.qty) completeOrder(state, order, 'filled', now);
+  return book.bookSource;
 }
 export function cancelOrder(state, id, now) {
   const order = state.orders.find(entry => entry.id === id && entry.market === 'spot');
