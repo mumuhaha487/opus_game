@@ -10,7 +10,7 @@
 # BUILD_TRADE_CSP
 
 /developer/*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com https://push2his.eastmoney.com https://searchapi.eastmoney.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'
+# BUILD_DEVELOPER_CSP
 
 /hub/*
   Cache-Control: public, max-age=0, must-revalidate

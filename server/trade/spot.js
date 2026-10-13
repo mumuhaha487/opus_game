@@ -123,7 +123,11 @@ export async function placeOrder(state, data, gate, now) {
 async function placeBookOrder(state, order, values, specification, gate, now) {
   // 第五轮修复 / TRADE §6.3：金额市价委托检查原始 quoteQty，数量取整不能降低委托门槛。
   if (values.quoteOrder) checkNotional(values.quoteQty, specification);
-  const book = await gate.executionBook(order.symbol);
+  let book = await gate.executionBook(order.symbol);
+  // 第五轮延迟修复：结算可能消耗预取的新鲜度，撮合前最多再取一次，仍共享上游预算。
+  if (Date.now() - Number(book.current) > (book.bookSource === 'ws' ? 2500 : 8000)) {
+    book = await gate.executionBook(order.symbol, { refresh: true });
+  }
   assertBookFresh(book, Date.now());
   const match = eatBook(book, order.side, values.qty, values.quoteQty, Number(specification.amount_precision), values.price);
   if (order.type === 'limit') {

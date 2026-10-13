@@ -1,7 +1,6 @@
 // 已通过全站会话验证的交易 API 路由。
 // 规格 5.1：方法检查、账号限流、统一错误与 no-store 响应。
 // 结算和操作在同一 R2 条件写内提交，summary 只读一次交易文档。
-import { rateWindow } from '../store.js';
 import { dayKey } from '../likes.js';
 import { GateClient } from './gate.js';
 import { readState, updateState, stateView, summary, transfer } from './state.js';
@@ -10,7 +9,7 @@ import { placeOrder, cancelOrder, cancelAll } from './spot.js';
 import { settle } from './settle.js';
 import { marketFor } from './markets.js';
 import { getFx } from './fx.js';
-import { AshareClient } from './ashare-data.js';
+import { AshareClient, validateCode } from './ashare-data.js';
 import { placeAshareOrder, cancelAshareOrder } from './ashare.js';
 import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
@@ -43,6 +42,43 @@ function reply(status, data, headers = {}) {
     'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   } });
 }
+const postStores = new WeakMap();
+async function tradeRate(env, uid, now) {
+  // PLATFORM §5.1 / 第五轮延迟修复：绑定 40/分钟；本地使用与 Agent 相同的 isolate 令牌桶回退。
+  const key = 'trade-post:' + uid, retryAfter = 60 - Math.floor(now / 1000) % 60;
+  if (env.TRADE_RATE?.limit) {
+    try { return (await env.TRADE_RATE.limit({ key })).success ? 0 : retryAfter; } catch { /* isolate fallback */ }
+  }
+  // 本地不同 R2 存储分别维护内存额度；同一存储的网页与 Agent 共享 uid 计数。
+  if (!postStores.has(env.ACCOUNTS)) postStores.set(env.ACCOUNTS, new Map());
+  const postBuckets = postStores.get(env.ACCOUNTS);
+  const previous = postBuckets.get(key) || { tokens: 40, time: now };
+  const tokens = Math.min(40, previous.tokens + Math.max(0, now - previous.time) * 40 / 60000);
+  postBuckets.set(key, { tokens: tokens >= 1 ? tokens - 1 : tokens, time: now });
+  if (postBuckets.size > 10000) for (const [name, value] of postBuckets) if (now - value.time > 120000) postBuckets.delete(name);
+  return tokens >= 1 ? 0 : retryAfter;
+}
+function prefetch(route, data, gate, ashare) {
+  // 第五轮延迟修复：验证符号后才发起上游，与 R2 状态读取并行；回调共享这些 promise 与预算。
+  try {
+    if (route === 'ashare/order') {
+      validateCode(data.code);
+      ashare.quotes([data.code, 'sh000001'], true).catch(() => {});
+    } else if (route === 'spot/order') {
+      marketFor(data.symbol);
+      Promise.all([gate.spec(data.symbol), data.type === 'stop_limit'
+        ? gate.ticker(data.symbol, true) : gate.executionBook(data.symbol)]).catch(() => {});
+    } else if (route.startsWith('futures/') && route !== 'futures/cancel') {
+      marketFor(data.symbol);
+      const reads = [gate.contract(data.symbol)];
+      if (route !== 'futures/leverage') reads.push(gate.futuresTicker(data.symbol, true));
+      if (['futures/order', 'futures/close'].includes(route) && data.type !== 'stop_market') {
+        reads.push(gate.futuresBook(data.symbol, true));
+      }
+      Promise.all(reads).catch(() => {});
+    }
+  } catch { /* Invalid symbols are rejected by the existing action validation without prefetch. */ }
+}
 export async function handleTrade(request, env, session, data, services) {
   const url = new URL(request.url), route = url.pathname.slice('/api/trade/'.length);
   if (!Object.hasOwn(ROUTES, route)) return reply(404, { error: 'not_found', message: MESSAGES.not_found });
@@ -54,7 +90,7 @@ export async function handleTrade(request, env, session, data, services) {
   try {
     // 本轮验收修正规格 5.1：仅 POST 计数，60 秒共 40 次；GET 不写限流文档。
     if (method === 'POST') {
-      const retryAfter = await rateWindow(env.ACCOUNTS, 'trade-post', uid, 60, 40, true);
+      const retryAfter = await tradeRate(env, uid, now);
       if (retryAfter) return reply(429, { error: 'rate_limited', message: MESSAGES.rate_limited, retryAfter },
         { 'Retry-After': String(retryAfter) });
     }
@@ -70,6 +106,7 @@ export async function handleTrade(request, env, session, data, services) {
     // PLATFORM §6.4：Agent结算、操作和估值共用同一个上游预算与请求缓存。
     const gate = services?.gate || new GateClient(now);
     const ashare = services?.ashare || new AshareClient(gate, now);
+    prefetch(route, data, gate, ashare);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }

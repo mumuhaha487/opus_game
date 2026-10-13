@@ -114,16 +114,25 @@ for (const name of siteFiles) {
 }
 // PLATFORM §5.4、ASHARE §6：JSONP搜索只放行明确的东方财富主机；CSP输出必须单行。
 // 源文件使用标记，构建展开，避免新增源代码行超过140字符。
-const tradePolicy = [
-  "default-src 'self'", "script-src 'self' 'unsafe-inline' https://searchapi.eastmoney.com",
-  "connect-src 'self' https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn"
+const beaconScript = 'https://static.cloudflareinsights.com', beaconConnect = 'https://cloudflareinsights.com';
+const connectHosts = 'https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn'
     + ' https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com'
-    + ' https://push2his.eastmoney.com https://searchapi.eastmoney.com',
+    + ' https://push2his.eastmoney.com https://searchapi.eastmoney.com ' + beaconConnect;
+const pagePolicy = trade => [
+  "default-src 'self'", "script-src 'self' 'unsafe-inline' " + beaconScript
+    + (trade ? ' https://searchapi.eastmoney.com' : ''),
+  "connect-src 'self' " + connectHosts,
   "img-src 'self' data:", "style-src 'self' 'unsafe-inline'", "font-src 'self'", "frame-ancestors 'none'",
 ].join('; ');
 const headersPath = path.join(out, '_headers');
 writeFileSync(headersPath, readFileSync(headersPath, 'utf8').replace('# BUILD_TRADE_CSP',
-  '  Content-Security-Policy: ' + tradePolicy));
+  '  Content-Security-Policy: ' + pagePolicy(true)).replace('# BUILD_DEVELOPER_CSP',
+  '  Content-Security-Policy: ' + pagePolicy(false)));
+// 第五轮收尾：两页必须同时允许自动注入的 Web Analytics 脚本和信标，CSP 保持单行。
+const policies = [...readFileSync(headersPath, 'utf8').matchAll(/^  Content-Security-Policy: (.+)$/gm)];
+check(policies.length === 2 && policies.every(([, policy]) => policy.includes(beaconScript) && policy.includes(beaconConnect)),
+  'trade/developer CSP must allow Cloudflare Web Analytics script and beacon');
+if (problems.length) { console.error('Build checks failed:\n- ' + problems.join('\n- ')); process.exit(1); }
 
 // Hash the staged site so unchanged builds keep the same asset URLs.
 const stagedFiles = filesIn(out);

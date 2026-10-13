@@ -16,7 +16,8 @@
   // PLATFORM §6.5 / 第2b轮：每Key每分钟读写各10次；namespace在账号内唯一。
   "ratelimits": [
     { "name": "API_RATE_READ", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
-    { "name": "API_RATE_WRITE", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } }
+    { "name": "API_RATE_WRITE", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } },
+    { "name": "TRADE_RATE", "namespace_id": "2003", "simple": { "limit": 40, "period": 60 } }
   ],
   "routes": [
     { "pattern": "game.inc.re", "custom_domain": true }

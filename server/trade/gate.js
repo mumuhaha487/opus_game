@@ -12,11 +12,12 @@ export function assertBookFresh(book, now) {
 }
 export class GateClient {
   constructor(now = Date.now()) { this.now = now; this.used = 0; this.pending = new Map(); }
-  async get(path, query = {}, ttl = 5, fresh = false) {
+  async get(path, query = {}, ttl = 5, fresh = false, refresh = false) {
     const parameters = new URLSearchParams(Object.entries(query).map(([name, value]) => [name, String(value)]));
     const suffix = path + (parameters.size ? '?' + parameters : '');
     // 第五轮修复 / PLATFORM §5.2.2：成交直连与缓存读取分开复用，直连只共享本请求的结果。
     const pendingKey = (fresh ? 'live:' : '') + suffix;
+    if (refresh) this.pending.delete(pendingKey);
     if (this.pending.has(pendingKey)) return this.pending.get(pendingKey);
     const promise = this.load(suffix, ttl, fresh);
     this.pending.set(pendingKey, promise);
@@ -47,18 +48,20 @@ export class GateClient {
     finally { clearTimeout(timer); }
   }
   spec(symbol) { return this.get('/spot/currency_pairs/' + symbol, {}, 3600); }
-  book(symbol, fresh = false) { return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1, fresh); }
-  executionBook(symbol) {
+  book(symbol, fresh = false, refresh = false) {
+    return this.get('/spot/order_book', { currency_pair: symbol, limit: 100 }, 1, fresh, refresh);
+  }
+  executionBook(symbol, { refresh = false } = {}) {
     // 第五轮 WS 修复 / PLATFORM §5.2.2：现货 REST 可能滞后，同一调用每个交易对只取一次 WS 快照。
     const key = 'execution-book:' + symbol;
-    if (!this.pending.has(key)) this.pending.set(key, this.loadExecutionBook(symbol));
+    if (refresh || !this.pending.has(key)) this.pending.set(key, this.loadExecutionBook(symbol, refresh));
     return this.pending.get(key);
   }
-  async loadExecutionBook(symbol) {
+  async loadExecutionBook(symbol, refresh = false) {
     try { return await this.websocketBook(symbol); }
     catch (error) {
       if (error?.code === 'upstream_budget') throw error;
-      const book = await this.book(symbol, true);
+      const book = await this.book(symbol, true, refresh);
       assertBookFresh(book, Date.now());
       return { ...book, bookSource: 'rest' };
     }
@@ -97,7 +100,7 @@ export class GateClient {
             return [price, size];
           });
           const current = Number(result.t), age = Date.now() - current;
-          if (!Number.isFinite(current) || current <= 0 || age < 0 || age > 3000) {
+          if (!Number.isFinite(current) || current <= 0 || age < -1000 || age > 3000) {
             finish(null, { status: 503, code: 'market_stale' }); return;
           }
           finish({ bids: levels(result.bids), asks: levels(result.asks), current, bookSource: 'ws' });

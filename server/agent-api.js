@@ -70,7 +70,12 @@ async function quoteView(url, gate, ashare, now) {
   const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
   if (market === 'crypto') {
     marketFor(symbol);
-    const [ticker, book] = await Promise.all([gate.ticker(symbol), gate.executionBook(symbol)]);
+    const [ticker, initialBook] = await Promise.all([gate.ticker(symbol), gate.executionBook(symbol)]);
+    let book = initialBook;
+    // 第五轮延迟修复：ticker 等待结束后重查盘口，超过余量时最多强制刷新一次。
+    if (Date.now() - Number(book.current) > (book.bookSource === 'ws' ? 2500 : 8000)) {
+      book = await gate.executionBook(symbol, { refresh: true });
+    }
     assertBookFresh(book, Date.now());
     return { market, symbol, last: toStr(positivePrice(ticker[0]?.last)),
       bid: book.bids[0]?.[0] || '0', ask: book.asks[0]?.[0] || '0', time: Number(book.current) };
