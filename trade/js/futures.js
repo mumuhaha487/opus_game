@@ -27,7 +27,7 @@ const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_market', '条�
 export class Futures {
   constructor(panel, feed, api, modals) {
     Object.assign(this, { feed, api, modals, type: 'limit', fields: {}, side: 'buy' });
-    window.addEventListener('hashchange', () => { this.prefillKey = null; });
+    this.formSymbol = null;
     const sideTabs = segment([['buy', '开多'], ['sell', '开空']], side => { this.side = side; this.render(); });
     sideTabs.classList.add('ticket-sides'); panel.append(sideTabs);
     const tags = element('div', '', 'futures-tags'); this.leverageButton = button('20x', () => modals.leverage(feed));
@@ -105,7 +105,7 @@ export class Futures {
       [...marks.children].forEach((control, index) => control.classList.toggle('selected', +range.value === (index + 1) * 25));
       box.style.setProperty('--slider-fraction', String(Number(range.value) / 100)); this.feed.dirty = true;
     };
-    box.append(range, marks); this.form.append(box);
+    box.append(range, marks); this.form.append(box); this.range = range; this.ratios = box;
   }
   leverage() { return this.api.state?.futures.leverage[this.feed.symbol] || Math.min(20, Number(this.feed.spec?.leverage_max || 20)); }
   orderPrice() {
@@ -127,6 +127,12 @@ export class Futures {
   }
   setPrice(value) { this.setType('limit'); this.fields.price.input.value = value; }
   render() {
+    if (this.formSymbol !== this.feed.symbol) {
+      for (const field of Object.values(this.fields)) field.input.value = '';
+      this.range.value = 0; this.ratios.style.setProperty('--slider-fraction', '0');
+      this.ratios.querySelectorAll('.selected').forEach(control => control.classList.remove('selected'));
+      this.formSymbol = this.feed.symbol; this.prefillKey = null;
+    }
     this.prefillPrice();
     const coin = this.feed.symbol.split('_')[0], logged = this.api.logged(), wallet = this.api.state?.futures.wallet || '0';
     const leverage = this.leverage(); this.leverageButton.textContent = leverage + 'x';

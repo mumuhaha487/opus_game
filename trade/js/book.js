@@ -71,7 +71,7 @@ export class Book {
         select.value = String(this.factor);
       }
     }
-    const headings = feed.mobile() ? ['价格', '数量', '成交额(USDT)'] : ['价格(USDT)', '数量(' + coin + ')', '成交额(USDT)'];
+    const headings = ['价格(USDT)', '数量(' + coin + ')', '成交额(USDT)'];
     this.header.replaceChildren(...headings.map(text => element('span', text)));
     // DESIGN §4.6：电脑端买卖各12档，手机沿用7档。
     const count = feed.mobile() ? 7 : this.view === 'both' ? 12 : 24;

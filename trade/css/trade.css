@@ -481,6 +481,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 .stock-dock.empty-dock > .seg { align-self: stretch; }
 .stock-dock > .seg { background: transparent; }
 .stock-dock .seg button { padding: 0 8px; }
+.stock-dock .seg button small { font-size: inherit; }
 .stock-mobile-actions, .ticket-close, .compact-chart-tabs { display: none; }
 .stock-fullscreen { position: fixed; inset: 0; z-index: 40; border-radius: 0; }
 @media (min-width: 1024px) and (max-width: 1199px) and (min-height: 500px) {
@@ -768,7 +769,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
     height: calc(60px + env(safe-area-inset-bottom)); background: var(--panel); gap: 8px;
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
   .chart-mobile-actions button { flex: 1; height: 44px; }
-  .chart-legend { font-size: 11px; left: 8px; }
+  .chart-legend { left: 8px; right: 64px; font-size: 11px; line-height: 16px; white-space: normal; overflow-wrap: anywhere; }
 
   /* §7：A 股三列列表与个股。热门表的代码移到名称下方，保持 JS 不变。 */
   .ashare-page { padding: 0 4px; }

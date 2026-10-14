@@ -179,13 +179,16 @@ export class Stock {
         button('登录', () => this.modals.login(), 'primary')); return;
     }
     const open = state.openOrders.filter(row => row.market === 'ashare');
-    const tabs = segment([['orders', '当日委托 (' + open.length + ')'], ['holdings', '持仓 (' + state.ashare.holdings.length + ')'],
+    const tabs = segment([['orders', '当日委托'], ['holdings', '持仓'],
       ['trades', '当日成交'], ['history', '历史委托'], ['ledger', '资金流水']], tab => {
       this.tab = tab; this.historyRows = null;
       if (['history', 'ledger'].includes(tab)) this.api.history(tab === 'history' ? 'orders' : 'ledger', 'ashare')
         .then(rows => { this.historyRows = rows; this.renderDock(this.api.state); }).catch(error => this.modals.error(error));
       this.renderDock(this.api.state);
     }, this.tab);
+    [open.length, state.ashare.holdings.length].forEach((count, index) => {
+      tabs.children[index].append(' ', element('small', '(' + count + ')'));
+    });
     const today = new Date(state.serverTime + 28800000).toISOString().slice(0, 10);
     const isToday = value => new Date(value + 28800000).toISOString().slice(0, 10) === today;
     let rows, headings;

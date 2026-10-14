@@ -7,7 +7,7 @@ const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_limit', '条件
 export class Spot {
   constructor(panel, feed, api, modals) {
     this.feed = feed; this.api = api; this.modals = modals; this.type = 'limit'; this.side = 'buy'; this.columns = {};
-    window.addEventListener('hashchange', () => { this.prefillKey = null; });
+    this.formSymbol = null;
     const top = element('div', '', 'form-top'), tabs = element('div', '', 'order-types'); this.tabs = new Map();
     for (const [type, label] of TYPES) {
       const control = button(label, () => this.setType(type)); tabs.append(control); this.tabs.set(type, control);
@@ -111,6 +111,14 @@ export class Spot {
     this.feed.dirty = true;
   }
   render() {
+    if (this.formSymbol !== this.feed.symbol) {
+      for (const column of Object.values(this.columns)) {
+        for (const name of ['stop', 'limit', 'qty', 'amount']) column[name].input.value = '';
+        column.range.value = 0;
+        column.form.querySelectorAll('.ratio-buttons .selected').forEach(control => control.classList.remove('selected'));
+      }
+      this.formSymbol = this.feed.symbol; this.prefillKey = null;
+    }
     this.prefillPrice();
     const coin = this.feed.symbol.split('_')[0], logged = this.api.logged();
     for (const [type, control] of this.tabs) control.classList.toggle('selected', this.type === type);
