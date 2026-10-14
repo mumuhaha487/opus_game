@@ -299,7 +299,7 @@ UI.leaveHome = async function () {
   finally { clearTimeout(timeout); location.href = '/'; }
 };
 UI.askHome = function (playing = false) {
-  this.confirm = { text: playing ? '放弃本局并返回主页？本局进度不保留。' : '返回 GAME.INC.RE 主页？',
+  this.confirm = { text: playing ? '放弃本局并返回主页？本局进度将丢失（熵晶会保留）。' : '返回 GAME.INC.RE 主页？',
     labels: ['返回', '取消'], sel: 1, yes: () => {
       if (playing) { Save.data.crystals += G.run.crystals; G.overlay = null; }
       this.leaveHome();
