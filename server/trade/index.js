@@ -20,7 +20,7 @@ const ROUTES = {
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
 };
-const MESSAGES = {
+export const MESSAGES = {
   bad_request: '请求格式错误', unknown_symbol: '不支持的交易对', bad_price: '价格不符合精度要求',
   bad_qty: '数量不符合精度要求', insufficient_balance: '可用余额不足', too_many_orders: '当前委托最多 50 笔',
   order_not_found: '委托不存在或已结束', already_checked_in: '今天已经签到过了',

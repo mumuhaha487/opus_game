@@ -3,7 +3,7 @@
 // 账户估值使用服务端可信报价，逐仓亏损以保证金为限；日志仅保存请求元信息。
 import { authenticateKey, requestKeyRate, recordKeyUse } from './api-keys.js';
 import { dailyUsage } from './api-usage.js';
-import { handleTrade } from './trade/index.js';
+import { handleTrade, MESSAGES } from './trade/index.js';
 import { GateClient, assertBookFresh } from './trade/gate.js';
 import { AshareClient, validateCode } from './trade/ashare-data.js';
 import { marketStatus } from './trade/ashare-rules.js';
@@ -215,7 +215,7 @@ export async function handleAgent(request, env, readBody) {
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'server_error';
     response = reply(error?.status === 400 ? 422 : error?.status || 503, { error: code,
-      message: error?.message || (code === 'bad_request' ? '请求格式错误' : '服务暂时不可用，请稍后再试') });
+      message: error?.message || MESSAGES[code] || '服务暂时不可用，请稍后再试' });
   }
   for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
   if (key) await recordKeyUse(env.ACCOUNTS, key, request, response.status, now);
