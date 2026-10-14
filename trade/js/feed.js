@@ -1,8 +1,7 @@
 // 浏览器直连 Gate.io 的行情连接、REST 补数据与内存缓存。
 // 规格第 4 节：共享 ticker 订阅、切换撤订、心跳、退避与隐藏暂停。
 // 消息只标记内存脏数据，DOM 由 app 的 requestAnimationFrame 更新。
-const BASE = 'https://api.gateio.ws/api/v4';
-const SOCKETS = { spot: 'wss://api.gateio.ws/ws/v4/', futures: 'wss://fx-ws.gateio.ws/v4/ws/usdt' };
+import { CryptoSources } from './crypto-sources.js';
 const symbols = new Set(globalThis.TRADE_MARKETS.map(market => market.spot));
 export class Feed {
   constructor() {
@@ -12,12 +11,12 @@ export class Feed {
     this.trades = []; this.candles = []; this.connections = {}; this.status = 'reconnecting';
     this.dirty = true; this.priceUp = true; this.wantFutures = false; this.received = {};
     this.sparkCandles = new Map();
+    this.sources = new CryptoSources(this);
     document.addEventListener('visibilitychange', () => this.visibility());
   }
   mobile() { return matchMedia('(max-width: 767px), (max-height: 499px)').matches; }
   async rest(path) {
-    const response = await fetch(BASE + path, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw Error('gate'); return response.json();
+    return this.sources.rest(path);
   }
   prefix(market = this.market) { return market === 'spot' ? '/spot' : '/futures/usdt'; }
   async loadMiniCharts() {
@@ -25,8 +24,8 @@ export class Feed {
     try {
       await Promise.allSettled(['BTC', 'ETH', 'SOL'].map(async coin => {
         const symbol = coin + '_USDT';
-        const rows = await this.rest('/spot/candlesticks?currency_pair=' + symbol + '&interval=1h&limit=24');
-        this.sparkCandles.set(symbol, rows.map(row => ({ time: +row[0], close: +row[2] }))); this.dirty = true;
+        const rows = await this.sources.miniHistory(symbol);
+        this.sparkCandles.set(symbol, rows.map(row => ({ time: row.time, close: row.close }))); this.dirty = true;
       }));
     } finally { this.miniPending = false; }
   }
@@ -67,32 +66,7 @@ export class Feed {
     send('trades', [this.symbol]); send('candlesticks', [this.interval, this.symbol]);
   }
   connect(market) {
-    if (this.connections[market]?.socket?.readyState < WebSocket.CLOSING) return;
-    const connection = this.connections[market] ||= { attempts: 0 };
-    clearTimeout(connection.retry);
-    const socket = new WebSocket(SOCKETS[market]); connection.socket = socket;
-    socket.onopen = () => {
-      connection.attempts = 0;
-      this.subscription(market, 'subscribe');
-      if (this.market === market) { this.subscription(market, 'subscribe', true); this.status = 'connected'; }
-      clearInterval(connection.heartbeat);
-      connection.heartbeat = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ time: Math.floor(Date.now() / 1000),
-          channel: market + '.ping' }));
-      }, 15000);
-      this.snapshot(market).catch(() => {}); this.dirty = true;
-    };
-    socket.onmessage = message => {
-      try { this.message(market, JSON.parse(message.data)); } catch { /* malformed upstream message */ }
-    };
-    socket.onerror = () => { if (market === this.market) { this.status = 'failed'; this.dirty = true; } };
-    socket.onclose = () => {
-      clearInterval(connection.heartbeat);
-      if (connection.paused || (market === 'futures' && !this.wantFutures)) return;
-      if (market === this.market) { this.status = 'reconnecting'; this.dirty = true; }
-      const delay = [1, 2, 4, 8, 15][Math.min(connection.attempts++, 4)] * 1000;
-      connection.retry = setTimeout(() => this.connect(market), delay);
-    };
+    this.sources.start(market);
   }
   setFuturesWanted(wanted) {
     this.wantFutures = wanted || this.market === 'futures';
@@ -103,8 +77,7 @@ export class Feed {
     // DESIGN §6：导航只调整订阅意图，保留已经建立的连接；隐藏满60秒才关闭。
   }
   close(market) {
-    const connection = this.connections[market]; if (!connection) return;
-    connection.paused = true; clearTimeout(connection.retry); clearInterval(connection.heartbeat); connection.socket?.close();
+    this.sources.state(market).revision++; this.sources.stop(market);
   }
   async activate(market, symbol, interval = this.interval) {
     if (market === this.market && symbol === this.symbol && interval === this.interval && this.spec) return;
@@ -114,12 +87,11 @@ export class Feed {
     this.book = { asks: [], bids: [] }; this.trades = []; this.candles = []; this.spec = null;
     this.status = this.connections[market]?.socket?.readyState === WebSocket.OPEN ? 'connected' : 'reconnecting';
     this.perpBook = { asks: new Map(), bids: new Map() }; this.dirty = true;
-    this.connections.spot && (this.connections.spot.paused = false);
+    this.sources.activate(market);
+    if (market === 'futures') this.wantFutures = true;
     this.connect('spot');
-    if (market === 'futures') { this.wantFutures = true; this.connections.futures && (this.connections.futures.paused = false); }
     this.setFuturesWanted(market === 'futures');
-    this.subscription(market, 'subscribe', true);
-    await this.snapshot(market);
+    if (this.sources.state(market).health.index < 2 || market === 'futures') await this.snapshot(market);
   }
   snapshot(market) {
     const key = market + ':' + this.revision;
@@ -148,15 +120,13 @@ export class Feed {
       this.candles = results[1]; this.trades = this.normalizeTrades(results[2]); this.dirty = true;
     } catch {
       if (revision === this.revision && market === this.market) {
-        this.status = 'failed'; this.dirty = true;
-        clearTimeout(this.snapshotRetry);
-        this.snapshotRetry = setTimeout(() => {
-          if (!document.hidden && revision === this.revision && market === this.market) this.snapshot(market);
-        }, 3000);
+        if (this.sources.state(market).health.unavailable) this.status = 'failed';
+        this.dirty = true;
       }
     }
   }
   async history(to) {
+    if (this.market === 'spot' && this.sources.state('spot').health.index >= 2) return this.sources.history(to);
     const market = this.market, multiplier = this.multiplier();
     const query = this.parameter() + '=' + this.symbol + '&interval=' + this.interval + '&limit=500'
       + (to === undefined ? '' : '&to=' + to);
@@ -180,7 +150,7 @@ export class Feed {
   }
   saveTicker(market, ticker) {
     const symbol = ticker.currency_pair || ticker.contract; if (!symbols.has(symbol)) return;
-    if (!this.specs.has(market + ':' + symbol)) {
+    if (!this.specs.has(market + ':' + symbol) && !(market === 'spot' && this.sources.state('spot').health.index >= 2)) {
       this.specification(market, symbol).then(() => { this.dirty = true; }).catch(() => {});
     }
     const previous = this.tickers[market].get(symbol);
@@ -228,13 +198,6 @@ export class Feed {
     }
   }
   visibility() {
-    clearTimeout(this.hideTimer);
-    if (document.hidden) this.hideTimer = setTimeout(() => { this.close('spot'); this.close('futures'); }, 60000);
-    else {
-      for (const market of ['spot', 'futures']) if (market === 'spot' || this.wantFutures) {
-        this.connections[market] && (this.connections[market].paused = false);
-        this.connect(market); this.snapshot(market).catch(() => {});
-      }
-    }
+    this.sources.visibility();
   }
 }

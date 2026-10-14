@@ -2,6 +2,7 @@
 import { money } from './format.js';
 import { futuresEquity } from './futures.js';
 import { parseInput, inputString } from './decimal.js';
+import { FxFeed } from './fx-feed.js';
 export const ACCOUNTS = [['wallet', '钱包', 'USD'], ['spot', '加密现货', 'USDT'],
   ['futures', '合约', 'USDT'], ['ashare', 'A 股', 'CNY']];
 export function availableFunds(state, account) {
@@ -25,21 +26,24 @@ export class WalletView {
     this.currency = null; this.region = 'intl'; this.onChange = onChange; this.rate = null;
     try { this.currency = localStorage.getItem('gameinc_currency_v1'); } catch { /* unavailable */ }
     if (!['CNY', 'USD'].includes(this.currency)) this.currency = null;
+    this.fx = new FxFeed();
     this.refresh();
-    setInterval(() => { if (!document.hidden) this.refresh(); }, 30000);
+    this.timer = setInterval(() => { if (!document.hidden) this.refresh(); }, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.refresh(); });
   }
   async refresh() {
+    if (document.hidden) return;
     if (this.pending) return this.pending;
     this.pending = this.load().finally(() => { this.pending = null; }); return this.pending;
   }
   async load() {
     try {
-      const query = new URLSearchParams(location.search), region = query.get('region');
-      const response = await fetch('/api/region' + (region ? '?region=' + encodeURIComponent(region) : ''));
-      if (!response.ok) throw Error('region');
-      const data = await response.json(); this.region = data.region; this.rate = data.usdcny ? +data.usdcny : null;
-      this.rateTime = data.rateTime; this.currency ||= data.currency;
-    } catch { this.rate = null; this.currency ||= 'USD'; }
+      const [region, fx] = await Promise.allSettled([GameAccount.region(), this.fx.read()]);
+      if (region.status === 'fulfilled') { this.region = region.value.region; this.currency ||= region.value.currency; }
+      if (fx.status === 'fulfilled') { this.rate = fx.value.rate; this.rateTime = fx.value.rateTime; }
+      else this.rate = null;
+    } catch { this.rate = null; }
+    this.currency ||= 'USD';
     this.onChange();
   }
   select(currency) {

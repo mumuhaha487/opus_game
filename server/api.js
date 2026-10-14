@@ -8,6 +8,7 @@ import { auditSave } from './save-audit.js';
 import { manageKeys } from './api-keys.js';
 import { handleAgent } from './agent-api.js';
 import { ashareList } from './market-ashare.js';
+import { ashareQuotes } from './market-quotes.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -47,6 +48,10 @@ export async function handle(request, env) {
     }
     if (new URL(request.url).pathname === '/api/market/ashare-list') {
       const result = await ashareList(request, env);
+      return reply(result.status, result.body, result.headers);
+    }
+    if (new URL(request.url).pathname === '/api/market/ashare-quotes') {
+      const result = await ashareQuotes(request, env);
       return reply(result.status, result.body, result.headers);
     }
     // PLATFORM §2.3：公开只读地区接口，地区只决定显示货币。

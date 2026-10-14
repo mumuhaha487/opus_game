@@ -1,12 +1,12 @@
 // 全站 GameAccount 会话下的交易请求、状态与历史读取。
-// 规格 5.5：可见时 20 秒轮询，穿价 1 秒防抖且至少间隔 3 秒。
-// partial 状态一秒后续结算；退出和换账号丢弃过期响应。
+// SPEC-FEED §3：服务端调节 60/300 秒轮询，隐藏暂停；POST 直接应用完整 state。
+import { WorkerPoll } from './worker-poll.js';
+export const pendingSettlement = state => !!(state?.openOrders.length || state?.futures.positions.length);
 export class TradeApi {
   constructor(onChange, onNotice) {
     this.state = null; this.onChange = onChange; this.onNotice = onNotice; this.lastRequest = 0; this.generation = 0;
     this.historyCache = new Map(); this.previousPrice = null;
-    setInterval(() => { if (!document.hidden && this.logged()) this.refresh(); }, 20000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && this.logged()) this.refresh(); });
+    this.poll = new WorkerPoll(() => this.loadState(), 300, () => this.logged());
     GameAccount.onProfileChange(() => this.accountChanged());
   }
   logged() { return !!GameAccount.profile(); }
@@ -14,24 +14,25 @@ export class TradeApi {
     if (JSON.stringify(this.state?.recent) !== JSON.stringify(state.recent)) this.historyCache.clear();
     this.state = state; this.onChange(state);
     for (const notice of state.notices || []) this.onNotice(notice.text);
-    clearTimeout(this.partialTimer);
-    if (state.partial) this.partialTimer = setTimeout(() => this.refresh(), 1000);
   }
   refresh() {
     if (!this.logged()) return Promise.resolve();
-    if (this.pending) return this.pending;
-    this.pending = this.loadState().finally(() => { this.pending = null; });
-    return this.pending;
+    return this.poll.run(true);
   }
   async loadState() {
     this.lastRequest = Date.now(); const generation = this.generation;
     try {
-      const state = await GameAccount.request('/api/trade/state');
-      if (generation === this.generation) this.apply(state);
+      let cadence;
+      const state = await GameAccount.request('/api/trade/state', 'GET', undefined, false,
+        response => { cadence = response.headers.get('X-Poll-After'); });
+      if (generation === this.generation) {
+        this.poll.after(cadence || (pendingSettlement(state) ? 60 : 300)); this.apply(state);
+      }
     } catch (error) {
       if (error.status === 401 && generation === this.generation) {
         GameAccount.clearProfile(); this.state = null; this.onChange(null);
       }
+      throw error;
     }
   }
   async post(path, data) {
@@ -45,7 +46,9 @@ export class TradeApi {
       if (generation !== this.generation) throw error;
       result = await GameAccount.request('/api/trade/' + path, 'POST', data);
     }
-    if (generation === this.generation) { this.historyCache.clear(); this.apply(result); }
+    if (generation === this.generation) {
+      this.historyCache.clear(); this.apply(result); this.poll.touch(pendingSettlement(result) ? 60 : 300);
+    }
     return result;
   }
   async history(kind, market) {
@@ -56,29 +59,14 @@ export class TradeApi {
     this.historyCache.set(key, result[kind]); return result[kind];
   }
   async accountChanged() {
-    clearTimeout(this.partialTimer); clearTimeout(this.crossTimer); this.previousPrice = null;
+    clearTimeout(this.poll.timer); this.previousPrice = null;
     this.generation++; this.state = null; this.historyCache.clear(); this.onChange(null);
+    // A response belonging to the old login is discarded before the new login's initial read.
+    if (this.poll.pending) await this.poll.pending;
     await this.refresh();
-    if (!this.state && this.logged()) await this.refresh();
   }
   crossing(feed) {
-    const current = Number(feed.tickers[feed.market].get(feed.symbol)?.last);
-    const previous = this.previousPrice; this.previousPrice = current;
-    const mark = Number(feed.tickers[feed.market].get(feed.symbol)?.mark_price), previousMark = this.previousMark;
-    this.previousMark = mark;
-    if (!this.state) return;
-    const levels = this.state.openOrders.filter(order => order.symbol === feed.symbol && order.market === feed.market)
-      .map(order => Number(['stop_limit', 'stop_market'].includes(order.type) && order.status === 'new'
-        ? order.stopPrice : order.price));
-    const position = this.state.futures.positions.find(entry => entry.symbol === feed.symbol);
-    const markLevels = feed.market === 'futures' && position ? [position.liq, position.tp, position.sl].map(Number).filter(Boolean) : [];
-    const crossed = (before, after, level) => before && after && before !== after
-      && ((before <= level && after >= level) || (before >= level && after <= level));
-    if (!levels.some(level => crossed(previous, current, level))
-      && !markLevels.some(level => crossed(previousMark, mark, level))) return;
-    clearTimeout(this.crossTimer);
-    this.crossTimer = setTimeout(() => {
-      if (Date.now() - this.lastRequest >= 3000 && !document.hidden) this.refresh();
-    }, Math.max(1000, 3000 - (Date.now() - this.lastRequest)));
+    // Realtime ticks update local valuation only; they never accelerate Worker synchronization.
+    this.previousPrice = Number(feed.tickers[feed.market].get(feed.symbol)?.last);
   }
 }

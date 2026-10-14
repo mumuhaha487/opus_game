@@ -116,6 +116,8 @@ for (const name of siteFiles) {
 // 源文件使用标记，构建展开，避免新增源代码行超过140字符。
 const beaconScript = 'https://static.cloudflareinsights.com', beaconConnect = 'https://cloudflareinsights.com';
 const connectHosts = 'https://api.gateio.ws wss://api.gateio.ws wss://fx-ws.gateio.ws https://qt.gtimg.cn'
+    + ' https://fx-api.gateio.ws https://sqt.gtimg.cn https://push2delay.eastmoney.com'
+    + ' https://data-api.binance.vision wss://data-stream.binance.vision'
     + ' https://web.ifzq.gtimg.cn https://ifzq.gtimg.cn https://push2.eastmoney.com'
     + ' https://push2his.eastmoney.com https://searchapi.eastmoney.com ' + beaconConnect;
 const pagePolicy = trade => [

@@ -1,11 +1,15 @@
 // DESIGN §1.4/1.6/1.7：直连市场数据、像素阶梯走势、签到与统一钱包；可见时15秒刷新。
-import { parseTencent, parseBars } from '../trade/js/ashare/feed.js';
+import '../trade/js/markets.js';
+import { Feed } from '../trade/js/feed.js';
+import { AshareFeed } from '../trade/js/ashare/feed.js';
 import { WalletView, valuations, totalValue } from '../trade/js/wallet.js';
 const indices = [['sh000001', '上证指数'], ['sz399001', '深证成指'], ['sz399006', '创业板指'], ['sh000300', '沪深300']];
 const coins = ['BTC', 'ETH', 'SOL', 'DOGE'];
 const ns = 'http://www.w3.org/2000/svg', rows = [], mini = new Map();
 let state = null, quotes = {}, cryptoQuotes = new Map(), futuresQuotes = new Map(), timer, loading = false, revision = 0;
 const wallet = new WalletView(renderAccount);
+const live = new Feed(), stocks = new AshareFeed(() => {});
+live.connect('spot');
 const node = (tag, text = '', cls = '') => {
   const value = document.createElement(tag); value.textContent = text; value.className = cls; return value;
 };
@@ -58,6 +62,7 @@ function paintQuotes() {
     const percent = row.cn ? quote?.percent : quote?.change_percentage;
     row.value.textContent = number(quote?.last, row.cn);
     row.change.textContent = pct(percent); row.change.style.color = tone(percent, row.cn);
+    row.value.style.color = (row.cn ? stocks : live).status === 'failed' ? 'var(--muted)' : '';
     if (!row.compact) svgChart(row.svg, mini.get(row.code)?.values || [], tone(percent, row.cn));
   }
 }
@@ -69,13 +74,9 @@ async function loadMini(code, cn) {
   if (Date.now() - (mini.get(code)?.at || 0) < 60000) return;
   let values;
   if (cn) {
-    const secid = (code.startsWith('sh') ? '1.' : '0.') + code.slice(2);
-    const data = await json('https://push2.eastmoney.com/api/qt/stock/trends2/get?secid=' + secid
-      + '&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=1');
-    values = parseBars(data.data, true).map(row => row.close);
+    values = (await stocks.loadBars(code)).map(row => row.close);
   } else {
-    const data = await json('https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=' + code + '_USDT&interval=1h&limit=24');
-    values = data.map(row => +row[2]);
+    values = (await live.sources.miniHistory(code + '_USDT')).map(row => row.close);
   }
   mini.set(code, { at: Date.now(), values });
 }
@@ -120,17 +121,18 @@ async function refresh() {
     const codes = [...new Set([...indices.map(([code]) => code), ...(state?.ashare.holdings || []).map(row => row.code)])];
     await Promise.allSettled([
       (async () => {
-        const response = await fetch('https://qt.gtimg.cn/q=' + codes.join(','), { signal: AbortSignal.timeout(8000) });
-        if (!response.ok) throw Error('quotes');
-        quotes = parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer()));
+        stocks.codes = codes; await stocks.loadQuotes(); quotes = stocks.quotes;
       })(),
       (async () => {
-        const data = await json('https://api.gateio.ws/api/v4/spot/tickers');
-        cryptoQuotes = new Map(data.map(row => [row.currency_pair, row]));
+        live.sources.listVisible = true;
+        if (live.sources.state('spot').health.index >= 2) await live.sources.binanceList();
+        else if (!live.tickers.spot.size) {
+          const data = await live.rest('/spot/tickers'); data.forEach(row => live.saveTicker('spot', row));
+        }
+        cryptoQuotes = live.tickers.spot;
       })(),
       ...(state?.futures.positions.length ? [(async () => {
-        const data = await json('https://api.gateio.ws/api/v4/futures/usdt/tickers');
-        futuresQuotes = new Map(data.map(row => [row.contract, row]));
+        live.setFuturesWanted(true); futuresQuotes = live.tickers.futures;
       })()] : []),
       ...indices.map(([code]) => loadMini(code, true)), ...coins.map(coin => loadMini(coin, false)),
     ]);
@@ -143,3 +145,12 @@ document.addEventListener('hub-account-change', accountChanged);
 GameAccount.onProfileChange(accountChanged);
 document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (!document.hidden) refresh(); });
 accountChanged(); refresh();
+let painted = 0;
+function paintLive(at) {
+  if (!document.hidden && at - painted >= 250) {
+    cryptoQuotes = live.tickers.spot; futuresQuotes = live.tickers.futures;
+    paintQuotes(); renderAccount(); painted = at;
+  }
+  requestAnimationFrame(paintLive);
+}
+requestAnimationFrame(paintLive);

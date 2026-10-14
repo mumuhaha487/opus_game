@@ -3,6 +3,7 @@ import { GateClient } from './trade/gate.js';
 import { upstream, cacheIsFresh } from './trade/upstream.js';
 const QQ = 'https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList';
 const rates = new WeakMap();
+const globalRates = new WeakMap();
 const CACHE_ROOT = 'https://trade-cache.game.inc.re/ashare-list-v2/';
 let snapshotPending;
 const isStock = code => /^(sh(?:60|68)|sz(?:00|30))\d{4}$/.test(code);
@@ -85,12 +86,21 @@ export async function marketRate(env, ip, now = Date.now()) {
   if (counters.size > 10000) for (const [name, entry] of counters) if (entry.minute < minute) counters.delete(name);
   return count > 30 ? retryAfter : 0;
 }
+export async function marketGlobal(env, now = Date.now()) {
+  if (env.MARKET_GLOBAL?.limit) {
+    try { return (await env.MARKET_GLOBAL.limit({ key: 'all' })).success; } catch { /* local fallback */ }
+  }
+  const minute = Math.floor(now / 60000), previous = globalRates.get(env);
+  const count = previous?.minute === minute ? previous.count + 1 : 1;
+  globalRates.set(env, { minute, count }); return count <= 120;
+}
 export async function ashareList(request, env) {
   if (request.method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' }, headers: { Allow: 'GET' } };
   try {
     const { board, sort, page } = listParameters(new URL(request.url));
     const wait = await marketRate(env, request.headers.get('CF-Connecting-IP') || 'local');
     if (wait) return { status: 429, body: { error: 'rate_limited', retryAfter: wait }, headers: { 'Retry-After': String(wait) } };
+    if (!await marketGlobal(env)) return { status: 503, body: { error: 'market_busy' } };
     const path = 'result/' + [board, sort, page].join('/'), hit = await cached(path);
     if (hit) return { status: 200, body: await hit.json() };
     const snapshot = await allRows(new GateClient()), body = selectRows(snapshot.rows, { board, sort, page });

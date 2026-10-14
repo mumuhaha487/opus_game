@@ -181,7 +181,7 @@ function bar() {
   view.back.hidden = !document.body.classList.contains('mobile-chart');
   view.pairButton.textContent = coin + '/USDT' + (feed.mobile() ? ' ▾' : '');
   view.logo.textContent = coin[0]; view.logo.style.background = badge(coin, coin).style.background;
-  view.subtitle.textContent = coin + '/USDT · ' + (feed.market === 'spot' ? '现货' : '永续') + ' · Gate.io';
+  view.subtitle.textContent = coin + '/USDT · ' + (feed.market === 'spot' ? '现货' : '永续') + ' · ' + (feed.source || 'Gate.io');
   view.favorite.textContent = markets.favorites.includes(coin) ? '★' : '☆';
   view.tag.textContent = feed.market === 'spot' ? '现货' : '永续';
   view.latest.textContent = price(ticker.last, feed.precision()) + (feed.priceUp ? ' ↑' : ' ↓');
@@ -216,11 +216,18 @@ function bar() {
   document.title = ticker.last ? price(ticker.last, feed.precision()) + ' | ' + coin + 'USDT | 模拟交易所'
     : '模拟交易所 · GAME.INC.RE';
 }
-function connectionColor() { return feed.status === 'connected' ? '#22B573' : feed.status === 'failed' ? '#E5484D' : '#F2C66D'; }
+function connectionColor() {
+  const active = page === 'stock' || page === 'ashare' ? ashare : feed;
+  return active.status === 'failed' ? '#E5484D' : active.degraded ? '#F2C66D'
+    : active.status === 'connected' ? '#22B573' : '#F2C66D';
+}
 function status() {
-  const state = feed.status;
-  node('connection-status').textContent = state === 'connected' ? '实时行情已连接'
-    : state === 'failed' ? '行情连接中断，正在重试' : '行情重连中…';
+  const active = page === 'stock' || page === 'ashare' ? ashare : feed, state = active.status;
+  node('connection-status').textContent = ashare.listBusy && ['ashare', 'overview'].includes(page) ? '列表更新放缓'
+    : state === 'connected' ? '实时行情已连接'
+    : state === 'failed' ? '行情暂不可用，正在重试' : '行情重连中…';
+  node('feed-source').textContent = '数据来源 ' + (active.source || (active === ashare ? '腾讯行情' : 'Gate.io'));
+  document.body.classList.toggle('feed-unavailable', state === 'failed');
   node('connection-dot').style.backgroundColor = connectionColor();
 }
 function mobileChartActions() {
@@ -241,6 +248,8 @@ async function route() {
     navigation.go('#/overview'); return;
   }
   closePicker(); closeChart(); page = requested;
+  feed.sources.listVisible = () => ['crypto', 'overview'].includes(page)
+    || [...document.querySelectorAll('.market-body')].some(node => node.getClientRects().length > 0);
   if (page === 'stock') stock.setCode(symbol);
   const pool = watch.codes.length ? watch.codes : HOT_STOCKS.map(([code]) => code);
   ashare.configure(page, page === 'stock' ? symbol : null, [...pool, ...(api.state?.ashare.holdings.map(row => row.code) || [])]);

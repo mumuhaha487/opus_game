@@ -28,6 +28,7 @@ const GameAccount = (() => {
   } catch { /* migration is best effort */ }
   const profileValue = value => validName(value?.name) ? { name: value.name } : null;
   let current = profileValue(read(PROFILE));
+  let regionPending;
   const listeners = new Set();
   const C = {
     file: location.protocol === 'file:', validName,
@@ -47,13 +48,34 @@ const GameAccount = (() => {
       if (code === 'unauthorized') return '登录已过期，请重新登录';
       return e.status ? '服务器出了点问题，请稍后再试' : '无法连接服务器，请稍后再试';
     },
-    async request(path, method = 'GET', data, keepalive = false) {
+    region() {
+      if (regionPending) return regionPending;
+      try {
+        const saved = sessionStorage.getItem('gameinc_region_v1');
+        if (saved) return Promise.resolve(JSON.parse(saved));
+      } catch { /* unavailable */ }
+      const override = new URLSearchParams(location.search).get('region');
+      const path = '/api/region' + (override ? '?region=' + encodeURIComponent(override) : '');
+      regionPending = C.request(path).catch(() => ({ region: 'intl', currency: 'USD' })).then(value => {
+        try { sessionStorage.setItem('gameinc_region_v1', JSON.stringify(value)); } catch { /* unavailable */ }
+        return value;
+      });
+      return regionPending;
+    },
+    async request(path, method = 'GET', data, keepalive = false, onResponse) {
       if (C.file) throw new Error('file');
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
       try {
         const response = await fetch(path, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal, keepalive });
-        const value = await response.json();
+        const text = await response.text();
+        let value;
+        try { value = JSON.parse(text); }
+        catch {
+          const quota = /\b1027\b/.test(text);
+          throw { status: quota ? 1027 : response.status, data: quota ? { error: '1027' } : {} };
+        }
         if (!response.ok) throw { status: response.status, data: value };
+        onResponse?.(response);
         return value;
       } finally { clearTimeout(timer); }
     },

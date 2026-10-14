@@ -18,7 +18,8 @@
     { "name": "API_RATE_READ", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
     { "name": "API_RATE_WRITE", "namespace_id": "2002", "simple": { "limit": 10, "period": 60 } },
     { "name": "TRADE_RATE", "namespace_id": "2003", "simple": { "limit": 40, "period": 60 } },
-    { "name": "MARKET_RATE", "namespace_id": "2004", "simple": { "limit": 30, "period": 60 } }
+    { "name": "MARKET_RATE", "namespace_id": "2004", "simple": { "limit": 30, "period": 60 } },
+    { "name": "MARKET_GLOBAL", "namespace_id": "2005", "simple": { "limit": 120, "period": 60 } }
   ],
   "routes": [
     { "pattern": "game.inc.re", "custom_domain": true }

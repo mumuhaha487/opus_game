@@ -89,7 +89,7 @@ const HUB_GAMES = [{
     renderRows(null, 'loading');
     renderTradeRow(null, null, 'loading'); renderKeyRow(null, 'loading');
     const results = await Promise.allSettled([C.request('/api/saves'), C.request('/api/trade/state'),
-      C.request('/api/region'), C.request('/api/keys')]);
+      C.region(), C.request('/api/keys')]);
     if (token !== revision) return;
     const [gamesResult, tradeResult, regionResult, keysResult] = results;
     renderRows(gamesResult.status === 'fulfilled' ? gamesResult.value.games : null,

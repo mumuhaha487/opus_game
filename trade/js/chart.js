@@ -150,7 +150,8 @@ export class Chart {
     return result;
   }
   render(state) {
-    const feed = this.feed, key = [feed.market, feed.symbol, feed.interval, this.area, feed.precision(), this.indicators].join(':');
+    const feed = this.feed, key = [feed.market, feed.symbol, feed.interval, feed.sourceRevision,
+      this.area, feed.precision(), this.indicators].join(':');
     const changed = key !== this.key;
     if (changed) { this.key = key; this.rebuild(); }
     for (const node of this.buttons) node.classList.toggle('selected',

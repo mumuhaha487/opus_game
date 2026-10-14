@@ -136,9 +136,18 @@ export class AshareClient {
     const quoteMap = fresh ? this.liveQuoteMap : this.quoteMap;
     const missing = [...new Set(codes)].filter(code => !quoteMap[code]).sort();
     if (missing.length) {
-      const result = await this.load('https://qt.gtimg.cn/q=' + missing.join(','), 1, async response =>
-        parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())), fresh);
-      if (missing.some(code => !result[code])) throw { status: 503, code: 'market_unavailable' };
+      let result;
+      for (const host of ['qt.gtimg.cn', 'sqt.gtimg.cn']) {
+        try {
+          result = await this.load('https://' + host + '/q=' + missing.join(','), 1, async response => {
+            const quotes = parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer()));
+            if (missing.some(code => !quotes[code])) throw Error('missing quote');
+            return quotes;
+          }, fresh);
+          break;
+        } catch (error) { if (error.code === 'upstream_budget') throw error; }
+      }
+      if (!result) throw { status: 503, code: 'market_unavailable' };
       Object.assign(quoteMap, result);
     }
     return quoteMap;

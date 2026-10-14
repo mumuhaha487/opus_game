@@ -28,24 +28,27 @@ export class GateClient {
     const cache = globalThis.caches?.default;
     const cached = !fresh && cache && await cache.match(key);
     if (cacheIsFresh(cached, ttl)) return cached.json();
-    // 规格 5.3：Cache 命中不计预算，并发请求在 fetch 前同步领取额度。
-    if (this.used >= (this.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
-    this.used++;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch('https://api.gateio.ws/api/v4' + suffix, {
-        headers: { Accept: 'application/json', 'User-Agent': 'game.inc.re-sim/1' }, signal: controller.signal,
-      });
-      if (!response.ok) throw new Error('upstream');
-      const value = await response.json();
-      if (!fresh && cache) await cache.put(key, new Response(JSON.stringify(value), {
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl,
-          'X-Fetched-At': String(Date.now()) },
-      }));
-      return value;
-    } catch { throw { status: 503, code: 'market_unavailable' }; }
-    finally { clearTimeout(timer); }
+    const hosts = suffix.startsWith('/futures/') ? ['fx-api.gateio.ws', 'api.gateio.ws'] : ['api.gateio.ws'];
+    for (const host of hosts) {
+      // SPEC-FEED §4: same-provider backup attempts also consume the shared upstream budget.
+      if (this.used >= (this.budgetLimit ?? 30)) throw { code: 'upstream_budget' };
+      this.used++;
+      const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);
+      try {
+        const response = await fetch('https://' + host + '/api/v4' + suffix, {
+          headers: { Accept: 'application/json', 'User-Agent': 'game.inc.re-sim/1' }, signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('upstream');
+        const value = await response.json();
+        if (!fresh && cache) await cache.put(key, new Response(JSON.stringify(value), {
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=' + ttl,
+            'X-Fetched-At': String(Date.now()) },
+        }));
+        return value;
+      } catch { /* Only another Gate host may supply execution prices. */ }
+      finally { clearTimeout(timer); }
+    }
+    throw { status: 503, code: 'market_unavailable' };
   }
   spec(symbol) { return this.get('/spot/currency_pairs/' + symbol, {}, 3600); }
   book(symbol, fresh = false, refresh = false) {

@@ -863,3 +863,6 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @media (prefers-reduced-motion: reduce) { .trade-modal, .stock-ticket { animation: none; } }
 }
+/* SPEC-FEED: keep last observed values visible when every browser channel fails. */
+.feed-unavailable .latest-price, .feed-unavailable .bar-price,
+.feed-unavailable .market-last, .feed-unavailable .book-row { color: var(--muted) !important; }

@@ -139,7 +139,7 @@
   }
   async function refresh() {
     if (FILE) { paintAll(); return; }
-    try { apply(await A.request('/api/likes')); paintAll(); reorderSoon(); } catch { /* keep the last numbers */ }
+    apply(await A.request('/api/likes')); paintAll(); reorderSoon();
   }
 
   function cover(g, cls, opts = {}) {
@@ -242,9 +242,10 @@
   // ---------- boot ----------
   $('door-count').textContent = GAMES.length + ' 款游戏 · 横版动作 · 挂机刷宝 · 云存档同步';
   chips(); renderAll();
-  refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, 45000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
-  $('acct').addEventListener('close', refresh);
-  if (A) A.onProfileChange(refresh);
+  import('../trade/js/worker-poll.js').then(({ WorkerPoll }) => {
+    const poll = new WorkerPoll(refresh, 120);
+    poll.run();
+    $('acct').addEventListener('close', () => poll.run());
+    if (A) A.onProfileChange(() => poll.run(true));
+  });
 })();

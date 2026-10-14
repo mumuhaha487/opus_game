@@ -63,7 +63,8 @@ export class AshareChart {
   }
   render() {
     const code = this.feed.code, rows = this.feed.bars.get(code + ':' + this.period) || [];
-    const key = code + ':' + this.period + ':' + this.indicators, changed = key !== this.key;
+    const key = code + ':' + this.period + ':' + this.feed.barsSource?.get(code + ':' + this.period)
+      + ':' + this.indicators, changed = key !== this.key;
     if (changed) { this.key = key; this.rebuild(); }
     const line = ['trends', 'five'].includes(this.period);
     const unique = [...new Map(rows.map(row => [row.time, row])).values()].sort((a, b) => a.time - b.time);

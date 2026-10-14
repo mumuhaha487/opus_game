@@ -42,6 +42,7 @@ function reply(status, data, headers = {}) {
     'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   } });
 }
+export const statePollAfter = state => state.orders.length || Object.keys(state.futures.positions).length ? 60 : 300;
 const postStores = new WeakMap();
 async function tradeRate(env, uid, now) {
   // PLATFORM §5.1 / 第五轮延迟修复：绑定 40/分钟；本地使用与 Agent 相同的 isolate 令牌桶回退。
@@ -181,7 +182,8 @@ export async function handleTrade(request, env, session, data, services) {
       ...result.transferred,
       ...(result.stale ? { stale: true } : {}),
       ...(result.order ? { order, ...(bookSource ? { bookSource } : {}) } : {}),
-      ...(result.reward ? { reward: result.reward } : {}) });
+      ...(result.reward ? { reward: result.reward } : {}) },
+    route === 'state' ? { 'X-Poll-After': String(statePollAfter(result.state)) } : {});
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';
     const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT`
