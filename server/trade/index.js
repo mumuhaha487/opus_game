@@ -1,11 +1,11 @@
 // 已通过全站会话验证的交易 API 路由。
 // 规格 5.1：方法检查、账号限流、统一错误与 no-store 响应。
-// 结算和操作在同一 R2 条件写内提交，summary 只读一次交易文档。
+// 结算和操作在同一 R2 条件写内提交，history 只读一次交易文档。
 import { dayKey } from '../likes.js';
 import { GateClient } from './gate.js';
-import { readState, updateState, stateView, summary, transfer } from './state.js';
+import { readState, updateState, stateView, transfer } from './state.js';
 import { checkin } from './checkin.js';
-import { placeOrder, cancelOrder, cancelAll } from './spot.js';
+import { placeOrder, cancelOrder } from './spot.js';
 import { settle } from './settle.js';
 import { marketFor } from './markets.js';
 import { getFx } from './fx.js';
@@ -15,11 +15,11 @@ import { placeUsOrder, cancelUsOrder } from './usstock.js';
 import { UsClient, usStock } from './us-data.js';
 import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
-  state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
+  state: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   disclaimer: 'POST',
   'ashare/order': 'POST', 'ashare/cancel': 'POST', 'ashare/watch': 'POST',
   'usstock/order': 'POST', 'usstock/cancel': 'POST',
-  'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
+  'spot/order': 'POST', 'spot/cancel': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST', 'cancel-all': 'POST',
 };
@@ -114,9 +114,8 @@ export async function handleTrade(request, env, session, data, services) {
       if (retryAfter) return reply(429, { error: 'rate_limited', message: MESSAGES.rate_limited, retryAfter },
         { 'Retry-After': String(retryAfter) });
     }
-    if (route === 'summary' || route === 'history') {
+    if (route === 'history') {
       const { state } = await readState(env.ACCOUNTS, uid, now);
-      if (route === 'summary') return reply(200, summary(state, now));
       const kind = url.searchParams.get('kind'), market = url.searchParams.get('market');
       if (!['orders', 'trades', 'ledger'].includes(kind) || !['wallet', 'spot', 'futures', 'ashare', 'usstock'].includes(market)) {
         throw { status: 400, code: 'bad_request' };
@@ -189,7 +188,6 @@ export async function handleTrade(request, env, session, data, services) {
       if (route === 'transfer') transferred = transfer(state, data, now, fx);
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);
-      if (route === 'spot/cancel-all') cancelAll(state, data.symbol, now);
       if (route === 'cancel-all') canceled = cancelEverything(state, data, now);
       if (route === 'futures/order') order = await placeFuturesOrder(state, data, gate, now);
       if (route === 'futures/close') order = await closeFutures(state, data, gate, now);

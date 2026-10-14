@@ -12,12 +12,3 @@
 
 /developer/*
 # BUILD_DEVELOPER_CSP
-
-/hub/*
-  Cache-Control: public, max-age=0, must-revalidate
-
-/entropy-blade/icons/*
-  Cache-Control: public, max-age=0, must-revalidate
-
-/entropy-blade/art/*
-  Cache-Control: public, max-age=0, must-revalidate

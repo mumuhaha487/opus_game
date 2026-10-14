@@ -103,7 +103,7 @@ export class Futures {
       const qty = Math.floor(maximum * Number(range.value) / 100 / tick) * tick;
       this.fields.qty.input.value = qty.toFixed(this.feed.quantityPrecision());
       [...marks.children].forEach((control, index) => control.classList.toggle('selected', +range.value === (index + 1) * 25));
-      box.style.setProperty('--slider-fraction', String(Number(range.value) / 100)); this.feed.dirty = true;
+      this.feed.dirty = true;
     };
     box.append(range, marks); this.form.append(box); this.range = range; this.ratios = box;
   }
@@ -129,7 +129,7 @@ export class Futures {
   render() {
     if (this.formSymbol !== this.feed.symbol) {
       for (const field of Object.values(this.fields)) field.input.value = '';
-      this.range.value = 0; this.ratios.style.setProperty('--slider-fraction', '0');
+      this.range.value = 0;
       this.ratios.querySelectorAll('.selected').forEach(control => control.classList.remove('selected'));
       this.formSymbol = this.feed.symbol; this.prefillKey = null;
     }

@@ -26,10 +26,9 @@ export async function getFx(now = Date.now(), budget) {
   }
   throw { status: 503, code: 'fx_unavailable' };
 }
-export async function regionView(request, now = Date.now(), debug = false) {
-  const override = debug ? new URL(request.url).searchParams.get('region') : null;
-  const country = ['cn', 'intl'].includes(override) ? override === 'cn' ? 'CN' : 'US' : request.cf?.country || null;
-  // PLATFORM §2.3 / 第2b轮：地区独立于FX可用性；第三轮覆盖仅由本地DEBUG_REGION=1开启。
+export async function regionView(request, now = Date.now()) {
+  const country = request.cf?.country || null;
+  // PLATFORM §2.3 / 第2b轮：地区只看 Cloudflare 判定的国家，独立于 FX 可用性；查询参数不能覆盖。
   let fx;
   try { fx = await getFx(now); } catch { fx = null; }
   return { country, region: country === 'CN' ? 'cn' : 'intl', currency: country === 'CN' ? 'CNY' : 'USD',

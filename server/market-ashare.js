@@ -94,6 +94,15 @@ export async function marketGlobal(env, now = Date.now()) {
   const count = previous?.minute === minute ? previous.count + 1 : 1;
   globalRates.set(env, { minute, count }); return count <= 120;
 }
+// 一页 A 股行情（50 行）：网页列表与 /api/v1/markets 共用同一份 30 秒快照与结果缓存。
+export async function ashareRows({ board, sort, page }) {
+  const path = 'result/' + [board, sort, page].join('/'), hit = await cached(path);
+  if (hit) return hit.json();
+  const snapshot = await allRows(new GateClient()), body = selectRows(snapshot.rows, { board, sort, page });
+  // Results expire with their snapshot, rather than extending old prices by another 30 seconds.
+  await store(path, body, snapshot.fetchedAt);
+  return body;
+}
 export async function ashareList(request, env) {
   if (request.method !== 'GET') return { status: 405, body: { error: 'method_not_allowed' }, headers: { Allow: 'GET' } };
   try {
@@ -101,12 +110,7 @@ export async function ashareList(request, env) {
     const wait = await marketRate(env, request.headers.get('CF-Connecting-IP') || 'local');
     if (wait) return { status: 429, body: { error: 'rate_limited', retryAfter: wait }, headers: { 'Retry-After': String(wait) } };
     if (!await marketGlobal(env)) return { status: 503, body: { error: 'market_busy' } };
-    const path = 'result/' + [board, sort, page].join('/'), hit = await cached(path);
-    if (hit) return { status: 200, body: await hit.json() };
-    const snapshot = await allRows(new GateClient()), body = selectRows(snapshot.rows, { board, sort, page });
-    // Results expire with their snapshot, rather than extending old prices by another 30 seconds.
-    await store(path, body, snapshot.fetchedAt);
-    return { status: 200, body };
+    return { status: 200, body: await ashareRows({ board, sort, page }) };
   } catch (error) {
     return { status: error.status || 503, body: { error: error.code || 'market_unavailable' } };
   }

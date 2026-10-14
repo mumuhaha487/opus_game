@@ -146,21 +146,7 @@ select { border: 0; background: var(--input); padding: 2px 4px; border-radius: 4
 .quantity-unit { padding: 0; font-size: 14px; }
 .input-row input { border: 0; background: transparent; width: 100%; text-align: right; font-size: 14px; }
 .input-row input::placeholder { color: var(--text); font-size: 12px; }
-.balance-slider { height: 30px; position: relative; padding: 5px 7px; }
-.balance-slider::before { content: ''; position: absolute; top: 13px; left: 7px; right: 7px;
-  height: 4px; background: var(--line-2); }
-.balance-slider input { appearance: none; width: 100%; height: 4px; background: transparent; margin: 8px 0;
-  position: relative; z-index: 2; }
-.balance-slider input::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px;
-  transform: rotate(45deg); background: var(--panel); border: 2px solid var(--text); cursor: pointer; }
-.slider-selected { position: absolute; top: 13px; left: 7px; height: 4px;
-  width: calc((100% - 14px) * var(--slider-fraction, 0)); background: var(--text-2); z-index: 1; pointer-events: none; }
-.slider-hint { position: absolute; left: var(--slider-percent, 0%); top: -18px; transform: translateX(-50%);
-  padding: 2px 6px; border-radius: 4px; background: var(--panel-2); font-size: 12px; z-index: 4; pointer-events: none; }
-.slider-marks { position: absolute; display: flex; justify-content: space-between; top: 11px; left: 7px; right: 7px; }
-.slider-marks button { width: 8px; height: 8px; padding: 0; border: 1px solid var(--line-2);
-  transform: rotate(45deg); background: var(--panel); }
-.slider-marks .reached { background: var(--text-2); }
+
 .maximum { font-size: 12px; }
 .spot-column > button { width: 100%; }
 .spot-column > .primary { height: 40px; }
@@ -178,7 +164,7 @@ select { border: 0; background: var(--input); padding: 2px 4px; border-radius: 4
 .futures-actions button { width: 100%; height: 40px; }
 .futures-login { display: flex; flex-direction: column; gap: 8px; }
 .futures-login > .primary { width: 100%; height: 40px; }
-.futures-cost { white-space: pre-line; font-size: 12px; margin-top: 4px; }
+
 .futures-liq { color: var(--liq); font-size: 12px; }
 .futures-field-tp, .futures-field-sl { flex-wrap: wrap; height: auto; min-height: 56px; padding-top: 4px; padding-bottom: 4px; }
 .futures-field-tp .field-label, .futures-field-sl .field-label { width: 100%; font-size: 11px; }
@@ -219,13 +205,11 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
 .market-actions { display: flex; justify-content: flex-end; gap: 8px; color: var(--accent); }
 .assets-page { margin: 4px; padding: 24px; min-height: calc(100vh - 92px); }
 .asset-total > b { font-size: 28px; font-weight: 600; }
-.asset-actions { display: flex; gap: 12px; margin: 20px 0; }
-.asset-actions .primary { height: 40px; }
-.asset-accounts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
-.asset-account, .asset-login { background: var(--panel-2); border-radius: 8px; padding: 16px; }
+
+.asset-account { background: var(--panel-2); border-radius: 8px; padding: 16px; }
 .asset-account b { display: block; font-size: 20px; font-weight: 600; margin-top: 8px; }
-.asset-login .primary { display: block; margin-top: 16px; }
-.asset-list, .asset-ledger { overflow: auto; }
+
+.asset-list { overflow: auto; }
 .trade-modal { width: min(420px, 100vw - 32px); padding: 24px; border: 0; border-radius: 16px;
   color: var(--text); background: var(--panel-2); max-height: calc(100vh - 32px); }
 .trade-modal::backdrop { background: rgba(0,0,0,0.6); }
@@ -277,7 +261,6 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
   .header-actions { gap: 8px; }
   .bar { gap: 24px; }
 }
-
 
 /* DESIGN §4.2–4.3：外壳和公共组件；手机保留原交易布局。 */
 body { font-size: 13px; }
@@ -421,7 +404,6 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .global-search { width: 280px; }
 }
 
-
 /* DESIGN §4.5–4.6：A股视图，五档/逐笔、单列ticket；1024处图表/盘口分段。 */
 .index-cards { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
 .ashare-status { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -492,7 +474,6 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .compact-book > .book { display: block; grid-area: chart; margin-top: 36px; z-index: 1; }
 }
 
-
 /* DESIGN §4.6–4.7：加密单列ticket、盘口/成交共用实例及窄屏图表/盘口分段。 */
 .spot-columns { display: block; padding: 0; }
 .spot-column.mobile-hidden { display: none; }
@@ -522,7 +503,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 .futures-tags { padding: 0; margin-bottom: 8px; }
 .futures-actions { display: block; }
 .futures-actions button, .futures-login > .primary { height: 48px; }
-.futures-cost { background: var(--surface-2); padding: 12px; border-radius: 8px; }
+
 .book-row { height: 22px; }
 .book-title { height: 40px; }
 .book-switch { margin: 8px; }
@@ -548,7 +529,6 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .futures-bar .bar-stat:nth-of-type(n+6) { display: none; }
 }
 @media (min-width: 1440px) { .futures-bar .bar-stat:nth-of-type(n+7) { display: none; } }
-
 
 /* 第三轮评审：签到金额、紧凑统计与独立登录标签。 */
 .rail-login { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; font-size: 11px; }
@@ -915,5 +895,4 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   @media (prefers-reduced-motion: reduce) { .trade-modal, .stock-ticket { animation: none; } }
 }
 /* SPEC-FEED: keep last observed values visible when every browser channel fails. */
-.feed-unavailable .latest-price, .feed-unavailable .bar-price,
-.feed-unavailable .market-last, .feed-unavailable .book-row { color: var(--muted) !important; }
+.feed-unavailable .latest-price, .feed-unavailable .market-last, .feed-unavailable .book-row { color: var(--muted) !important; }

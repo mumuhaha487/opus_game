@@ -57,7 +57,7 @@ export async function handle(request, env) {
     // PLATFORM §2.3：公开只读地区接口，地区只决定显示货币。
     if (new URL(request.url).pathname === '/api/region') {
       if (request.method !== 'GET') return fail(405, 'method_not_allowed', { Allow: 'GET' });
-      try { return reply(200, await regionView(request, Date.now(), env?.DEBUG_REGION === '1'),
+      try { return reply(200, await regionView(request, Date.now()),
         { 'Cache-Control': 'private, max-age=60' }); }
       catch { return reply(503, { error: 'fx_unavailable', message: '汇率暂时不可用，请稍后再试' }); }
     }
@@ -74,7 +74,7 @@ export async function handle(request, env) {
     const likeMatch = /^\/api\/like\/([a-z0-9-]{1,32})$/.exec(path);
     const liked = likeMatch && likeable(likeMatch[1]) ? likeMatch[1] : null;
     const trading = path.startsWith('/api/trade/');
-    const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/delete': 'POST', '/api/keys/revoke': 'POST', '/api/keys/log': 'GET' };
+    const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/delete': 'POST', '/api/keys/log': 'GET' };
     const managingKeys = Object.hasOwn(keyMethods, path);
     const allow = trading ? method
       : managingKeys ? keyMethods[path] : game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;

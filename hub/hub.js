@@ -1,7 +1,7 @@
 'use strict';
 // =====================================================================
-//  HUB — renders GAME.INC.RE from HUB_CATALOG: the live hot-games
-//  carousel, every game grouped by category, likes and game details.
+//  HUB — renders GAME.INC.RE from HUB_CATALOG: every game with category
+//  filters, search, new/hot sorting, likes and game details.
 //  DOM is built with createElement/textContent only.
 // =====================================================================
 (() => {
@@ -12,7 +12,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const catOf = id => CATS.find(c => c.id === id) || { id, name: '其它', en: 'OTHER', color: '#a99cc4', desc: '' };
-  const S = { likes: {}, mine: { guest: [], user: null }, loaded: false, slide: 0, order: [], cat: 'all', sort: 'new', q: '', paused: 0, hover: false };
+  const S = { likes: {}, mine: { guest: [], user: null }, loaded: false, cat: 'all', sort: 'new', q: '' };
 
   // ---------- tiny DOM helpers ----------
   function el(tag, o = {}, kids = []) {
@@ -59,7 +59,6 @@
   // weekly likes count double; a game is boosted for its first two weeks
   const heat = g => { const l = likesOf(g.id); return l.week * 2 + l.total + (isNew(g) ? 10 : 0); };
   const byHeat = (a, b) => heat(b) - heat(a) || (a.released < b.released ? 1 : a.released > b.released ? -1 : 0) || a.no - b.no;
-  const hotOrder = () => GAMES.slice().sort(byHeat).slice(0, 6).map(g => g.id);
 
   // ---------- like buttons ----------
   const likeEls = new Map(); // id -> [{ btn, num }]
@@ -142,11 +141,10 @@
     apply(await A.request('/api/likes')); paintAll(); reorderSoon();
   }
 
-  function cover(g, cls, opts = {}) {
+  function cover(g, cls) {
     const a = el('a', { cls, attrs: { href: g.href, 'aria-label': '开始游戏：' + g.name } });
-    a.append(el('img', { attrs: { src: g.cover, alt: g.coverAlt || g.name, width: '960', height: '540', loading: opts.lazy ? 'lazy' : 'eager', decoding: 'async' } }));
+    a.append(el('img', { attrs: { src: g.cover, alt: g.coverAlt || g.name, width: '960', height: '540', loading: 'eager', decoding: 'async' } }));
     a.append(el('span', { cls: 'play', attrs: { 'aria-hidden': 'true' } }, [playIcon()]));
-    if (opts.rank) a.append(el('span', { cls: 'rank px' }, [document.createTextNode('热度 '), el('b', { text: 'No.' + opts.rank })]));
     if (isNew(g)) a.append(el('span', { cls: 'ribbon', text: '新作' }));
     return a;
   }
@@ -201,7 +199,7 @@
     const q = S.q.trim().toLowerCase();
     const hay = g => [g.name, g.en, g.short || '', g.pitch, catOf(g.category).name, ...g.tags].join(' ').toLowerCase();
     const list = GAMES.filter(g => (S.cat === 'all' || g.category === S.cat) && (!q || hay(g).includes(q)));
-    const sorter = { new: (a, b) => (a.released < b.released ? 1 : a.released > b.released ? -1 : b.no - a.no), hot: byHeat, no: (a, b) => a.no - b.no }[S.sort];
+    const sorter = { new: (a, b) => (a.released < b.released ? 1 : a.released > b.released ? -1 : b.no - a.no), hot: byHeat }[S.sort];
     list.sort(sorter);
     const box = $('groups'); box.replaceChildren();
     $('all-count').textContent = q || S.cat !== 'all' ? `${list.length} / ${GAMES.length} 款` : `${GAMES.length} 款`;

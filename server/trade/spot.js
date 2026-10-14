@@ -157,8 +157,3 @@ export function cancelOrder(state, id, now) {
   if (!order) throw { status: 404, code: 'order_not_found' };
   completeOrder(state, order, 'canceled', now);
 }
-export function cancelAll(state, symbol, now) {
-  if (symbol !== undefined) marketFor(symbol);
-  const orders = state.orders.filter(order => order.market === 'spot' && (!symbol || order.symbol === symbol));
-  for (const order of orders) completeOrder(state, order, 'canceled', now);
-}

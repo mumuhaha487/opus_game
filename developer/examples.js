@@ -4685,11 +4685,11 @@ export const documentationExamples = {
       ]
     },
     {
-      "label": "撤销trade Key",
+      "label": "删除trade Key",
       "authentication": "web_session",
       "request": {
         "method": "POST",
-        "path": "/api/keys/revoke",
+        "path": "/api/keys/delete",
         "body": {
           "id": "jpvsie2omu"
         }
@@ -4701,11 +4701,12 @@ export const documentationExamples = {
         },
         "body": {
           "ok": true,
-          "id": "jpvsie2omu"
+          "id": "jpvsie2omu",
+          "deleted": true
         }
       },
       "curl": [
-        "curl -X POST \"https://game.inc.re/api/keys/revoke\" \\",
+        "curl -X POST \"https://game.inc.re/api/keys/delete\" \\",
         "  -H \"Cookie: <SESSION_COOKIE>\" -H \"Origin: https://game.inc.re\" \\",
         "  -H \"Content-Type: application/json\" --data @request.json"
       ],
@@ -4714,7 +4715,7 @@ export const documentationExamples = {
       },
       "python": [
         "import os, json, requests",
-        "url = \"https://game.inc.re/api/keys/revoke\"",
+        "url = \"https://game.inc.re/api/keys/delete\"",
         "headers = {\"Cookie\": os.environ[\"GAME_SESSION_COOKIE\"], \"Origin\": \"https://g" +
           "ame.inc.re\"}",
         "payload = json.loads('''",
@@ -4730,7 +4731,7 @@ export const documentationExamples = {
       ]
     },
     {
-      "label": "撤销后立即401",
+      "label": "删除后立即401",
       "authentication": "api_key",
       "request": {
         "method": "GET",

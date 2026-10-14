@@ -1,7 +1,7 @@
 // 美股限价单惰性结算：只用委托之后、完整结束的分钟（跳过委托所在分钟），每分钟只用该分钟确实成交过的价格；
 // 触价按限价成交（保守）；盘外预埋单若开盘第一根就已越过限价，按该根开盘价成交（真实成交价、优于限价）；收盘未成交部分过期并解冻。当日用 UsMinute，近 5 个交易日用 dayus，更早用未复权日 K
 // （仅当委托覆盖整个交易时段，即盘外预埋单；盘中委托缺分钟数据时保守按未成交过期）。
-import { parse, mul } from './decimal.js';
+import { parse } from './decimal.js';
 import { nyParts, sessionFor } from './us-calendar.js';
 import { fillUs, finishUsOrder } from './usstock.js';
 export const hasUsWork = state => state.orders.some(order => order.market === 'usstock');
@@ -50,11 +50,4 @@ export async function settleUs(state, client, now, notices) {
     if (error?.code === 'upstream_budget') return true;
     throw error;
   }
-}
-// 估值：持仓按腾讯最新价（展示口径）计入总资产。
-export async function usHoldingsValue(state, client) {
-  const tickers = Object.keys(state.usstock.holdings);
-  if (!tickers.length) return 0n;
-  const quotes = await client.quotes(tickers);
-  return tickers.reduce((sum, ticker) => sum + mul(parse(quotes[ticker].last), parse(state.usstock.holdings[ticker].qty), 'floor'), 0n);
 }

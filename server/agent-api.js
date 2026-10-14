@@ -15,13 +15,11 @@ import { pnl, MAKER, TAKER, maxLeverage } from './trade/futures.js';
 import { FEE_RATE } from './trade/spot.js';
 import { UsClient, usStock } from './trade/us-data.js';
 import { tradePrice, SEC_RATE, TAF_PER_SHARE, TAF_MAX } from './trade/usstock.js';
+import { marketsView, depthView, klinesView, futuresQuote } from './agent-market.js';
+import { AGENT_ROUTES as ROUTES } from './agent-routes.js';
 import { usMarketStatus } from './trade/us-calendar.js';
-// 网页能做的交易操作 API 都能做：含签到、资金流水、一键撤单、逐仓保证金和 A 股自选。
-const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', ledger: 'GET',
-  'orders/cancel': 'POST', 'orders/cancel-all': 'POST', transfer: 'POST', checkin: 'POST', 'ashare/watch': 'POST',
-  'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST' };
 const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare', usstock: 'usstock' };
-const denied = new Set(['keys', 'keys/delete', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
+const denied = new Set(['keys', 'keys/delete', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
 const fail = (status, code, message) => { throw { status, code, message }; };
 function reply(status, data, headers) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8',
@@ -82,7 +80,8 @@ async function quoteView(url, gate, ashare, now) {
   const market = url.searchParams.get('market'), raw = url.searchParams.get('symbol');
   // 美股代码大小写不敏感（名单为大写）。
   const symbol = market === 'usstock' && raw ? raw.toUpperCase() : raw;
-  if (market === 'crypto') {
+  if (market === 'crypto_futures') return futuresQuote(symbol, gate);
+  if (market === 'crypto' || market === 'crypto_spot') {
     marketFor(symbol);
     const [ticker, initialBook] = await Promise.all([gate.ticker(symbol), gate.executionBook(symbol)]);
     let book = initialBook;
@@ -177,6 +176,9 @@ async function dispatch(request, env, key, route, data, now) {
   }
   if (route === 'quote') return reply(200, await quoteView(url, gate, ashare, now));
   if (route === 'spec') return reply(200, await specView(url, gate, ashare));
+  if (route === 'markets') return reply(200, await marketsView(url, gate, new UsClient(gate, now)));
+  if (route === 'depth') return reply(200, await depthView(url, gate, ashare, new UsClient(gate, now)));
+  if (route === 'klines') return reply(200, await klinesView(url, gate, ashare, new UsClient(gate, now)));
   if (route === 'ledger') {
     const value = url.searchParams.get('market'), { state } = await readState(env.ACCOUNTS, key.uid, now);
     const market = value === null ? null : value === 'wallet' ? 'wallet' : marketName(value, true);

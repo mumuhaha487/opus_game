@@ -9,7 +9,7 @@ export class Feed {
     this.tickers = { spot: new Map(), futures: new Map() }; this.specs = new Map();
     this.book = { asks: [], bids: [] }; this.perpBook = { asks: new Map(), bids: new Map() };
     this.trades = []; this.candles = []; this.connections = {}; this.status = 'reconnecting';
-    this.dirty = true; this.priceUp = true; this.wantFutures = false; this.received = {};
+    this.dirty = true; this.priceUp = true; this.wantFutures = false;
     this.sparkCandles = new Map();
     this.sources = new CryptoSources(this);
     document.addEventListener('visibilitychange', () => this.visibility());
@@ -175,7 +175,6 @@ export class Feed {
     if (message.error || message.event === 'subscribe') return;
     const result = message.result;
     if (!result) return;
-    this.received[message.channel] = (this.received[message.channel] || 0) + 1;
     if (message.channel.endsWith('.tickers')) {
       for (const ticker of Array.isArray(result) ? result : [result]) this.saveTicker(market, ticker);
       return;

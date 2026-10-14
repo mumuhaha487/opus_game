@@ -1,5 +1,4 @@
 // ACCOUNT §3 / REPORT-14：纯本地 Markdown；响应从本地 curl 按操作相关字段抓取，不联网或执行代码。
-const BASE = 'https://game.inc.re/api/v1';
 export const PROMPT_ERRORS = {
   "api_key_required": [
     "未提供 API 密钥",
@@ -188,6 +187,12 @@ export const PROMPT_ERROR_GROUPS = {
     "unknown_symbol",
     "market_unavailable"
   ],
+  "marketData": [
+    "bad_request",
+    "unknown_symbol",
+    "not_a_share",
+    "market_unavailable"
+  ],
   "list": [
     "bad_request",
     "market_unavailable"
@@ -329,6 +334,490 @@ export const PROMPT_ERROR_STATUS = {
   "server_error": 503
 };
 export const PROMPT_RESPONSES = {
+  "quote-futures": {
+    "market": "crypto_futures",
+    "symbol": "BTC_USDT",
+    "last": "82893.6",
+    "bid": "82898",
+    "ask": "82898.1",
+    "markPrice": "82897.81",
+    "indexPrice": "82928.08",
+    "fundingRate": "0.0001",
+    "changePercent": "-0.53",
+    "time": 1791982169225
+  },
+  "markets": {
+    "market": "crypto_spot",
+    "markets": [
+      {
+        "symbol": "BTC_USDT",
+        "name": "比特币",
+        "last": "82871.9",
+        "changePercent": "-0.5",
+        "high24h": "84142.8",
+        "low24h": "82604.3",
+        "quoteVolume24h": "662866335.8582105"
+      },
+      {
+        "symbol": "ETH_USDT",
+        "name": "以太坊",
+        "last": "2481.53",
+        "changePercent": "-0.81",
+        "high24h": "2530.07",
+        "low24h": "2475.06",
+        "quoteVolume24h": "183459216.034085"
+      },
+      {
+        "symbol": "BNB_USDT",
+        "name": "币安币",
+        "last": "738.8",
+        "changePercent": "-0.25",
+        "high24h": "747",
+        "low24h": "737.7",
+        "quoteVolume24h": "5511092.4046"
+      },
+      {
+        "symbol": "SOL_USDT",
+        "name": "Solana",
+        "last": "105.73",
+        "changePercent": "-0.76",
+        "high24h": "108.68",
+        "low24h": "105.45",
+        "quoteVolume24h": "70052207.8566"
+      },
+      {
+        "symbol": "XRP_USDT",
+        "name": "瑞波币",
+        "last": "1.3597",
+        "changePercent": "-0.32",
+        "high24h": "1.3868",
+        "low24h": "1.3558",
+        "quoteVolume24h": "35411959.90884"
+      },
+      {
+        "symbol": "DOGE_USDT",
+        "name": "狗狗币",
+        "last": "0.0837",
+        "changePercent": "-0.4",
+        "high24h": "0.08567",
+        "low24h": "0.0832",
+        "quoteVolume24h": "14919664.5281304"
+      },
+      {
+        "symbol": "ADA_USDT",
+        "name": "艾达币",
+        "last": "0.2315",
+        "changePercent": "-1.12",
+        "high24h": "0.23914",
+        "low24h": "0.22865",
+        "quoteVolume24h": "5000235.44664"
+      },
+      {
+        "symbol": "TRX_USDT",
+        "name": "波场",
+        "last": "0.3334",
+        "changePercent": "1.52",
+        "high24h": "0.3343",
+        "low24h": "0.3269",
+        "quoteVolume24h": "5959675.52395"
+      },
+      {
+        "symbol": "AVAX_USDT",
+        "name": "雪崩",
+        "last": "10.074",
+        "changePercent": "-1.87",
+        "high24h": "10.426",
+        "low24h": "10.012",
+        "quoteVolume24h": "4230238.989417"
+      },
+      {
+        "symbol": "LINK_USDT",
+        "name": "Chainlink",
+        "last": "12.752",
+        "changePercent": "-1.38",
+        "high24h": "13.103",
+        "low24h": "12.726",
+        "quoteVolume24h": "7038682.265"
+      },
+      {
+        "symbol": "DOT_USDT",
+        "name": "波卡",
+        "last": "1.1401",
+        "changePercent": "-3.3",
+        "high24h": "1.2096",
+        "low24h": "1.122",
+        "quoteVolume24h": "2440379.08586"
+      },
+      {
+        "symbol": "BCH_USDT",
+        "name": "比特币现金",
+        "last": "275.34",
+        "changePercent": "1.65",
+        "high24h": "282.68",
+        "low24h": "269.93",
+        "quoteVolume24h": "846240.437"
+      },
+      {
+        "symbol": "LTC_USDT",
+        "name": "莱特币",
+        "last": "60.57",
+        "changePercent": "-0.67",
+        "high24h": "62.44",
+        "low24h": "60.47",
+        "quoteVolume24h": "3846310.13529"
+      },
+      {
+        "symbol": "SHIB_USDT",
+        "name": "柴犬币",
+        "last": "0.000005087",
+        "changePercent": "-1.94",
+        "high24h": "0.000005246",
+        "low24h": "0.000005067",
+        "quoteVolume24h": "254349.85223801"
+      },
+      {
+        "symbol": "NEAR_USDT",
+        "name": "NEAR",
+        "last": "4.992",
+        "changePercent": "-2.32",
+        "high24h": "5.184",
+        "low24h": "4.935",
+        "quoteVolume24h": "35671859.39546"
+      },
+      {
+        "symbol": "UNI_USDT",
+        "name": "Uniswap",
+        "last": "7.26",
+        "changePercent": "-0.79",
+        "high24h": "7.674",
+        "low24h": "7.216",
+        "quoteVolume24h": "9097377.16825"
+      },
+      {
+        "symbol": "APT_USDT",
+        "name": "Aptos",
+        "last": "0.8096",
+        "changePercent": "-2.02",
+        "high24h": "0.8503",
+        "low24h": "0.803",
+        "quoteVolume24h": "1410763.907352"
+      },
+      {
+        "symbol": "ARB_USDT",
+        "name": "Arbitrum",
+        "last": "0.18507",
+        "changePercent": "0.24",
+        "high24h": "0.1952",
+        "low24h": "0.18281",
+        "quoteVolume24h": "3990736.28329"
+      },
+      {
+        "symbol": "OP_USDT",
+        "name": "Optimism",
+        "last": "0.14646",
+        "changePercent": "5.94",
+        "high24h": "0.16257",
+        "low24h": "0.13821",
+        "quoteVolume24h": "8218301.31144"
+      },
+      {
+        "symbol": "SUI_USDT",
+        "name": "Sui",
+        "last": "1.0341",
+        "changePercent": "-0.93",
+        "high24h": "1.1055",
+        "low24h": "1.0106",
+        "quoteVolume24h": "14565772.712844"
+      },
+      {
+        "symbol": "PEPE_USDT",
+        "name": "Pepe",
+        "last": "0.000004124",
+        "changePercent": "-0.5",
+        "high24h": "0.000004266",
+        "low24h": "0.000004077",
+        "quoteVolume24h": "6903375.907116846"
+      },
+      {
+        "symbol": "FIL_USDT",
+        "name": "Filecoin",
+        "last": "1.1185",
+        "changePercent": "-3.55",
+        "high24h": "1.2145",
+        "low24h": "1.1",
+        "quoteVolume24h": "5744814.23124"
+      },
+      {
+        "symbol": "ATOM_USDT",
+        "name": "Cosmos",
+        "last": "1.788",
+        "changePercent": "-0.5",
+        "high24h": "1.901",
+        "low24h": "1.766",
+        "quoteVolume24h": "245979.09357"
+      },
+      {
+        "symbol": "ETC_USDT",
+        "name": "以太经典",
+        "last": "8.055",
+        "changePercent": "-0.34",
+        "high24h": "8.223",
+        "low24h": "8.015",
+        "quoteVolume24h": "372462.050041"
+      },
+      {
+        "symbol": "AAVE_USDT",
+        "name": "Aave",
+        "last": "158.81",
+        "changePercent": "0.35",
+        "high24h": "163.11",
+        "low24h": "157.71",
+        "quoteVolume24h": "7593021.22009"
+      },
+      {
+        "symbol": "INJ_USDT",
+        "name": "Injective",
+        "last": "7.856",
+        "changePercent": "1.4",
+        "high24h": "8.455",
+        "low24h": "7.708",
+        "quoteVolume24h": "4974927.67584"
+      },
+      {
+        "symbol": "WLD_USDT",
+        "name": "Worldcoin",
+        "last": "0.5007",
+        "changePercent": "-1.1",
+        "high24h": "0.5253",
+        "low24h": "0.4954",
+        "quoteVolume24h": "10304892.1914092"
+      },
+      {
+        "symbol": "TIA_USDT",
+        "name": "Celestia",
+        "last": "0.5499",
+        "changePercent": "-7.85",
+        "high24h": "0.6076",
+        "low24h": "0.5396",
+        "quoteVolume24h": "3031218.32387"
+      },
+      {
+        "symbol": "SEI_USDT",
+        "name": "Sei",
+        "last": "0.06346",
+        "changePercent": "2.22",
+        "high24h": "0.06634",
+        "low24h": "0.062",
+        "quoteVolume24h": "334346.8647226"
+      },
+      {
+        "symbol": "HBAR_USDT",
+        "name": "Hedera",
+        "last": "0.08557",
+        "changePercent": "-1.5",
+        "high24h": "0.08892",
+        "low24h": "0.08541",
+        "quoteVolume24h": "305538.6523768"
+      },
+      {
+        "symbol": "XLM_USDT",
+        "name": "恒星币",
+        "last": "0.18746",
+        "changePercent": "-1.9",
+        "high24h": "0.19348",
+        "low24h": "0.18691",
+        "quoteVolume24h": "1724434.8344899"
+      },
+      {
+        "symbol": "ICP_USDT",
+        "name": "互联网计算机",
+        "last": "3.057",
+        "changePercent": "-3.35",
+        "high24h": "3.192",
+        "low24h": "3.033",
+        "quoteVolume24h": "2706373.19191"
+      },
+      {
+        "symbol": "RENDER_USDT",
+        "name": "Render",
+        "last": "1.9576",
+        "changePercent": "-4.73",
+        "high24h": "2.0987",
+        "low24h": "1.9451",
+        "quoteVolume24h": "1844148.56573"
+      },
+      {
+        "symbol": "ENA_USDT",
+        "name": "Ethena",
+        "last": "0.20165",
+        "changePercent": "-4.68",
+        "high24h": "0.21583",
+        "low24h": "0.1855",
+        "quoteVolume24h": "6577747.44672"
+      },
+      {
+        "symbol": "ONDO_USDT",
+        "name": "Ondo",
+        "last": "0.4575",
+        "changePercent": "-2.32",
+        "high24h": "0.475",
+        "low24h": "0.4522",
+        "quoteVolume24h": "7565618.238477"
+      },
+      {
+        "symbol": "TAO_USDT",
+        "name": "Bittensor",
+        "last": "274.93",
+        "changePercent": "-0.28",
+        "high24h": "285.02",
+        "low24h": "273.31",
+        "quoteVolume24h": "2752915.76768"
+      },
+      {
+        "symbol": "FET_USDT",
+        "name": "Fetch.ai",
+        "last": "0.2111",
+        "changePercent": "-0.47",
+        "high24h": "0.2202",
+        "low24h": "0.21",
+        "quoteVolume24h": "1797630.474841"
+      },
+      {
+        "symbol": "POL_USDT",
+        "name": "Polygon",
+        "last": "0.09812",
+        "changePercent": "-2.87",
+        "high24h": "0.10249",
+        "low24h": "0.09774",
+        "quoteVolume24h": "180158.53434"
+      },
+      {
+        "symbol": "HYPE_USDT",
+        "name": "Hyperliquid",
+        "last": "80.87",
+        "changePercent": "-0.66",
+        "high24h": "82.78",
+        "low24h": "80.56",
+        "quoteVolume24h": "16216761.16484"
+      }
+    ]
+  },
+  "depth": {
+    "market": "crypto_spot",
+    "symbol": "BTC_USDT",
+    "unit": "基础币数量",
+    "time": 1791982091214,
+    "bids": [
+      [
+        "82872.9",
+        "0.035655"
+      ],
+      [
+        "82872.3",
+        "0.0002"
+      ],
+      [
+        "82870.8",
+        "0.021735"
+      ],
+      [
+        "82869.1",
+        "0.028486"
+      ],
+      [
+        "82864.8",
+        "0.001"
+      ]
+    ],
+    "asks": [
+      [
+        "82873",
+        "0.071379"
+      ],
+      [
+        "82873.5",
+        "0.007804"
+      ],
+      [
+        "82873.6",
+        "0.05229"
+      ],
+      [
+        "82877.6",
+        "0.006794"
+      ],
+      [
+        "82877.8",
+        "0.01585"
+      ]
+    ]
+  },
+  "klines": {
+    "market": "crypto_spot",
+    "symbol": "BTC_USDT",
+    "interval": "1h",
+    "candles": [
+      {
+        "t": 1791972000000,
+        "open": "83259.3",
+        "high": "83469.4",
+        "low": "83021.7",
+        "close": "83469.4",
+        "volume": "236.65774100",
+        "quoteVolume": "19715133.02149040"
+      },
+      {
+        "t": 1791975600000,
+        "open": "83470",
+        "high": "83510.3",
+        "low": "83333.3",
+        "close": "83473.9",
+        "volume": "151.99642500",
+        "quoteVolume": "12681864.21327660"
+      },
+      {
+        "t": 1791979200000,
+        "open": "83473.8",
+        "high": "83932.6",
+        "low": "82604.3",
+        "close": "82821.1",
+        "volume": "976.79018700",
+        "quoteVolume": "81079744.98004020"
+      }
+    ]
+  },
+  "klines-stock": {
+    "market": "ashare",
+    "symbol": "sh600519",
+    "interval": "1d",
+    "adjusted": "前复权",
+    "candles": [
+      {
+        "t": 1791768600000,
+        "open": "1262.950",
+        "high": "1288.000",
+        "low": "1261.000",
+        "close": "1288.000",
+        "volume": "3155600"
+      },
+      {
+        "t": 1791855000000,
+        "open": "1287.000",
+        "high": "1288.480",
+        "low": "1268.110",
+        "close": "1274.890",
+        "volume": "2657300"
+      },
+      {
+        "t": 1791941400000,
+        "open": "1270.10",
+        "high": "1286.75",
+        "low": "1266.00",
+        "close": "1286.00",
+        "volume": "2377300"
+      }
+    ]
+  },
   "checkin": {
     "reward": "20",
     "wallet": {
@@ -1207,7 +1696,7 @@ export const PROMPT_PROJECTS = {
         "title": "加密报价",
         "method": "GET",
         "path": "/quote?market=crypto&symbol=BTC_USDT",
-        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
+        "params": "market：string，必填，crypto（或 crypto_spot）/ crypto_futures / ashare / usstock；symbol：string，必填，对应 BTC_USDT / BTC_USDT / sh601005 / AAPL。",
         "ability": "读取 last、bid、ask 和行情时间；A 股另含涨跌停与交易状态。",
         "errorGroup": "quoteCrypto"
       },
@@ -1216,7 +1705,7 @@ export const PROMPT_PROJECTS = {
         "title": "A 股报价",
         "method": "GET",
         "path": "/quote?market=ashare&symbol=sh601005",
-        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
+        "params": "market：string，必填，crypto（或 crypto_spot）/ crypto_futures / ashare / usstock；symbol：string，必填，对应 BTC_USDT / BTC_USDT / sh601005 / AAPL。",
         "ability": "读取 last、bid、ask 和行情时间；A 股另含涨跌停与交易状态。",
         "errorGroup": "quoteAshare"
       },
@@ -1225,9 +1714,50 @@ export const PROMPT_PROJECTS = {
         "title": "美股报价",
         "method": "GET",
         "path": "/quote?market=usstock&symbol=AAPL",
-        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
+        "params": "market：string，必填，crypto（或 crypto_spot）/ crypto_futures / ashare / usstock；symbol：string，必填，对应 BTC_USDT / BTC_USDT / sh601005 / AAPL。",
         "ability": "盘中 realtime=true，last 为实时成交价（与市价单同源）；盘外 realtime=false，last 仅作参考；字段见第 6 节。",
         "errorGroup": "quoteUs"
+      },
+      {
+        "id": "quote-futures",
+        "title": "合约报价",
+        "method": "GET",
+        "path": "/quote?market=crypto_futures&symbol=BTC_USDT",
+        "params": "market：string，必填，crypto（或 crypto_spot）/ crypto_futures / ashare / usstock；symbol：string，必填，对应 BTC_USDT / BTC_USDT / sh601005 / AAPL。",
+        "ability": "合约最新价、买一卖一、标记价、指数价、资金费率和 24 小时涨跌幅。",
+        "errorGroup": "marketData"
+      },
+      {
+        "id": "markets",
+        "title": "市场清单",
+        "method": "GET",
+        "path": "/markets?market=crypto_spot",
+        "ability": "一次返回该市场全部可交易代码及最新价、涨跌幅；合约另含标记价与资金费率，美股含分组；A 股按板块/排序分页（每页 50，带 total）。",
+        "errorGroup": "marketData"
+      },
+      {
+        "id": "depth",
+        "title": "盘口深度",
+        "method": "GET",
+        "path": "/depth?market=crypto_spot&symbol=BTC_USDT&limit=5",
+        "ability": "bids/asks 为 [价格, 数量] 字符串，数量与下单 qty 同单位（加密为基础币，股票为股）；A 股最多五档，美股一档。",
+        "errorGroup": "marketData"
+      },
+      {
+        "id": "klines",
+        "title": "K 线",
+        "method": "GET",
+        "path": "/klines?market=crypto_spot&symbol=BTC_USDT&interval=1h&limit=3",
+        "ability": "candles 按时间升序，t 为开盘时刻毫秒；open/high/low/close/volume 为字符串，加密另有 quoteVolume。",
+        "errorGroup": "marketData"
+      },
+      {
+        "id": "klines-stock",
+        "title": "股票日 K",
+        "method": "GET",
+        "path": "/klines?market=ashare&symbol=sh600519&interval=1d&limit=3",
+        "ability": "股票 1d/1w/1M 为前复权，volume 单位为股；1m 为当日分时，每分钟只有 close 与 volume。",
+        "errorGroup": "marketData"
       },
       {
         "id": "orders-open-crypto_spot",
@@ -1763,6 +2293,7 @@ export const PROMPT_FIELDS = [
   'market 是 crypto / ashare / usstock，symbol 是交易对/代码；last、bid、ask 均为 string，time 为行情 Unix 毫秒。',
   'A 股另有 string limitUp/limitDown 与“交易中/休市/停牌”status；last 为最近成交价，不保证等于本单吃到的盘口均价。',
   '美股另有 name、prevClose、realtime（true=盘中实时成交价，与市价单同源；false=盘外最近价，仅参考）、status、nextOpen/closeAt（毫秒）。',
+  '合约 quote 另有 markPrice、indexPrice、fundingRate、changePercent；行情数据接口（markets/depth/klines）只供分析，成交价以下单时的权威行情为准。',
   'quote 不返回 Gate 数量精度、合约乘数等规格；按交易所文档/真实 Gate 规格核实，不从价格小数位猜数量精度。',
   '',
   '### order：委托',
@@ -1818,10 +2349,6 @@ export const maskKey = key => key.slice(0, 7) + '…' + key.slice(-4);
 export function environmentCommands(secret) {
   return `$env:GAMEINC_API_KEY = '${secret}'\nexport GAMEINC_API_KEY='${secret}'`;
 }
-export function curlExample(endpoint, base = BASE) {
-  const head = `curl -X ${endpoint.method} "${base}${endpoint.path}" -H "Authorization: Bearer $GAMEINC_API_KEY"`;
-  return head + (endpoint.body ? ` -H "Content-Type: application/json" --data '${JSON.stringify(endpoint.body)}'` : '');
-}
 // 提示词内的紧凑写法：第 4 节先定义 $B/$A/$J，示例只引用变量，复制后同样可执行。
 export const CURL_VARIABLES = 'B=https://game.inc.re/api/v1; A="Authorization: Bearer $GAMEINC_API_KEY"; '
   + 'J="Content-Type: application/json"';
@@ -1830,7 +2357,7 @@ export function curlShort(endpoint) {
     : `curl -s "$B${endpoint.path}" -H "$A"`;
 }
 // ACCOUNT §3 压缩版：接口按族分组，参数表每族只写一次；通用错误只在第 8 节出现；
-// 响应去掉空值/游标噪声后单行展示，完整字段以第 6 节为准。目标：trade 不超过 54 KB，read 不超过 38 KB。
+// 响应去掉空值/游标噪声后单行展示，完整字段以第 6 节为准。目标：trade 不超过 58 KB，read 不超过 42 KB。
 // 美股可交易名单（与 trade/js/usstock/universe.js 一致，测试校验）。
 export const US_TICKERS = 'AAPL MSFT NVDA GOOGL AMZN META TSLA AVGO ORCL ADBE CRM AMD INTC QCOM TXN CSCO IBM NFLX ASML TSM ARM SMCI PLTR SNOW SHOP UBER ABNB PYPL COIN MSTR MU DELL JPM V MA BAC WFC GS MS C AXP UNH LLY JNJ PFE MRK ABBV NVO WMT COST PG KO PEP MCD NKE DIS SBUX HD BA CAT GE XOM CVX T VZ BABA PDD JD BIDU NIO LI XPEV NTES BILI TME TCOM SPY QQQ DIA IWM VOO ARKK GLD TLT SOXX';
 const SPEC_PARAMS = 'market：必填 string，crypto_spot / crypto_futures / ashare / usstock；symbol：必填 string，交易对 BTC_USDT、A 股代码 sh600519 或美股代码 AAPL。';
@@ -1853,7 +2380,11 @@ const ABILITY = {
 const SPEC_ERRORS = ['bad_request', 'unknown_symbol', 'not_a_share', 'market_unavailable'];
 const FAMILIES = [
   { title: '账户与估值', ids: ['account'], params: '无参数。' },
-  { title: '行情报价', ids: ['quote-crypto', 'quote-ashare', 'quote-us'], paramsFrom: 'quote-crypto' },
+  { title: '行情报价', ids: ['quote-crypto', 'quote-futures', 'quote-ashare', 'quote-us'], paramsFrom: 'quote-crypto' },
+  { title: '行情数据：清单、盘口、K 线', ids: ['markets', 'depth', 'klines', 'klines-stock'],
+    params: '/markets：market 必填，crypto_spot / crypto_futures / usstock / ashare；ashare 另可 board（0 全部、1 沪主板、2 深主板、3 创业板、4 科创板）、'
+      + 'sort（0 涨幅、1 跌幅、2 成交额）、page（1–200）。/depth：market、symbol 必填，limit 可选 1–50（默认 20）。'
+      + '/klines：market、symbol 必填；interval 加密 1m/5m/15m/30m/1h/4h/1d/1w，股票 1m/1d/1w/1M（默认 1d）；limit 可选 1–500（默认 100）。' },
   { title: '交易规格（下单前必读）', ids: ['spec-spot', 'spec-futures', 'spec-ashare', 'spec-us'], params: SPEC_PARAMS },
   { title: '委托与成交查询', ids: ['orders-open-all', 'orders-history-crypto_spot', 'trades', 'ledger'],
     params: 'GET /orders：status 必填 open / history；market 可选 crypto_spot / crypto_futures / ashare / usstock，不传则返回全部市场（最省额度）。'
@@ -1875,6 +2406,8 @@ const FAMILIES = [
 const NOISE = new Set(['serverTime', 'checkFrom', 'nextCheck', 'fundedAt', 'updatedAt', 'stopDir', 'quoteQty', 'rateTime', 'bookSource']);
 export function briefResponse(value) {
   if (Array.isArray(value)) {
+    // 短的纯值数组（如盘口 [价格, 数量]）保持完整；其他数组只留第一项。
+    if (value.length <= 4 && value.every(item => item === null || typeof item !== 'object')) return value;
     const items = value.slice(0, 1).map(briefResponse); return value.length > 1 ? [...items, '…'] : items;
   }
   if (!value || typeof value !== 'object') return value;
@@ -1922,7 +2455,7 @@ export function generatePrompt(key, { mode = 'environment', secret = '' } = {}) 
   // 交易密钥：实时自主执行，不逐笔等待确认（行情会在等待中变化）；以用户利益原则约束。
   const strategy = !trade ? '当前是只读密钥，禁止任何写操作；需要交易时请用户新建带“交易”权限的密钥。'
     : '交易授权：这把密钥能做网页上的全部交易操作（下单、撤单、一键撤单、划转、签到、调杠杆、调保证金、止盈止损、平仓、A 股自选），'
-      + '你按用户的指令实时直接执行，下单前后都不向用户要确认——行情实时变化，等待确认会错过价格。每次操作后立即向用户汇报结果。';
+      + '行情（报价、清单、盘口、K 线）也都能用 API 获取。你按用户的指令实时直接执行，下单前后都不向用户要确认——行情实时变化，等待确认会错过价格。每次操作后立即向用户汇报结果。';
   const interest = !trade ? '' : '\n### 执行原则（用户指令优先）\n'
     + '- 用户的指令就是授权：按用户给出的标的、金额、杠杆、止盈止损和频率直接执行，不额外加限制、不追问是否确认。\n'
     + '- 用户没给出的参数（如数量、价格），按用户的目标自行决定，并在汇报里说明取值。\n'
@@ -1990,7 +2523,7 @@ export function generatePrompt(key, { mode = 'environment', secret = '' } = {}) 
     + '不能划走冻结/仓位保证金。签到用 POST /checkin，奖励发到钱包。\n'
     + '\n## 8. 错误码表\n' + errors
     + '\n\n## 9. 推荐工作流程\n'
-    + '先读 account 确认可用余额 → spec 读取规格 → quote 查询 → 按精度及最小额计算数量 → 按用户指令实时下单 → '
+    + '先读 account 确认可用余额 → 需要时用 markets/klines/depth 分析 → spec 读取规格 → quote 查询 → 按精度及最小额计算数量 → 按用户指令实时下单 → '
     + '间隔至少 10 秒查询 orders/trades（合并市场，遵守额度）→ 报告成交价、数量、手续费、未成交和冻结。\n'
     + '下面仅查询，不下单；不打印密钥，401 停止，429 串行等待。\n\n```python\n'
     + 'import os, time, requests\nkey = os.environ["GAMEINC_API_KEY"]\n'

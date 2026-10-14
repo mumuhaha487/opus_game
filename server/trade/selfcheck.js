@@ -64,4 +64,3 @@ export function runSelfcheck() {
   return { checks: ['decimal', 'rounding:1000', 'spot-fee', 'liquidation-formula', 'futures-fee', 'futures-margin',
     'checkin-calendar', 'fx-fee:0.2%', 'fx-conservation'] };
 }
-runSelfcheck();

@@ -4,8 +4,8 @@ import { WorkerPoll } from './worker-poll.js';
 export const pendingSettlement = state => !!(state?.openOrders.length || state?.futures.positions.length);
 export class TradeApi {
   constructor(onChange, onNotice) {
-    this.state = null; this.onChange = onChange; this.onNotice = onNotice; this.lastRequest = 0; this.generation = 0;
-    this.historyCache = new Map(); this.previousPrice = null;
+    this.state = null; this.onChange = onChange; this.onNotice = onNotice; this.generation = 0;
+    this.historyCache = new Map();
     this.poll = new WorkerPoll(() => this.loadState(), 300, () => this.logged());
     GameAccount.onProfileChange(() => this.accountChanged());
   }
@@ -20,7 +20,7 @@ export class TradeApi {
     return this.poll.run(true);
   }
   async loadState() {
-    this.lastRequest = Date.now(); const generation = this.generation;
+    const generation = this.generation;
     try {
       let cadence;
       const state = await GameAccount.request('/api/trade/state', 'GET', undefined, false,
@@ -59,14 +59,10 @@ export class TradeApi {
     this.historyCache.set(key, result[kind]); return result[kind];
   }
   async accountChanged() {
-    clearTimeout(this.poll.timer); this.previousPrice = null;
+    clearTimeout(this.poll.timer);
     this.generation++; this.state = null; this.historyCache.clear(); this.onChange(null);
     // A response belonging to the old login is discarded before the new login's initial read.
     if (this.poll.pending) await this.poll.pending;
     await this.refresh();
-  }
-  crossing(feed) {
-    // Realtime ticks update local valuation only; they never accelerate Worker synchronization.
-    this.previousPrice = Number(feed.tickers[feed.market].get(feed.symbol)?.last);
   }
 }

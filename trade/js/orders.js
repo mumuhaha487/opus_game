@@ -20,7 +20,8 @@ export class Orders {
     try { await this.api.post(this.feed.market + '/cancel', { id }); } catch (error) { this.modals.error(error); }
   }
   async cancelAll() {
-    try { await this.api.post('spot/cancel-all', this.hideOthers.checked ? { symbol: this.feed.symbol } : {}); }
+    // 当前页面所属市场（现货或合约）的全部委托；勾选“隐藏其他交易对”时只撤当前交易对。
+    try { await this.api.post('cancel-all', { market: this.feed.market, ...(this.hideOthers.checked ? { symbol: this.feed.symbol } : {}) }); }
     catch (error) { this.modals.error(error); }
   }
   tabsFor(state) {
@@ -51,7 +52,7 @@ export class Orders {
     tabs.forEach(([name, label], index) => {
       this.tabs.children[index].textContent = label; this.tabs.children[index].classList.toggle('selected', this.tab === name);
     });
-    this.controls.hidden = this.tab !== 'open' || !state || this.feed.market !== 'spot';
+    this.controls.hidden = this.tab !== 'open' || !state;
     if (!state) {
       this.body.replaceChildren(element('div', '登录后查看委托与持仓', 'empty-message'),
         button('登录', () => this.modals.login(), 'primary empty-login')); return;

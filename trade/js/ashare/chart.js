@@ -2,7 +2,7 @@
 import { element, button, price } from '../format.js';
 import { segment } from '../ui.js';
 import { movingAverage } from '../chart.js';
-import { chartTime, chartPoint, marketTimestamp } from '../chart-time.js';
+import { chartTime, chartPoint } from '../chart-time.js';
 export class AshareChart {
   // options（美股复用）：up/down 涨跌色、shift 图表时间平移（秒→秒）、zone 说明时区、more 是否显示分钟周期。
   // 不传时保持 A 股：红涨绿跌、北京时间、带分钟周期。

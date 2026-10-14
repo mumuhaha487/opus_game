@@ -1,6 +1,7 @@
 // PLATFORM §6.2–6.5：网页会话管理Key，HMAC索引认证，isolate令牌桶与脱敏调用日志。
 // 完整Key仅在创建响应出现；元数据和日志没有secret/hash；撤销以两份文档共同有效为准。
 // 条件写限制五个有效Key；认证不接受Cookie回退，不信任客户端uid。
+import { AGENT_ROUTES } from './agent-routes.js';
 import { b64url, unbase64, randomBytes, equal32, passwordHash, passwordValid } from './auth.js';
 import { absent, rateWindow } from './store.js';
 export const KEY_PROJECTS = {
@@ -13,8 +14,7 @@ const ID = /^[a-z2-7]{10}$/;
 const KEY = /^gk_([a-z2-7]{10})_([A-Za-z0-9_-]{43})$/;
 const buckets = new Map();
 const sampledGets = new WeakMap();
-const loggedPaths = new Set(['account', 'quote', 'orders', 'trades', 'orders/cancel', 'transfer',
-  'futures/leverage', 'futures/close', 'futures/tpsl'].map(path => '/api/v1/' + path));
+const loggedPaths = new Set(Object.keys(AGENT_ROUTES).map(path => '/api/v1/' + path));
 const fail = (status, code, message) => { throw { status, code, message }; };
 async function hashSecret(secret, authSecret) {
   const encoding = new TextEncoder();
@@ -57,8 +57,8 @@ export async function manageKeys(request, env, session, data) {
     const object = await bucket.get(`apikeys/log/${id}.json`);
     return { status: 200, body: { logs: object ? await object.json() : [] } };
   }
-  if (path === '/api/keys/delete' || path === '/api/keys/revoke') {
-    // 删除（旧 revoke 路由同义）：先在条件写里移除元数据行——认证同时要求元数据与索引，
+  if (path === '/api/keys/delete') {
+    // 删除：先在条件写里移除元数据行——认证同时要求元数据与索引，
     // 此后 Key 立即 401；再删除本人名下的索引与调用记录。索引删除失败也无法复活 Key。
     if (typeof data.id !== 'string' || !ID.test(data.id)) fail(400, 'bad_request', '请求格式错误');
     let removed = false;

@@ -100,7 +100,7 @@ export class AshareFeed {
     this.onChange = onChange; this.quotes = {}; this.bars = new Map(); this.trades = []; this.ranking = [];
     this.list = []; this.total = 0; this.tasks = new Map(); this.status = 'connecting'; this.page = 'overview';
     this.codes = INDICES.map(([code]) => code); this.board = 0; this.sort = 0; this.pageNumber = 1;
-    this.barsSource = new Map(); this.barsFetchedAt = new Map(); this.eastBarsRetryAt = 0;
+    this.barsSource = new Map(); this.barsFetchedAt = new Map();
     this.barChains = new Map(); this.detailsChain = new SourceChain(2, undefined, 'ashare-details');
     this.listChain = new SourceChain(3, undefined, 'ashare-list');
     this.workerLists = new Map(); this.workerDelay = 60000;
@@ -204,22 +204,21 @@ export class AshareFeed {
       fields1: 'f1,f2,f3,f4,f5,f6,f7,f8', fields2: 'f51,f52,f53,f54,f55,f56,f57,f58',
       ...(trends ? { ndays: period === 'five' ? '5' : '1' } : { klt: period, fqt: '1', lmt: '500', end: '20500101' }) });
     const prefix = trends ? EAST + 'stock/trends2/get?' : 'https://push2his.eastmoney.com/api/qt/stock/kline/get?';
-    let source;
     if (!this.barChains.has(key)) this.barChains.set(key, new SourceChain(2, undefined, 'ashare-bars-' + period));
     const rows = await this.barChains.get(key).read([async () => {
       const payload = await this.json(prefix + parameters);
       if (payload.rc !== undefined && payload.rc !== 0) throw Error('east rc');
       const bars = parseBars(payload.data, trends); if (!bars.length) throw Error('empty bars');
-      source = 'eastmoney'; return bars;
+      return bars;
     }, async () => {
       const name = { 101: 'day', 102: 'week', 103: 'month' }[period];
       const path = period === 'trends' ? 'minute/query?code=' + code : period === 'five' ? 'day/query?code=' + code
         : name ? 'fqkline/get?param=' + code + ',' + name + ',,,320,qfq' : null;
       if (!path) throw Error('unsupported fallback period');
       const bars = parseTencentBars(await this.json('https://web.ifzq.gtimg.cn/appstock/app/' + path), code, period);
-      source = 'tencent'; return bars;
+      return bars;
     }]);
-    source = this.barChains.get(key).health.index === 0 ? 'eastmoney' : 'tencent';
+    const source = this.barChains.get(key).health.index === 0 ? 'eastmoney' : 'tencent';
     this.bars.set(key, rows); this.barsSource.set(key, source); this.barsFetchedAt.set(key, Date.now()); return rows;
   }
   async loadDetails() {

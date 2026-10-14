@@ -20,7 +20,7 @@ export class Stock {
     this.chart = new AshareChart(this.chartPanel, feed); this.buildTicket();
     new ResizeObserver(() => this.fitStatistics()).observe(this.head);
     this.bookTabs = segment([['book', '盘口'], ['trades', '逐笔']], mode => {
-      this.bookMode = mode; this.book.classList.toggle('stock-book-trades', mode === 'trades');
+      this.book.classList.toggle('stock-book-trades', mode === 'trades');
     }); this.bookTabs.classList.add('stock-book-tabs');
     this.actions = element('div', '', 'stock-mobile-actions');
     this.actions.append(button('买入', () => this.openTicket('buy'), 'buy-button'),

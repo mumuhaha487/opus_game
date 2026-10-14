@@ -83,18 +83,6 @@ export function moveLock(state, asset, amount, freeze) {
 export function ledger(state, kind, asset, amount, note, now, market = 'spot') {
   state.history.ledger.unshift({ t: now, kind, asset, amount: toStr(amount), note, market });
 }
-export function summary(state, now) {
-  let futuresTotal = parse(state.futures.wallet) + parse(state.futures.locked);
-  for (const position of Object.values(state.futures.positions)) futuresTotal += parse(position.margin);
-  const assets = Object.entries(state.spot.balances).filter(([asset, funds]) =>
-    asset !== 'USDT' && parse(funds.free) + parse(funds.locked) > 0n).length;
-  const funds = balance(state, 'USDT');
-  return {
-    checkedToday: checkinView(state.checkin, now).checkedToday, streak: checkinView(state.checkin, now).streak,
-    spotUSDT: toStr(parse(funds.free) + parse(funds.locked)), futuresUSDT: toStr(futuresTotal),
-    assets, positions: Object.keys(state.futures.positions).length,
-  };
-}
 export function stateView(state, now, partial = false, notices = []) {
   const balances = Object.entries(state.spot.balances)
     .filter(([asset, funds]) => asset === 'USDT' || parse(funds.free) + parse(funds.locked) > 0n)

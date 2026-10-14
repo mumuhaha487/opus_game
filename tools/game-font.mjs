@@ -2,7 +2,7 @@
 // Collects every character in <game>/index.html and <game>/js/*.js, subsets the
 // 12 px face to them and the 8 px face to printable ASCII, and writes
 // <game>/js/font.js as base64 so the game also runs from file://.
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { embeddedFont, collectCharacters, missingGlyphs } from './font-data.mjs';

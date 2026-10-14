@@ -56,8 +56,8 @@ section('limits', '额度与轮询', [
 ]);
 const errors = section('errors', '错误与重试', [
   '错误统一返回 { error, message }。记录 X-Request-Id 可帮助定位调用；限流返回 Retry-After。',
-  '401：Key 无效、已过期或已删除；403：权限不足或需要确认使用须知；404：接口或资源不存在。',
-  '409：密钥数量上限、委托冲突；422：参数或交易规则不满足；429：分钟、每日调用或委托额度用尽。',
+  '401：Key 无效、已过期或已删除；403：权限不足（例如只读 Key 调用写接口）；404：接口或资源不存在。',
+  '409：今天已签到、密钥数量上限；422：参数或交易规则不满足；429：分钟、每日调用或委托额度用尽。',
   '503：行情、汇率或服务暂时不可用，稍后重试；413：请求体过大；415：媒体类型错误；405：方法不支持。',
   '下单 clientId 必填。重试同一次意图时沿用 clientId；新的交易意图使用新的 clientId。',
 ]);
@@ -74,8 +74,13 @@ const groups = [
     '读取会触发结算（2 秒节流）。汇率不可用时保留原生余额，相关估值为 null；partial 表示结算仍需继续。',
   ]],
   ['quote', '行情报价', [2, 7], [
-    'GET /api/v1/quote · read。market=crypto、ashare 或 usstock，symbol=BTC_USDT、sh600519 或 AAPL。',
-    '返回 last、bid、ask、time；A 股另含 limitUp、limitDown、status；美股另含 realtime、prevClose、status、nextOpen、closeAt。行情来自服务端公开数据源。',
+    'GET /api/v1/quote · read。market=crypto（或 crypto_spot）、crypto_futures、ashare 或 usstock，symbol=BTC_USDT、sh600519 或 AAPL。',
+    '返回 last、bid、ask、time；A 股另含 limitUp、limitDown、status；美股另含 realtime、prevClose、status、nextOpen、closeAt；合约另含标记价、指数价和资金费率。行情来自服务端公开数据源。',
+  ]],
+  ['market-data', '市场清单、盘口与 K 线', [], [
+    'GET /api/v1/markets · read。market=crypto_spot / crypto_futures / usstock 返回全部可交易代码与最新价；ashare 按 board、sort、page 分页（每页 50）。',
+    'GET /api/v1/depth · read。market、symbol 必填，limit 1–50；[价格, 数量] 的数量与下单 qty 同单位（加密为基础币，股票为股），A 股五档、美股一档。',
+    'GET /api/v1/klines · read。interval 加密 1m/5m/15m/30m/1h/4h/1d/1w，股票 1m/1d/1w/1M（前复权）；limit 1–500。只供分析，成交以下单时的权威行情为准。',
   ]],
   ['spec', '交易规格', [27, 28, 29], [
     'GET /api/v1/spec · read。market=crypto_spot / crypto_futures / ashare / usstock，symbol=BTC_USDT、sh600519 或 AAPL。下单前先读规格再计算数量。',

@@ -54,9 +54,7 @@ const GameAccount = (() => {
         const saved = sessionStorage.getItem('gameinc_region_v1');
         if (saved) return Promise.resolve(JSON.parse(saved));
       } catch { /* unavailable */ }
-      const override = new URLSearchParams(location.search).get('region');
-      const path = '/api/region' + (override ? '?region=' + encodeURIComponent(override) : '');
-      regionPending = C.request(path).catch(() => ({ region: 'intl', currency: 'USD' })).then(value => {
+      regionPending = C.request('/api/region').catch(() => ({ region: 'intl', currency: 'USD' })).then(value => {
         try { sessionStorage.setItem('gameinc_region_v1', JSON.stringify(value)); } catch { /* unavailable */ }
         return value;
       });

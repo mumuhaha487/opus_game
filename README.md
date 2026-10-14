@@ -48,12 +48,11 @@ and credential files are ignored by Git.
 
 ## 汇总页
 
-- **热门推荐**：页面顶部的轮播，左右箭头、圆点、键盘方向键或手机滑动切换，6.5 秒自动翻页，
-  鼠标停留、页面隐藏或打开对话框时暂停。排序按热度 = 近 7 天点赞 × 2 + 总点赞，上线两周内的新作额外 +10；
-  点赞数每 45 秒、切回页面和登录 / 退出时刷新。
-- **全部游戏**：按分类分组展示，可按分类筛选、搜索名称与标签、按最新 / 最热 / 编号排序；
-  某个分类只有一款游戏时用横向大卡片。
+- **首页**：游戏馆与交易所两扇门；顶部导航按滚动位置高亮首页 / 游戏馆 / 交易所。
+- **游戏馆**：全部游戏卡片，可按分类筛选、搜索名称与标签、按最新 / 最热排序。
+  热度 = 近 7 天点赞 × 2 + 总点赞，上线两周内的新作额外 +10；点赞数在切回页面和登录 / 退出时刷新。
 - **详情**：封面、角色、介绍、数据、平台与按键。
+- **交易所预览**：指数与币价、签到和资产概览，数据直连公开行情。
 
 ### 加一款新游戏
 
@@ -137,41 +136,48 @@ node build.mjs
 
 ## 模拟交易所
 
-入口为 `/trade/`，复用 GAME.INC.RE 全站账号，资产保存在现有 `ACCOUNTS` R2 绑定的 `trade/<uid>.json`。
-第一阶段提供现货交易、签到、划转、资产页，以及真实 USDT 永续合约行情；合约下单在第二阶段开放。
+入口为 `/trade/`，复用全站账号，资产保存在 R2 的 `trade/<uid>.json`。五个账户：钱包（USD）、加密现货（USDT）、
+USDT 永续合约（逐仓、单向持仓）、A 股（CNY）、美股（USD）。任意两个账户可直接划转：USD / USDT 1:1，
+涉及人民币时按实时 USDCNY 换汇并收 0.2%（人民币买美股要先划到美股账户换成美元）。
 
-行情使用 Gate.io 公开 REST / WebSocket。大陆直连与 Cloudflare Worker 出口均已验证可用；
-Binance 镜像在 Worker 出口返回 403。展示和成交使用同一数据源，浏览器行情流量直接访问 Gate.io。
+展示行情由浏览器直连公开数据源，不占 Worker 额度；成交只用 Worker 端取得的权威价格：
+
+| 市场 | 展示（浏览器） | 成交与结算（Worker） |
+|---|---|---|
+| 加密现货 / 合约 | Gate.io WebSocket / REST，Binance 镜像作展示备用 | Gate.io 盘口（WebSocket 优先，REST 备用）、逐笔与 K 线 |
+| A 股 | 东方财富与腾讯互为备用 | 腾讯五档撮合；挂单按东方财富分钟 / 逐笔结算，腾讯备用 |
+| 美股 | 腾讯 qt / sqt | 新浪实时成交价，腾讯在同样新鲜时备用；挂单按腾讯分钟结算 |
 
 ```mermaid
 flowchart LR
-  Browser[浏览器] <-->|公开实时行情| Gate[Gate.io]
+  Browser[浏览器] <-->|公开实时行情| Public[Gate.io / 腾讯 / 东方财富]
   Browser <-->|全站签名会话| Worker[Cloudflare Worker]
+  Agent[AI / 脚本] <-->|API 密钥 /api/v1| Worker
   Worker <-->|条件写入| R2[R2 账号资产]
-  Worker -->|权威盘口、成交、K 线| Gate
+  Worker -->|权威盘口、成交、K 线| Public
 ```
 
-| 接口 | 第一阶段用途 |
+| 网页接口 | 用途 |
 |---|---|
-| `GET /api/trade/state` | 先惰性结算，返回资产、签到、当前委托和近期历史 |
-| `GET /api/trade/summary` | 只读交易文档，供汇总页显示账号摘要 |
-| `GET /api/trade/history?kind=orders\|trades\|ledger&market=spot\|futures` | 有上限的完整历史 |
-| `POST /api/trade/checkin` | 领取北京时间当天的签到奖励 |
-| `POST /api/trade/transfer` | 现货 / 合约账户之间划转 USDT |
-| `POST /api/trade/spot/order` | 市价、限价、止盈止损下单，clientId 去重 |
-| `POST /api/trade/spot/cancel` | 撤销当前账号的现货委托 |
-| `POST /api/trade/spot/cancel-all` | 按交易对或全部撤销现货委托 |
+| `GET /api/trade/state` | 先惰性结算，返回全部账户、签到、当前委托和近期记录 |
+| `GET /api/trade/history?kind=orders|trades|ledger&market=wallet|spot|futures|ashare|usstock` | 有上限的历史 |
+| `POST /api/trade/checkin` | 每周签到 |
+| `POST /api/trade/transfer` | 账户划转 |
+| `POST /api/trade/{spot,futures,ashare,usstock}/order`、`…/cancel` | 下单与撤单，clientId 去重 |
+| `POST /api/trade/cancel-all` | 按市场、交易对撤销全部委托 |
+| `POST /api/trade/futures/{leverage,tpsl,margin,close}` | 合约杠杆、止盈止损、保证金与平仓 |
+| `POST /api/trade/ashare/watch` | A 股自选 |
 
-市价买单吃 asks，卖单吃 bids；深度不足时部分成交并取消余量。限价单先冻结资金，
-立即可成交部分吃盘口记 Taker，余量等待下单后的真实成交或完整 K 线命中，再按限价一次性成交记 Maker。
-止盈止损根据服务端最新价确定触发方向；限价允许成交时按触发价成交，否则成为已触发的挂单。
-现货 Maker / Taker 都是 0.1%，买入手续费扣币，卖出手续费扣 USDT。
+API 密钥在交易所账户面板或 `/developer/` 创建，`/api/v1/*` 覆盖网页上的全部交易操作，另有市场清单、盘口与 K 线；
+接口说明见 `/developer/`，创建密钥时附带给 AI 的完整提示词。
 
-惰性结算的首尾不完整分钟查逐笔，历史按 1m / 1h / 1d 分段，跳过下单之前的数据。
-成交时间使用逐笔时间或 K 线开盘时间，已触发挂单从下一根 K 线开始判断。
-金额内部使用 18 位 BigInt，余额 8 位：入账向下、出账及费用向上取整。
-R2 使用 etag 条件写并最多重试四次；每次 Worker 调用最多 30 次上游 fetch，
-预算不足时返回 partial 并记录进度，前端一秒后继续同步。
+市价单吃对手盘口，深度不足时部分成交并取消余量。限价单先冻结资金，立即可成交部分吃盘口记 Taker，
+余量等待下单之后的真实成交或完整 K 线命中，再按限价成交记 Maker。现货 Maker / Taker 都是 0.1%，
+合约 Maker 0.02% / Taker 0.05%；A 股收佣金（最低 5 元）、过户费和卖出印花税；美股佣金 0，卖出收 SEC 费与 FINRA TAF。
+
+惰性结算跳过下单之前的数据，首尾不完整分钟查逐笔，历史按 1m / 1h / 1d 分段。
+金额内部使用 18 位 BigInt：入账向下、出账及费用向上取整。R2 使用 etag 条件写并最多重试四次；
+每次 Worker 调用最多 30 次上游 fetch，预算不足时返回 partial 并记录进度，前端随后继续同步。
 
 签到按周计算：北京时间每周一 00:00 开始新一周，本周第 1–7 次签到依次奖励 **20、25、30、35、40、45、50 USD**，
 不要求连续，奖励发到钱包。首次创建交易文档余额为 0。
@@ -179,38 +185,32 @@ R2 使用 etag 条件写并最多重试四次；每次 Worker 调用最多 30 �
 ### 美股
 
 入口 `#/usstock`（列表）与 `#/us/<代码>`（个股），用美元结算，账户为 `usstock`。
-钱包、现货、合约与美股之间 1:1 划转；人民币先从 A 股账户划到美股账户，按实时汇率换成美元（0.2% 费用）再买入。
 
 - 名单：`trade/js/usstock/universe.js`（浏览器与服务端共用）；交易日历含纽交所假日、提前收盘和夏令时，在 `trade/js/usstock/calendar.js`。
-- 展示行情：浏览器直连腾讯（qt / sqt 互为备用），不占 Worker 额度。
-- 成交价：市价单与可立即成交的限价单使用新浪实时成交价（服务端请求，数据时间 30 秒内、最后成交 3 分钟内），
+- 成交价：市价单与可立即成交的限价单使用新浪实时成交价（数据时间 30 秒内、最后成交 3 分钟内），
   腾讯在同样新鲜时作为备用；都不新鲜时返回 503 `market_stale`。
-- 挂单：惰性结算只用委托之后完整结束的腾讯分钟数据，触价按限价成交；盘外委托排入下一交易时段，
+- 挂单：只用委托之后完整结束的腾讯分钟数据，触价按限价成交；盘外委托排入下一交易时段，
   开盘第一根已越过限价时按该价成交；收盘时未成交部分过期并解冻。
-- 规则：整股、T+0、只卖持仓、限价须在参考价 ±50% 内（防手误）、佣金 0，卖出收 SEC 费与 FINRA TAF。
+- 规则：整股、T+0、只卖持仓、限价须在参考价 ±50% 内（防手误）。
 
-成本估算：每个登录且可见的页面每 20 秒请求 state，持续一小时约 180 次 Worker 请求，
-穿过委托价格时额外请求，单账号限流为每分钟 180 次全部请求 / 40 次 POST。
-每次 state 包括一次会话用户读取、交易限流的读写、一次交易文档读取；
-发生结算进度或操作变化时再写一次交易文档。POST 再增加一次限流读写，etag 冲突会增加交易文档读写。
-行情展示占 0 次 Worker 请求；summary 读取一次交易文档，零 Gate.io 请求。
+### 请求额度
 
-范围：现货三种委托已实现；本期合约模式按逐仓、单向持仓设计，没有全仓或 OCO。
-第一阶段合约只展示行情，合约下单 API 尚未开放。
+Cloudflare 免费版每天 100,000 次 Worker 请求，静态资源不计入。登录且可见的交易所页面按需轮询 state，
+单账号限流为每分钟 180 次请求 / 40 次 POST；每把 API 密钥每分钟 GET 10 次、POST 10 次，每天 1500 次，
+每个账号每天 3000 次（北京时间重置）。
 
-本地开发先在被忽略的 `.dev.vars` 中设置独立测试用 `AUTH_SECRET` 与 `PW_PEPPER`，
-使用本地 R2，不连接生产存储：
+### 本地开发
+
+在被忽略的 `.dev.vars` 中设置独立测试用 `AUTH_SECRET` 与 `PW_PEPPER`，使用本地 R2，不连接生产存储：
 
 ```powershell
 node tools/hub-font.mjs
-node --test "_work/trade/tests/*.test.mjs"
 node build.mjs
 npx --yes wrangler@4 dev --local
-node _work/trade/ui-check.mjs
 ```
 
 图表库是 `trade/vendor/` 中原样复制的 Lightweight Charts 5.2.1，保留许可证和 attribution。
-构建不安装依赖，额外检查 39 个市场、vendor 版本与纯函数自检（包含 1000 组舍入守恒检查）。
+构建不安装依赖，额外检查市场清单、vendor 版本与纯函数自检（包含 1000 组舍入守恒检查）。
 
 ## Optional Manual Deployment
 

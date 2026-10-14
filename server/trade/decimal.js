@@ -18,11 +18,8 @@ export function quotient(numerator, denominator, mode) {
   if (mode === 'ceil') return result + (remainder > 0n ? 1n : 0n);
   return result + ((remainder < 0n ? -remainder : remainder) * 2n >= denominator ? (remainder < 0n ? -1n : 1n) : 0n);
 }
-export const add = (left, right) => left + right;
-export const sub = (left, right) => left - right;
 export const mul = (left, right, mode) => quotient(left * right, SCALE, mode);
 export const div = (left, right, mode) => quotient(left * SCALE, right, mode);
-export const cmp = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 export const min = (left, right) => left < right ? left : right;
 export const max = (left, right) => left > right ? left : right;
 export function roundTo(value, decimals, mode) {

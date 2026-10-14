@@ -6,9 +6,9 @@ const el = (tag, text = '', cls = '') => {
 const btn = (text, action, cls = '') => {
   const n = el('button', text, 'k-button ' + cls); n.type = 'button'; n.addEventListener('click', action); return n;
 };
-const active = k => !k.revoked && k.expires > Date.now();
+const active = k => k.expires > Date.now();
 const errorText = e => e.data?.message || GameAccount.errorText(e);
-export const GameKeys = { mount(container, { project = null, compact = false, onChange = () => {} } = {}) {
+export const GameKeys = { mount(container, { project = null, compact = false } = {}) {
   const root = el('section', '', 'k-ui' + (compact ? ' k-compact' : '')); container.append(root);
   const legacy = container.dataset.keyIds === 'developer';
   const id = (node, name) => { if (legacy) node.id = name; return node; };
@@ -72,7 +72,7 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
     try {
       await GameAccount.request('/api/keys/delete', 'POST', { id: keyId });
       if (token !== generation || disposed) return;
-      revoke.d.close(); await refresh(); onChange();
+      revoke.d.close(); await refresh();
     } catch (e) { if (token === generation) revokeMessage.textContent = errorText(e); }
     finally { confirmRevoke.disabled = false; }
   }, 'k-primary'), 'key-revoke-confirm');
@@ -119,7 +119,7 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       const result = await request;
       if (token === generation && editor.d.open && !disposed) {
         secret = result.key; delete result.key; current = result; editor.h.textContent = '密钥已创建';
-        renderResult(); onChange();
+        renderResult();
       } else { delete result.key; }
       if (!disposed && token === generation) await refresh();
     } catch (error) { if (token === generation) formMessage.textContent = errorText(error); }
@@ -241,7 +241,7 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
   const unsubscribe = GameAccount.onProfileChange(changed);
   document.addEventListener('hub-account-change', changed);
   refresh();
-  return { refresh, close: closeAll, destroy() {
+  return { destroy() {
     disposed = true; revision++; logToken++; closeAll();
     if (typeof unsubscribe === 'function') unsubscribe(); root.remove();
     document.removeEventListener('hub-account-change', changed);

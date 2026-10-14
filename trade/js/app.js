@@ -297,8 +297,7 @@ async function route() {
   const index = NAVIGATION.findIndex(([name]) => name === active);
   node('rail-indicator').style.transform = 'translateY(' + Math.max(0, index) * 60 + 'px)';
   node('page-title').textContent = NAVIGATION.find(([name]) => name === active)?.[1] || '交易';
-  orders.signature = ''; api.previousPrice = null;
-  api.previousMark = null; orders.tab = page === 'futures' ? 'positions' : 'open';
+  orders.signature = ''; orders.tab = page === 'futures' ? 'positions' : 'open';
   if (marketPage) await feed.activate(page, symbol, '15m');
   else if (!feed.connections.spot) await feed.activate('spot', feed.symbol, '15m');
   if (page === 'futures') side.selectTab('futures'); else side.selectTab('spot');
@@ -309,7 +308,7 @@ function renderFrame(timestamp) {
   if (!document.hidden) renderSchedule.run(timestamp, {
     fast: () => {
       header(); status(); watch.sync(api.state);
-      if (['spot', 'futures'].includes(page)) { bar(); book.render(); tape.render(api.state); api.crossing(feed); }
+      if (['spot', 'futures'].includes(page)) { bar(); book.render(); tape.render(api.state); }
       if (page === 'stock') { stock.renderHead(); stock.renderBook(); }
       if (page === 'us') { usStock.renderHead(); usStock.renderBook(); }
     },
