@@ -325,6 +325,7 @@ const View = (() => {
     if (Game.touch) btn('tfull', 'i_full', ['全屏横屏'], () => Game.toggleFull());
     else btn('tmini', 'i_pip', ['挂件小窗（M）'], () => Game.toggleMini());
     btn('tsnd', 'i_sound', [s.opts.music + s.opts.sfx > 0 ? '静音' : '开启声音'], () => Game.toggleMute());
+    btn('thome', 'i_home', ['回到 GAME.INC.RE 主页'], () => Game.askHome());
     const kpm = Game.monitor.kpm();
     const label = narrow ? `${Math.round(kpm)}/分` : `击杀/分 ${Math.round(kpm)}`;
     const lw = Text.width(label) + 34;

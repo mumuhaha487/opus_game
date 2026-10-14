@@ -222,6 +222,7 @@ UI.updTitle = function (dt) {
     case 'title':
       this.sel = navV(TITLE_ITEMS.length, this.sel);
       if (Input.hit('ok')) this.titleAction(this.sel);
+      if (Input.hit('cancel')) this.askHome();
       break;
     case 'mode':
       this.modeSel = navH(2, this.modeSel);
@@ -287,8 +288,26 @@ UI.updConfirm = function () {
   if (Input.hit('ok')) { const yes = c.sel === 0; this.confirm = null; if (yes) c.yes(); else { if (c.no) c.no(); Sound.play('cancel'); } }
   else if (Input.hit('cancel')) { this.confirm = null; if (c.cancel) c.cancel(); Sound.play('cancel'); }
 };
-UI.pauseItems = () => ['继续游戏', '游戏设置', '放弃本局', '返回标题'];
+UI.leaveHome = async function () {
+  if (this.leavingHome) return;
+  this.leavingHome = true; Save.write();
+  let timeout;
+  try {
+    await Promise.race([Promise.resolve().then(() => Account.sync()),
+      new Promise(resolve => { timeout = setTimeout(resolve, 1500); })]);
+  } catch { /* 本地进度已保存，云同步失败不阻止返回。 */ }
+  finally { clearTimeout(timeout); location.href = '/'; }
+};
+UI.askHome = function (playing = false) {
+  this.confirm = { text: playing ? '放弃本局并返回主页？本局进度不保留。' : '返回 GAME.INC.RE 主页？',
+    labels: ['返回', '取消'], sel: 1, yes: () => {
+      if (playing) { Save.data.crystals += G.run.crystals; G.overlay = null; }
+      this.leaveHome();
+    } };
+};
+UI.pauseItems = () => ['继续游戏', '游戏设置', '放弃本局', '返回标题', '返回主页'];
 UI.pauseAction = function (i) {
+  if (i === 4) { this.askHome(true); return; }
   if (i === 0) { G.overlay = null; Sound.play('cancel'); }
   else if (i === 1) { G.overlay = { kind: 'settings' }; this.setSel = 0; Sound.play('confirm'); }
   else if (i === 2) this.confirm = { text: '放弃本局？本局获得的熵晶仍会保留。', yes: () => { G.overlay = null; G.player.hp = 0; G.player.die(); G.deathT = 1.5; }, sel: 1 };
@@ -309,7 +328,7 @@ UI.updOverlay = function (dt) {
     o.sel = navV(o.choices.length, o.sel);
     if (Input.hit('ok') && o.t > 0.3) this.pickDialog(o.sel);
   } else if (o.kind === 'pause') {
-    this.pauseSel = navV(4, this.pauseSel);
+    this.pauseSel = navV(this.pauseItems().length, this.pauseSel);
     if (Input.hit('mright') || Input.hit('tab')) { this.pauseTab = ((this.pauseTab || 0) + 1) % 3; Sound.play('select'); }
     if (Input.hit('mleft')) { this.pauseTab = ((this.pauseTab || 0) + 2) % 3; Sound.play('select'); }
     if (Input.hit('ok')) this.pauseAction(this.pauseSel);
@@ -437,6 +456,10 @@ UI.drawLogo = function (y) {
   T('—— 像素横版动作 · 熵能肉鸽 ——', cx, y + 126, { color: '#9a8acb', align: 'center' });
 };
 UI.drawTitle = function () {
+  const homeHot = Input.mouse.x >= 6 && Input.mouse.x <= 110 && Input.mouse.y >= 4 && Input.mouse.y <= 44;
+  panel(12, 10, 92, 26, { border: homeHot ? '#ff3b5c' : '#3a2f5c', bg: homeHot ? '#2a0a18' : '#0b0716' });
+  T('◀ 主页', 58, 18, { size: 8, color: homeHot ? '#ffffff' : '#8a7aa8', align: 'center' });
+  region(6, 4, 104, 40, { onClick: () => this.askHome() });
   this.drawLogo(60);
   if (this.screen === 'press') {
     const a = 0.5 + 0.5 * Math.sin(this.t * 4);

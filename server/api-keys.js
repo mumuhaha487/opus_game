@@ -3,6 +3,10 @@
 // 条件写限制五个有效Key；认证不接受Cookie回退，不信任客户端uid。
 import { b64url, unbase64, randomBytes, equal32, passwordHash, passwordValid } from './auth.js';
 import { absent, rateWindow } from './store.js';
+export const KEY_PROJECTS = {
+  exchange: { name: '模拟交易所', scopes: { read: '只读（查询账户、行情、委托、成交）',
+    trade: '交易（下单、撤单、划转、合约杠杆/平仓/止盈止损）' }, base: '/api/v1', docs: '/developer/#docs' },
+};
 const metaPath = uid => `apikeys/${uid}.json`;
 const indexPath = id => `apikey-index/${id}.json`;
 const ID = /^[a-z2-7]{10}$/;
@@ -42,7 +46,7 @@ export async function manageKeys(request, env, session, data) {
   }
   if (path === '/api/keys' && request.method === 'GET') {
     const { rows } = await metadata(bucket, uid);
-    return { status: 200, body: { keys: rows.map(publicKey) } };
+    return { status: 200, body: { keys: rows.map(publicKey), projects: KEY_PROJECTS } };
   }
   if (path === '/api/keys/log') {
     const id = new URL(request.url).searchParams.get('id');
@@ -73,14 +77,15 @@ export async function manageKeys(request, env, session, data) {
   const user = session.user;
   const password = await passwordHash(data.password, env.PW_PEPPER, unbase64(user.salt), user.iter);
   if (!equal32(password, unbase64(user.hash))) fail(401, 'bad_credentials', '用户名或密码错误');
-  const scopes = data.scopes;
-  if (typeof data.name !== 'string' || !data.name.trim() || [...data.name.trim()].length > 40
-    || /[\u0000-\u001f\u007f-\u009f]/.test(data.name) || data.project !== 'exchange'
-    || !Array.isArray(scopes) || !['read', 'read,trade'].includes(scopes.join(','))
+  const scopes = data.scopes, project = Object.hasOwn(KEY_PROJECTS, data.project) ? KEY_PROJECTS[data.project] : null;
+  if (typeof data.name !== 'string' || !data.name.trim() || [...data.name.trim()].length > 24
+    || /[\u0000-\u001f\u007f-\u009f]/.test(data.name) || !project
+    || !Array.isArray(scopes) || scopes[0] !== 'read' || new Set(scopes).size !== scopes.length
+    || scopes.some(scope => !Object.hasOwn(project?.scopes || {}, scope))
     || ![30, 90, 180].includes(data.expiresDays)) fail(400, 'bad_request', '请求格式错误');
   const id = Array.from(randomBytes(10), byte => 'abcdefghijklmnopqrstuvwxyz234567'[byte & 31]).join('');
   const secret = b64url(randomBytes(32));
-  const row = { id, name: data.name.trim(), prefix: 'gk_' + id, scopes: [...scopes], project: 'exchange',
+  const row = { id, name: data.name.trim(), prefix: 'gk_' + id, scopes: [...scopes], project: data.project,
     created: now, expires: now + data.expiresDays * 86400000, lastUsed: null, revoked: false };
   // PLATFORM §6.2：元数据数组CAS为创建事务的名额边界，并发创建不超过五个有效Key。
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -91,7 +96,7 @@ export async function manageKeys(request, env, session, data) {
     if (!await bucket.put(metaPath(uid), JSON.stringify([...rows, row]), { onlyIf: condition(etag) })) continue;
     try {
       const index = { uid, hash: b64url(await hashSecret(secret, env.AUTH_SECRET)), scopes: [...scopes],
-        project: 'exchange', expires: row.expires, revoked: false };
+        project: data.project, expires: row.expires, revoked: false };
       if (!await bucket.put(indexPath(id), JSON.stringify(index), { onlyIf: absent() })) throw Error('id collision');
     } catch {
       await patchMetadata(bucket, uid, id, entry => { entry.revoked = true; });

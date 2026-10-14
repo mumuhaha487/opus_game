@@ -195,6 +195,20 @@ const Game = (() => {
     G.sheet = false;
   }
   function setPet(id) { s.pets.cur = id; persist(); Sound.play('click'); }
+  function askHome() {
+    const previous = G.dialog;
+    G.dialog = { title: '返回主页', lines: [
+      { text: '返回主页？进度已自动保存，离线收益照常累计。', color: PAL.cream },
+    ], buttons: [{ label: '返回', kind: 'gold', fn: async () => {
+      if (G.leavingHome) return;
+      G.leavingHome = true; persist();
+      let timeout;
+      try {
+        await Promise.race([Cloud.sync(), new Promise(resolve => { timeout = setTimeout(resolve, 1500); })]);
+      } catch { /* 本地已保存；离线时仍可离开。 */ }
+      finally { clearTimeout(timeout); location.href = '/'; }
+    } }, { label: '取消', fn: () => { G.dialog = previous; } }] };
+  }
   function askReset() {
     G.dialog = { title: '清空进度', lines: [{ text: '所有英雄、进度、装备与符文都会清除，从普通 1-1 重新开始。', color: PAL.red }, { text: '这一步无法撤回。', color: PAL.cream }],
       buttons: [{ label: '清空', kind: 'red', fn: () => { const keep = s.opts; s = newSave(); s.opts = keep; newBattle(); persist(); G.dialog = chooseDialog(); say('进度已清空', PAL.red); } }, { label: '取消', fn: () => { G.dialog = null; } }] };
@@ -546,7 +560,7 @@ const Game = (() => {
   Object.assign(G, {
     boot, persist, say, adopt, applyOpts, selectHero, equip, unequip, autoEquip, sortInv, alchOne, alchFiltered, alchMat, openKind, openAll,
     synth, craft, socket, unsocket, offer, runeBuy, skillRaise, skillLower, skillReset, skillAuto, skillSlot, skillUnslot,
-    partyDeploy, partyRemove, partyMove, setFarm, travel, setPet, askReset, firstAccountSave, exportSave, importSave,
+    partyDeploy, partyRemove, partyMove, setFarm, travel, setPet, askReset, askHome, firstAccountSave, exportSave, importSave,
     toggleMute, toggleMini, toggleFull, openTab, battle: () => b, save: () => s,
   });
   Object.defineProperties(G, { ready: { get: () => ready }, layout: { get: () => L } });

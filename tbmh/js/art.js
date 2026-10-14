@@ -1743,6 +1743,18 @@ gggg.gggg
 ggggggggg
 ggggggggg
 .........`], ICON);
+  def('i_home', { s: RAMP.silver, k: P.ink }, [`
+....kk....
+...kssk...
+..kssssk..
+.kssssssk.
+kssssssssk
+.kssssssk.
+.kssksssk.
+.kssksssk.
+.kkkkkkkk.
+..........
+  `]);
   def('i_sound', { s: RAMP.silver }, [`
 ....s....
 ...ss..s.

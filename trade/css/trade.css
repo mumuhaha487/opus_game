@@ -566,6 +566,27 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
 }
 .overview-status > p:last-child { margin-top: auto; }
 
+/* ACCOUNT §1：主页入口及平板底部导航。 */
+.home-link { flex: none; display: inline-flex; align-items: center; color: var(--muted); }
+.home-link:hover { color: var(--gold); }
+.home-text { font-family: FusionPixel, monospace; font-size: 11px; white-space: nowrap; }
+.home-text i { font-size: 12px; font-style: normal; }
+.home-link svg { display: none; }
+.home-divider { width: 1px; height: 20px; background: var(--line-2); flex: none; }
+@media (max-width: 1023px) {
+  .home-link { width: 40px; height: 40px; justify-content: center; color: var(--text-2); }
+  .home-link svg { display: block; }
+  .home-text, .home-divider { display: none; }
+}
+@media (min-width: 768px) and (max-width: 1023px) and (min-height: 500px) {
+  body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  .mobile-nav { position: fixed; z-index: 30; inset: auto 0 0; display: flex;
+    height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
+    background: var(--panel); border-top: 1px solid var(--line); }
+  .mobile-nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; color: var(--muted); font-size: 11px; }
+  .mobile-nav .selected { color: var(--gold); }
+}
 /* PHONE — SPEC-MOBILE */
 @media (max-width: 767px), (max-height: 499px) {
   body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }

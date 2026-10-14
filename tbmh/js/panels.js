@@ -962,7 +962,8 @@ const Panels = (() => {
     y += 20;
     if (UI.button('reset', B.x + 6, y, B.w - 12, 16, '清空进度，从头开始', { kind: 'red' })) Game.askReset();
     y += 22;
-    if (y + 16 < B.y + B.h && UI.button('hub', B.x + 6, y, B.w - 12, 16, '返回游戏汇总', { tip: '回到 GAME.INC.RE 首页' })) location.href = '../index.html';
+    if (y + 16 < B.y + B.h && UI.button('hub', B.x + 6, y, B.w - 12, 16, '返回主页',
+      { tip: '回到 GAME.INC.RE 主页' })) Game.askHome();
   }
 
   const DRAW = { party, gear, skill: skills, cube, rune: runes, map, codex, set: settings };
