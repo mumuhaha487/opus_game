@@ -2,7 +2,7 @@
 // 配置与颜色逐项对应规格 9.4、9.6，保留 TradingView attribution。
 // 历史滚动使用 REST，实时末根使用 series.update，图例通过安全 DOM 更新。
 import { element, button, price, percent } from './format.js';
-import { chartTime, chartDateTime } from './chart-time.js';
+import { chartTime, chartDateTime, chartPoint, marketTimestamp } from './chart-time.js';
 const COLORS = ['#F2C66D', '#5B8DEF', '#A78BFA'];
 export function movingAverage(candles, period, exponential = false) {
   const values = []; let total = 0, previous;
@@ -48,7 +48,8 @@ export class Chart {
     this.container.append(this.legend); panel.append(this.container);
     this.chart = globalThis.LightweightCharts.createChart(this.container, this.options());
     this.chart.subscribeCrosshairMove(event => {
-      const candle = feed.candles.find(entry => entry.time === event.time) || feed.candles.at(-1); this.paintLegend(candle);
+      const candle = feed.candles.find(entry => entry.time === marketTimestamp(event.time)) || feed.candles.at(-1);
+      this.paintLegend(candle);
     });
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 10) this.loadOlder(); });
     new ResizeObserver(() => this.resize()).observe(this.container);
@@ -72,9 +73,9 @@ export class Chart {
       rightPriceScale: { borderColor: '#232833' },
       timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 8,
         shiftVisibleRangeOnNewBar: true,
-        tickMarkFormatter: (value, type) => chartTime(value, undefined, type < 3) },
+        tickMarkFormatter: (value, type) => chartTime(value, 'UTC', type < 3) },
       localization: { priceFormatter: value => price(value, this.feed.precision()),
-        timeFormatter: value => chartTime(value) },
+        timeFormatter: value => chartTime(value, 'UTC') },
     };
   }
   rebuild() {
@@ -154,16 +155,16 @@ export class Chart {
     if (changed) { this.key = key; this.rebuild(); }
     for (const node of this.buttons) node.classList.toggle('selected',
       node.dataset.interval === feed.interval && (this.area ? node.textContent === '分时' : node.textContent !== '分时'));
-    const data = feed.candles.map(candle => this.area ? { time: candle.time, value: candle.close } : candle);
+    const data = feed.candles.map(candle => chartPoint(this.area ? { time: candle.time, value: candle.close } : candle));
     if (!data.length) { this.main.setData([]); return; }
-    const missingBars = this.lastTime && data.filter(candle => candle.time > this.lastTime).length > 1;
-    const reset = changed || this.lastFirst !== data[0].time || missingBars;
+    const missingBars = this.lastTime && feed.candles.filter(candle => candle.time > this.lastTime).length > 1;
+    const reset = changed || this.lastFirst !== feed.candles[0].time || missingBars;
     if (reset) this.main.setData(data);
     else this.main.update(data.at(-1));
-    this.lastFirst = data[0].time; this.lastTime = data.at(-1).time;
-    if (this.volume) this.volume.setData(feed.candles.map(candle => ({ time: candle.time, value: candle.volume,
+    this.lastFirst = feed.candles[0].time; this.lastTime = feed.candles.at(-1).time;
+    if (this.volume) this.volume.setData(feed.candles.map(candle => chartPoint({ time: candle.time, value: candle.volume,
       color: candle.close >= candle.open ? 'rgba(34,181,115,0.5)' : 'rgba(229,72,77,0.5)' })));
-    for (const extra of this.extras) extra.series.setData(this.indicatorData(extra));
+    for (const extra of this.extras) extra.series.setData(this.indicatorData(extra).map(chartPoint));
     this.paintLegend(feed.candles.at(-1)); this.priceLines(state);
     if (reset) this.showLatest();
   }

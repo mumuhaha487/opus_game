@@ -1,8 +1,10 @@
 // Public read-only list fallback. Remote dev: Eastmoney returned 502, Tencent returned usable rows.
 import { GateClient } from './trade/gate.js';
-import { upstream } from './trade/upstream.js';
+import { upstream, cacheIsFresh } from './trade/upstream.js';
 const QQ = 'https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList';
 const rates = new WeakMap();
+const CACHE_ROOT = 'https://trade-cache.game.inc.re/ashare-list-v2/';
+let snapshotPending;
 const isStock = code => /^(sh(?:60|68)|sz(?:00|30))\d{4}$/.test(code);
 const boards = [isStock, code => /^sh60\d{4}$/.test(code), code => /^sz00\d{4}$/.test(code),
   code => /^sz30\d{4}$/.test(code), code => /^sh68\d{4}$/.test(code)];
@@ -23,27 +25,53 @@ export function parseRank(payload) {
     throw Error('invalid rank');
   }
   const number = value => value !== '' && value != null && Number.isFinite(Number(value)) ? Number(value) : null;
-  return { total: data.total, rows: data.rank_list.map(row => ({ code: row.code, name: row.name,
-    last: number(row.zxj), percent: number(row.zdf), change: number(row.zd), turnoverRate: number(row.hsl),
+  return { total: data.total, rows: data.rank_list.map(row => [row.code, row.name,
+    number(row.zxj), number(row.zdf), number(row.zd),
     // aStock's turnover is in ten-thousand CNY; the public Tencent quote-centre renderer confirms this unit.
-    turnover: number(row.turnover) == null ? null : number(row.turnover) * 10000, high: null, low: null,
-  })).filter(row => typeof row.code === 'string' && typeof row.name === 'string' && row.last != null && row.percent != null) };
+    number(row.turnover) == null ? null : number(row.turnover) * 10000, number(row.hsl),
+  ]).filter(row => typeof row[0] === 'string' && typeof row[1] === 'string' && row[2] != null && row[3] != null) };
 }
-async function allRows(budget) {
+async function cached(path) {
+  const response = await globalThis.caches?.default?.match(new Request(CACHE_ROOT + path));
+  return cacheIsFresh(response, 30) ? response : null;
+}
+async function store(path, value, fetchedAt) {
+  if (globalThis.caches?.default) await caches.default.put(new Request(CACHE_ROOT + path),
+    new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=30', 'X-Fetched-At': String(fetchedAt) } }));
+}
+async function fetchSnapshot(budget) {
   const url = offset => QQ + '?' + new URLSearchParams({ _appver: '11.17.0', board_code: 'aStock',
     sort_type: 'price', direct: 'down', offset, count: 200 });
   // Tencent rejects code/name sorting. Read one price-ordered snapshot shared by every board/sort for 30 seconds.
-  return upstream(url(0), 30, async response => {
-    const first = parseRank(await response.json());
-    if (!first.rows.length) throw Error('empty rank');
-    const offsets = Array.from({ length: Math.ceil(first.total / 200) - 1 }, (_, index) => (index + 1) * 200);
-    if (offsets.length > 30 - budget.used) throw Error('upstream budget');
-    const remaining = await Promise.all(offsets.map(offset => upstream(url(offset), 30,
-      async next => parseRank(await next.json()), budget, true)));
-    if (remaining.some(page => !page.rows.length)) throw Error('incomplete rank');
-    return [...new Map([first, ...remaining].flatMap(page => page.rows).filter(row => isStock(row.code))
-      .map(row => [row.code, row])).values()];
-  }, budget);
+  const first = await upstream(url(0), 30, async response => parseRank(await response.json()), budget, true);
+  if (!first.rows.length) throw Error('empty rank');
+  const offsets = Array.from({ length: Math.ceil(first.total / 200) - 1 }, (_, index) => (index + 1) * 200);
+  if (offsets.length > (budget.budgetLimit ?? 30) - budget.used) throw { code: 'upstream_budget' };
+  const remaining = await Promise.all(offsets.map(offset => upstream(url(offset), 30,
+    async next => parseRank(await next.json()), budget, true)));
+  if (remaining.some(page => !page.rows.length)) throw Error('incomplete rank');
+  return [...new Map([first, ...remaining].flatMap(page => page.rows).filter(row => isStock(row[0]))
+    .map(row => [row[0], row])).values()];
+}
+async function allRows(budget) {
+  // Versioned keys cannot mistake old object snapshots for compact arrays.
+  const hit = await cached('snapshot');
+  if (hit) return { rows: await hit.json(), fetchedAt: Number(hit.headers.get('X-Fetched-At')) };
+  if (!snapshotPending) snapshotPending = (async () => {
+    const rows = await fetchSnapshot(budget), fetchedAt = Date.now();
+    await store('snapshot', rows, fetchedAt); return { rows, fetchedAt };
+  })();
+  const pending = snapshotPending;
+  try { return await pending; } finally { if (snapshotPending === pending) snapshotPending = null; }
+}
+export function selectRows(snapshot, { board, sort, page }) {
+  const field = sort === 2 ? 5 : 3, direction = sort === 1 ? 1 : -1;
+  const rows = snapshot.filter(row => boards[board](row[0]))
+    .sort((a, b) => direction * ((a[field] ?? 0) - (b[field] ?? 0)) || a[0].localeCompare(b[0]));
+  return { total: rows.length, source: 'tencent', rows: rows.slice((page - 1) * 50, page * 50)
+    .map(([code, name, last, percent, change, turnover, turnoverRate]) =>
+      ({ code, name, last, percent, change, turnover, turnoverRate, high: null, low: null })) };
 }
 export async function marketRate(env, ip, now = Date.now()) {
   const key = 'market-list:' + ip, retryAfter = 60 - Math.floor(now / 1000) % 60;
@@ -63,10 +91,12 @@ export async function ashareList(request, env) {
     const { board, sort, page } = listParameters(new URL(request.url));
     const wait = await marketRate(env, request.headers.get('CF-Connecting-IP') || 'local');
     if (wait) return { status: 429, body: { error: 'rate_limited', retryAfter: wait }, headers: { 'Retry-After': String(wait) } };
-    const field = sort === 2 ? 'turnover' : 'percent', direction = sort === 1 ? 1 : -1;
-    const rows = (await allRows(new GateClient())).filter(row => boards[board](row.code))
-      .sort((a, b) => direction * ((a[field] ?? 0) - (b[field] ?? 0)) || a.code.localeCompare(b.code));
-    return { status: 200, body: { total: rows.length, rows: rows.slice((page - 1) * 50, page * 50), source: 'tencent' } };
+    const path = 'result/' + [board, sort, page].join('/'), hit = await cached(path);
+    if (hit) return { status: 200, body: await hit.json() };
+    const snapshot = await allRows(new GateClient()), body = selectRows(snapshot.rows, { board, sort, page });
+    // Results expire with their snapshot, rather than extending old prices by another 30 seconds.
+    await store(path, body, snapshot.fetchedAt);
+    return { status: 200, body };
   } catch (error) {
     return { status: error.status || 503, body: { error: error.code || 'market_unavailable' } };
   }

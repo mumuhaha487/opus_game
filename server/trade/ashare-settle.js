@@ -34,9 +34,10 @@ async function settleOrder(state, order, client, now, notices) {
   const minuteStart = Math.ceil(start / 60000) * 60000;
   // ASHARE §3.2：当日 details 没有日期；历史首分钟缺逐笔时保守跳过，不借用整根 K 线回填。
   const events = date === cursorDate ? await client.details(order.code, date) : [];
+  const unknownMinute = events.length ? -1 : Math.floor(order.createdAt / 60000) * 60000;
   const older = now - start > 7 * 86400000;
-  const candles = older ? await client.daily(order.code, cursorDate, dayKey(end)) : await client.trends(order.code);
-  events.push(...candles.filter(event => event.t >= minuteStart && event.end <= end));
+  const candles = older ? await client.daily(order.code, cursorDate, dayKey(end)) : await client.trends(order.code, cursorDate);
+  events.push(...candles.filter(event => event.t >= minuteStart && event.t !== unknownMinute && event.end <= end));
   events.sort((left, right) => left.t - right.t);
   for (const event of events.filter(event => event.t >= start && event.t < end
     && (!quote.suspended || dayKey(event.t) !== date))) {

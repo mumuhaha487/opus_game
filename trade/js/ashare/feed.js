@@ -60,24 +60,26 @@ export function parseBars(data, trends = false) {
 export function parseTencentBars(payload, code, period) {
   if (payload?.code !== 0) throw Error('tencent bars');
   const data = payload.data?.[code], rows = [];
-  const minutes = (day, date) => {
+  const minutes = (day, date, prevClose) => {
     const compact = String(date).replaceAll('-', '');
     if (!/^\d{8}$/.test(compact) || !Array.isArray(day)) throw Error('minute data');
     const localDate = compact.slice(0, 4) + '-' + compact.slice(4, 6) + '-' + compact.slice(6);
-    let previous = 0;
+    let previous = 0, previousClose = Number(prevClose);
+    if (!(previousClose > 0)) throw Error('previous close');
     for (const text of day) {
       const [hhmm, price, cumulative, amount] = text.split(/\s+/), value = Number(price), volume = Number(cumulative);
       if (!/^\d{4}$/.test(hhmm) || !(value > 0) || !Number.isFinite(volume) || volume < previous) throw Error('minute row');
       rows.push({ time: Date.parse(localDate + 'T' + hhmm.slice(0, 2) + ':' + hhmm.slice(2) + ':00+08:00') / 1000,
-        open: value, high: value, low: value, close: value, volume: volume - previous,
+        open: previousClose, high: Math.max(previousClose, value), low: Math.min(previousClose, value),
+        close: value, volume: volume - previous,
         average: volume > 0 ? Number(amount) / (volume * 100) : 0 });
-      previous = volume;
+      previous = volume; previousClose = value;
     }
   };
-  if (period === 'trends') minutes(data?.data?.data, data?.data?.date);
+  if (period === 'trends') minutes(data?.data?.data, data?.data?.date, data?.qt?.[code]?.[QUOTE_FIELDS.prevClose]);
   else if (period === 'five') {
     if (!Array.isArray(data?.data)) throw Error('five days');
-    for (const day of data.data) minutes(day.data, day.date);
+    for (const day of data.data) minutes(day.data, day.date, day.prec);
   } else {
     const name = { 101: 'day', 102: 'week', 103: 'month' }[period];
     const candles = data?.['qfq' + name] || data?.[name];

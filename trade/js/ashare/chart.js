@@ -1,8 +1,8 @@
 // DESIGN §4.6、ASHARE §5：常驻A股图表；分时/均价/昨收、五日及前复权K线，末根每秒更新。
-import { element, button, price, time } from '../format.js';
+import { element, button, price } from '../format.js';
 import { segment } from '../ui.js';
 import { movingAverage } from '../chart.js';
-import { chartTime } from '../chart-time.js';
+import { chartTime, chartPoint, marketTimestamp } from '../chart-time.js';
 export class AshareChart {
   constructor(panel, feed) {
     this.feed = feed; this.period = 'trends'; this.indicators = true;
@@ -25,13 +25,13 @@ export class AshareChart {
       crosshair: { vertLine: { color: '#59616F', style: 2 }, horzLine: { color: '#59616F', style: 2 } },
       rightPriceScale: { borderColor: '#232833' }, timeScale: { borderColor: '#232833', timeVisible: true,
         rightOffset: 3, shiftVisibleRangeOnNewBar: true,
-        tickMarkFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101) },
-      localization: { timeFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101),
+        tickMarkFormatter: (value, type) => chartTime(value, 'UTC', +this.period >= 101 || type < 3) },
+      localization: { timeFormatter: value => chartTime(value, 'UTC', +this.period >= 101),
         priceFormatter: value => price(value, 2) },
     });
     this.chart.subscribeCrosshairMove(event => {
       const rows = feed.bars.get(feed.code + ':' + this.period) || [];
-      this.paintLegend(rows.find(row => row.time === event.time) || rows.at(-1));
+      this.paintLegend(rows.find(row => row.time === marketTimestamp(event.time)) || rows.at(-1));
     });
     new ResizeObserver(() => this.resize()).observe(this.canvas);
   }
@@ -67,14 +67,14 @@ export class AshareChart {
     if (changed) { this.key = key; this.rebuild(); }
     const line = ['trends', 'five'].includes(this.period);
     const unique = [...new Map(rows.map(row => [row.time, row])).values()].sort((a, b) => a.time - b.time);
-    const data = unique.map(row => line ? { time: row.time, value: row.close } : row);
+    const data = unique.map(row => chartPoint(line ? { time: row.time, value: row.close } : row));
     const missingBars = this.lastTime && unique.filter(row => row.time > this.lastTime).length > 1;
     const reset = changed || this.lastFirst !== unique[0]?.time || missingBars;
     if (reset || !data.length) this.main.setData(data); else this.main.update(data.at(-1));
     this.lastFirst = unique[0]?.time; this.lastTime = unique.at(-1)?.time;
-    this.average.setData(line ? unique.filter(row => row.average > 0).map(row => ({ time: row.time, value: row.average }))
-      : this.indicators ? movingAverage(unique, 7) : []);
-    this.volume.setData(this.indicators ? unique.map(row => ({ time: row.time, value: row.volume,
+    this.average.setData((line ? unique.filter(row => row.average > 0).map(row => ({ time: row.time, value: row.average }))
+      : this.indicators ? movingAverage(unique, 7) : []).map(chartPoint));
+    this.volume.setData(this.indicators ? unique.map(row => chartPoint({ time: row.time, value: row.volume,
       color: row.close >= row.open ? 'rgba(229,72,77,0.5)' : 'rgba(34,181,115,0.5)' })) : []);
     this.paintLegend(unique.at(-1)); if (reset) this.showLatest();
   }

@@ -1,5 +1,5 @@
 // ASHARE §1、§1.1：腾讯 GBK 实时报价与东方财富成交、分时及日 K。
-// 市价只采用腾讯盘口；东方财富历史数据只用于委托后的惰性结算。
+// 市价只采用腾讯盘口；惰性结算先东方财富，失败后用腾讯未复权历史价格保守撮合。
 // 服务端字段表独立导出，供下一轮客户端字段表与构建检查对照。
 import { parse, toStr } from './decimal.js';
 import { upstream, chinaTime } from './upstream.js';
@@ -82,6 +82,45 @@ export function parseDetails(data, date) {
     return { t: time, low: price, high: price, candle: false, end: time + 1, volume: numeric(fields[2]) };
   }).filter(event => parse(event.volume) > 0n);
 }
+export function parseTencentMinutes(payload, code) {
+  const data = payload?.data?.[code];
+  if (payload?.code !== 0 || !data) throw Error('missing tencent minutes');
+  const days = Array.isArray(data.data) ? data.data : [{ ...data.data, prec: data.qt?.[code]?.[QUOTE_FIELDS.prevClose] }];
+  return days.flatMap(day => {
+    const date = String(day.date).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+    if (!Array.isArray(day.data) || !day.data.length) throw Error('missing minute rows');
+    let cumulative = 0n, previous = numeric(day.prec), previousTime = 0;
+    if (parse(previous) <= 0n) throw Error('missing previous close');
+    return day.data.map(row => {
+      const [hhmm, price, lots] = row.split(/\s+/);
+      if (!/^\d{4}$/.test(hhmm)) throw Error('invalid minute');
+      const end = localTimestamp(date + ' ' + hhmm.slice(0, 2) + ':' + hhmm.slice(2));
+      const close = numeric(price), total = parse(numeric(lots)), open = previous;
+      if (parse(close) <= 0n || total < cumulative || end <= previousTime) throw Error('invalid minute');
+      const volume = toStr(total - cumulative), rising = parse(close) >= parse(open);
+      previous = close; cumulative = total; previousTime = end;
+      return { t: end - 60000, end, candle: true, open, close,
+        high: rising ? close : open, low: rising ? open : close, volume };
+    }).filter(event => parse(event.volume) > 0n);
+  }).sort((left, right) => left.t - right.t);
+}
+export function parseTencentDaily(payload, code) {
+  // 撮合必须是 day；即使存在 qfqday 也不能把复权价当成实际成交价。
+  const rows = payload?.data?.[code]?.day;
+  if (payload?.code !== 0 || !Array.isArray(rows) || !rows.length) throw Error('missing unadjusted daily bars');
+  return rows.map(([date, first, last, maximum, minimum, lots]) => {
+    const open = numeric(first), close = numeric(last), high = numeric(maximum), low = numeric(minimum);
+    if (parse(low) <= 0n || parse(high) < parse(open) || parse(high) < parse(close)
+      || parse(low) > parse(open) || parse(low) > parse(close)) throw Error('invalid daily bar');
+    const t = localTimestamp(date);
+    return { t, end: t + 19800000, candle: true, open, close, high, low, volume: numeric(lots) };
+  }).filter(event => parse(event.volume) > 0n);
+}
+function eastData(payload) {
+  if (payload.rc !== undefined && payload.rc !== 0 || !payload.data) throw Error('eastmoney unavailable');
+  return payload.data;
+}
+const tencentPath = 'https://web.ifzq.gtimg.cn/appstock/app/';
 export class AshareClient {
   constructor(budget, now = Date.now()) {
     this.budget = budget; this.now = now; this.pending = new Map(); this.quoteMap = {}; this.liveQuoteMap = {};
@@ -109,18 +148,50 @@ export class AshareClient {
     const url = 'https://push2.eastmoney.com/api/qt/stock/details/get?secid=' + secidFor(code)
       + '&fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54,f55&pos=-50';
     // ASHARE §3.2：details 只有当日时分秒，用可信腾讯报价日期赋予日期。
-    const data = await this.load(url, 1, async response => (await response.json()).data);
-    try { return parseDetails(data, date); } catch { throw { status: 503, code: 'market_unavailable' }; }
+    try {
+      const data = await this.load(url, 1, async response => eastData(await response.json()));
+      return parseDetails(data, date);
+    } catch (error) {
+      if (error.code === 'upstream_budget') throw error;
+      // 腾讯无逐笔备用；由结算器跳过委托所在分钟，不能用整分钟回填未知成交。
+      return [];
+    }
   }
-  trends(code) {
+  async trends(code, from) {
     const url = 'https://push2.eastmoney.com/api/qt/stock/trends2/get?secid=' + secidFor(code)
       + '&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ndays=5';
-    return this.load(url, 5, async response => parseTrends((await response.json()).data));
+    try {
+      return await this.load(url, 5, async response => {
+        const data = eastData(await response.json());
+        if (!data.trends?.length) throw Error('empty trends');
+        return parseTrends(data);
+      });
+    } catch (error) {
+      if (error.code === 'upstream_budget') throw error;
+      // 当日用 minute/query；跨日仍保留原五日分钟线结算范围，每日用各自 prec。
+      const today = new Date(this.now + 28800000).toISOString().slice(0, 10);
+      const path = from && from < today ? 'day/query?code=' : 'minute/query?code=';
+      return this.load(tencentPath + path + validateCode(code), 5,
+        async response => parseTencentMinutes(await response.json(), code));
+    }
   }
-  daily(code, from, to) {
+  async daily(code, from, to) {
     const url = 'https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=' + secidFor(code)
       + '&klt=101&fqt=0&lmt=500&beg=' + from.replace(/-/g, '') + '&end=' + to.replace(/-/g, '')
       + '&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56,f57';
-    return this.load(url, 300, async response => parseDaily((await response.json()).data));
+    try {
+      return await this.load(url, 300, async response => {
+        const data = eastData(await response.json());
+        if (!data.klines?.length) throw Error('empty daily bars');
+        return parseDaily(data);
+      });
+    } catch (error) {
+      if (error.code === 'upstream_budget') throw error;
+      const param = [validateCode(code), 'day', from, to, '500', ''].join(',');
+      const rows = await this.load(tencentPath + 'fqkline/get?param=' + param, 300,
+        async response => parseTencentDaily(await response.json(), code));
+      const begin = localTimestamp(from), end = localTimestamp(to) + 19800000;
+      return rows.filter(event => event.t >= begin && event.end <= end);
+    }
   }
 }
