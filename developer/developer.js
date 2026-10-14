@@ -1,3 +1,4 @@
+import { GameKeys } from '../hub/keys-ui.js';
 // DESIGN §5 / PLATFORM §6：网页会话管理密钥；样例只展示，所有动态文本使用 textContent。
 import { documentationExamples } from './examples.js';
 const byId = id => document.getElementById(id);
@@ -7,141 +8,11 @@ const element = (tag, text = '', className = '') => {
 const button = (text, action, className = 'ghost px') => {
   const node = element('button', text, className); node.type = 'button'; node.addEventListener('click', action); return node;
 };
-const date = value => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未使用';
-const active = key => !key.revoked && key.expires > Date.now();
-const newDialog = byId('key-new'), form = byId('key-form'), generate = byId('key-generate');
-let keys = [], identity = null, revision = 0, generation = 0, pending = false, revokeId = null, logRevision = 0;
-function message(id, text = '', error = false) {
-  const node = byId(id); node.textContent = text; node.classList.toggle('err', error);
-}
-const errorText = error => error.data?.message || GameAccount.errorText(error);
 async function copy(text, control) {
-  try {
-    await navigator.clipboard.writeText(text); control.textContent = '已复制';
-    setTimeout(() => { control.textContent = '复制'; }, 2000);
-  } catch { control.textContent = '请选择文字复制'; }
+  try { await navigator.clipboard.writeText(text); control.textContent = '已复制'; }
+  catch { control.textContent = '请选择文字复制'; }
 }
-function clearSecret() {
-  generation++; form.reset(); form.elements.password.value = ''; byId('key-secret').textContent = '';
-  byId('key-result').hidden = true; form.hidden = false; byId('key-copy').textContent = '复制';
-  pending = false; generate.disabled = true; generate.textContent = '生成密钥'; message('key-new-message');
-}
-for (const dialog of document.querySelectorAll('dialog:not(#acct)')) {
-  const close = () => { if (dialog === newDialog) clearSecret(); dialog.close(); };
-  dialog.querySelector('[data-close]').addEventListener('click', close);
-  dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
-}
-newDialog.addEventListener('cancel', clearSecret);
-newDialog.addEventListener('close', clearSecret);
-byId('key-log').addEventListener('close', () => { logRevision++; byId('key-log-rows').replaceChildren(); });
-byId('key-revoke').addEventListener('close', () => { revokeId = null; });
-byId('key-login').addEventListener('click', () => byId('acct-open').click());
-byId('key-create').addEventListener('click', () => {
-  if (keys.filter(active).length >= 5 || !identity) return;
-  clearSecret(); newDialog.showModal(); form.elements.name.focus();
-});
-form.addEventListener('input', () => { generate.disabled = pending || !form.checkValidity(); });
-form.addEventListener('submit', async event => {
-  event.preventDefault(); if (pending || !form.reportValidity()) return;
-  const name = form.elements.name.value.trim();
-  if (!name) { message('key-new-message', '请输入 1–24 个字的名称', true); return; }
-  pending = true; generate.disabled = true; generate.textContent = '正在生成…'; message('key-new-message');
-  const token = generation;
-  // PLATFORM §6.2：密码只用于这次同源请求，完整密钥只留在一次性弹窗的文本节点。
-  const request = GameAccount.request('/api/keys', 'POST', {
-    name, project: 'exchange', scopes: form.elements.trade.checked ? ['read', 'trade'] : ['read'],
-    expiresDays: +form.elements.expiry.value, password: form.elements.password.value, acceptDisclaimer: true,
-  });
-  form.elements.password.value = '';
-  try {
-    const result = await request;
-    if (token === generation && newDialog.open) {
-      byId('key-secret').textContent = result.key; result.key = null;
-      form.hidden = true; byId('key-result').hidden = false; byId('key-copy').focus();
-    }
-    await loadKeys();
-  } catch (error) {
-    if (token === generation) message('key-new-message', errorText(error), true);
-  } finally {
-    if (token === generation) { pending = false; generate.textContent = '生成密钥'; generate.disabled = !form.checkValidity(); }
-  }
-});
-byId('key-copy').addEventListener('click', () => copy(byId('key-secret').textContent, byId('key-copy')));
-function tableRow(values) {
-  const row = element('tr');
-  for (const value of values) {
-    const cell = element('td'); cell.append(typeof value === 'string' ? document.createTextNode(value) : value); row.append(cell);
-  }
-  return row;
-}
-function renderKeys() {
-  const rows = byId('key-rows'); rows.replaceChildren();
-  for (const key of keys) {
-    const scopes = element('div', '', 'key-scopes');
-    for (const scope of key.scopes) scopes.append(element('span', scope === 'trade' ? '交易' : '读取', 'key-scope px'));
-    const actions = element('div', '', 'key-actions');
-    actions.append(button('调用记录', () => showLog(key)));
-    if (active(key)) actions.append(button('撤销', () => {
-      revokeId = key.id; message('key-revoke-message');
-      byId('key-revoke-detail').textContent = '撤销「' + key.name + '」后，使用此密钥的调用立即失效。';
-      byId('key-revoke').showModal();
-    }));
-    else actions.append(element('span', key.revoked ? '已撤销' : '已到期', 'key-inactive'));
-    const row = tableRow([key.name, element('code', key.prefix), scopes,
-      date(key.created), date(key.expires), date(key.lastUsed), actions]);
-    row.dataset.id = key.id; rows.append(row);
-  }
-  const count = keys.filter(active).length;
-  byId('key-create').disabled = count >= 5;
-  message('keys-message', count >= 5 ? '最多保留 5 个有效密钥' : !keys.length ? '创建密钥，让 AI Agent 开始模拟交易。' : '');
-}
-async function loadKeys() {
-  const token = ++revision, logged = !!GameAccount.profile();
-  byId('keys-guest').hidden = logged; byId('key-create').hidden = !logged; byId('keys-table').hidden = !logged;
-  if (!logged) { keys = []; byId('key-rows').replaceChildren(); message('keys-message'); return; }
-  byId('key-create').disabled = true; message('keys-message', '正在读取密钥…');
-  try {
-    const result = await GameAccount.request('/api/keys');
-    if (token !== revision) return; keys = result.keys; renderKeys();
-  } catch (error) {
-    if (token !== revision) return;
-    keys = []; byId('key-rows').replaceChildren(); message('keys-message', errorText(error), true);
-    if (error.status === 401) { byId('keys-guest').hidden = false; byId('keys-table').hidden = true; byId('key-create').hidden = true; }
-  }
-}
-async function showLog(key) {
-  const token = ++logRevision; byId('key-log-rows').replaceChildren();
-  byId('key-log-title').textContent = key.name + ' · 调用记录'; message('key-log-message', '正在读取最近 100 条…');
-  byId('key-log').showModal();
-  try {
-    const result = await GameAccount.request('/api/keys/log?id=' + encodeURIComponent(key.id));
-    if (token !== logRevision) return;
-    byId('key-log-rows').replaceChildren(...result.logs.map(log => tableRow([
-      date(log.time), log.method, log.path, String(log.status), log.ip,
-    ])));
-    message('key-log-message', result.logs.length ? '最近 ' + result.logs.length + ' 条调用' : '还没有调用记录');
-  } catch (error) { if (token === logRevision) message('key-log-message', errorText(error), true); }
-}
-byId('key-revoke-confirm').addEventListener('click', async event => {
-  if (!revokeId || event.target.disabled) return;
-  const id = revokeId; event.target.disabled = true;
-  try {
-    await GameAccount.request('/api/keys/revoke', 'POST', { id });
-    byId('key-revoke').close(); await loadKeys();
-  } catch (error) { message('key-revoke-message', errorText(error), true); }
-  finally { event.target.disabled = false; }
-});
-function accountChanged() {
-  const name = GameAccount.profile()?.name || null;
-  if (identity !== name) {
-    for (const dialog of document.querySelectorAll('dialog:not(#acct)')) if (dialog.open) dialog.close();
-    clearSecret(); keys = []; identity = name;
-  }
-  loadKeys();
-}
-document.addEventListener('hub-account-change', accountChanged);
-GameAccount.onProfileChange(accountChanged);
-accountChanged();
+GameKeys.mount(byId('keys'), { project: null });
 
 // PLATFORM §6.6：目录与接口示例；展示来自第二轮真实本地响应，代码中的凭据均为占位符。
 const docs = byId('docs-body'), navigation = byId('docs-nav');

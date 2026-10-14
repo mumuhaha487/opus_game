@@ -1,4 +1,12 @@
 /* Shared arcade styles; existing rules moved from index.html with unchanged values. */
+:root {
+  --k-text: var(--ink); --k-muted: var(--muted); --k-line: var(--line); --k-control: var(--well);
+  --k-surface: var(--card); --k-accent: var(--gold); --k-accent-ink: var(--bg); --k-warning: var(--gold);
+  --k-font: var(--sans); --k-title-font: var(--px); --k-radius: 0px; --k-overlay: rgba(0, 0, 0, .7);
+  --k-shadow: 0 -4px var(--line), 0 4px var(--line), -4px 0 var(--line), 4px 0 var(--line);
+}
+#hub-keys { margin: 24px 0 12px; }
+#acct-user > a { display: block; margin-bottom: 16px; color: var(--gold); }
   @font-face { font-family: 'FusionPixel'; src: url('fusion-pixel-12.woff2') format('woff2'); font-display: swap; }
   :root {
     --bg: #0f0b16; --ink: #efe6ff; --muted: #a99cc4; --dim: #6f6390;

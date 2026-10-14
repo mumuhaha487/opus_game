@@ -1,3 +1,4 @@
+import { GameKeys } from './keys-ui.js';
 // DESIGN §3：游戏存档与统一钱包、API 密钥共用账号弹窗。
 'use strict';
 const HUB_GAMES = [{
@@ -18,6 +19,11 @@ const HUB_GAMES = [{
   const username = form.elements.username, password = form.elements.password, confirm = form.elements.confirm;
   const submit = form.querySelector('.btn'), logout = user.querySelector('.btn2');
   const message = dialog.querySelector('.msg'), note = dialog.querySelector('.note'), saves = user.querySelector('.saves');
+  const keyContainer = document.createElement('section'); keyContainer.id = 'hub-keys';
+  const docsLink = document.createElement('a'); docsLink.href = '/developer/#docs'; docsLink.textContent = '完整文档 →';
+  user.insertBefore(keyContainer, logout); user.insertBefore(docsLink, logout);
+  let keyUI;
+  const clearKeys = () => { keyUI?.destroy(); keyUI = null; };
   let mode = 0, busy = false, expired = false, revision = 0;
   const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };
   const say = (text = '', kind = '') => { message.textContent = text; message.className = 'msg' + (kind ? ' ' + kind : ''); };
@@ -75,29 +81,20 @@ const HUB_GAMES = [{
     } else detail.textContent = state === 'loading' ? '正在读取…' : '无法连接服务器，请稍后再试';
     link.append(name, status, detail); row.append(link); saves.append(row);
   }
-  function renderKeyRow(data, state = '') {
-    const row = document.createElement('li'), link = document.createElement('a');
-    link.className = 'gsave'; link.href = '/developer/index.html';
-    const name = document.createElement('span'), detail = document.createElement('span');
-    name.className = 'gname px'; name.textContent = 'API 密钥'; detail.className = 'gsum';
-    detail.textContent = data ? data.keys.filter(key => !key.revoked && key.expires > Date.now()).length + ' 个有效'
-      : state === 'loading' ? '正在读取…' : '无法连接服务器，请稍后再试';
-    link.append(name, detail); row.append(link); saves.append(row);
-  }
   async function loadSaves() {
     const token = ++revision;
     renderRows(null, 'loading');
-    renderTradeRow(null, null, 'loading'); renderKeyRow(null, 'loading');
+    renderTradeRow(null, null, 'loading');
     const results = await Promise.allSettled([C.request('/api/saves'), C.request('/api/trade/state'),
-      C.region(), C.request('/api/keys')]);
+      C.region()]);
     if (token !== revision) return;
-    const [gamesResult, tradeResult, regionResult, keysResult] = results;
+    const [gamesResult, tradeResult, regionResult] = results;
     renderRows(gamesResult.status === 'fulfilled' ? gamesResult.value.games : null,
       gamesResult.status === 'fulfilled' ? '' : 'error');
     renderTradeRow(tradeResult.status === 'fulfilled' ? tradeResult.value : null,
       regionResult.status === 'fulfilled' ? regionResult.value : null,
       tradeResult.status === 'fulfilled' ? '' : 'error');
-    renderKeyRow(keysResult.status === 'fulfilled' ? keysResult.value : null, keysResult.status === 'fulfilled' ? '' : 'error');
+
   }
   function render() {
     const profile = C.profile(), logged = !!profile && !expired;
@@ -108,9 +105,11 @@ const HUB_GAMES = [{
     submit.disabled = C.file || busy;
     if (logged) {
       user.querySelector('.who b').textContent = profile.name;
-      if (dialog.open) loadSaves();
+      if (dialog.open) {
+        loadSaves(); if (!keyUI) keyUI = GameKeys.mount(keyContainer, { project: null, compact: true });
+      }
     } else {
-      revision++;
+      revision++; clearKeys();
       if (expired) { changeTab(0); username.value = profile.name; say('登录已过期，请重新登录。', 'err'); }
       if (C.file) say('本地文件模式下只能使用本机存档。');
     }
@@ -135,7 +134,7 @@ const HUB_GAMES = [{
   });
   dialog.querySelector('.x').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
-  dialog.addEventListener('close', clearPasswords);
+  dialog.addEventListener('close', () => { clearPasswords(); clearKeys(); });
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (busy || C.file) return;

@@ -142,6 +142,8 @@ export async function handleAgent(request, env, readBody) {
       fail(503, 'storage_unavailable', '存储服务暂时不可用，请稍后再试');
     }
     key = await authenticateKey(request, env);
+    // ACCOUNT §2.1：注册表可扩展项目；交易所路由只接受交易所项目，不能跨项目使用权限。
+    if (key.meta.project !== 'exchange') fail(403, 'scope_denied', '此密钥不属于模拟交易所项目');
     const usage = await dailyUsage(env.ACCOUNTS, key, now);
     headers['X-Daily-Quota-Limit'] = '1500'; headers['X-Daily-Quota-Remaining'] = String(usage.keyRemaining);
     headers['X-Account-Quota-Remaining'] = String(usage.accountRemaining);

@@ -1,3 +1,4 @@
+import { AccountDrawer } from './account.js';
 // 交易所启动、hash 路由、桌面与手机布局协调。
 // 规格 9.11、13：非法交易对回默认路由；现货和合约共用真实行情。
 // DESIGN §4、§6、§7：常驻页面、导航不增长历史，行情接收与视图刷新分离。
@@ -40,6 +41,7 @@ const wallet = new WalletView(() => { feed.dirty = true; });
 let modals;
 const api = new TradeApi(() => { feed.dirty = true; }, text => modals.toast(text));
 modals = new Modals(api);
+const account = new AccountDrawer(api, modals, wallet);
 modals.wallet = wallet; api.onDisclaimer = () => modals.disclaimer();
 const spot = new Spot(node('spot-form'), feed, api, modals);
 const futures = new Futures(node('futures-form'), feed, api, modals);
@@ -88,7 +90,9 @@ for (const id of ['desktop-nav', 'mobile-nav']) NAVIGATION.forEach(([route, labe
   const link = element('a'); link.href = '#/' + route + (['spot', 'futures'].includes(route) ? '/BTC_USDT' : '');
   link.dataset.route = route;
   if (id === 'mobile-nav' && ['futures', 'api'].includes(route)) return;
-  if (route === 'api') link.href = '../developer/index.html';
+  if (route === 'api') {
+    link.href = '#account-keys'; link.addEventListener('click', e => { e.preventDefault(); account.open(true); });
+  }
   const glyph = icon(NAV_ICONS[index], 22); glyph.setAttribute('stroke-width', '1.6');
   link.append(glyph, element('span', label)); node(id).append(link);
 });
@@ -143,15 +147,16 @@ function header() {
   if (profile) {
     const menu = element('details', '', 'user-menu'), options = element('div');
     const avatar = element('summary', profile.name[0].toUpperCase()); avatar.title = profile.name; menu.append(avatar);
-    for (const [label, target] of [['资产', '#/assets'], ['返回游戏汇总', '../index.html']]) {
+    for (const [label, target] of [['资产', '#/assets'], ['返回主页', '/']]) {
       const link = element('a', label); link.href = target; options.append(link);
     }
+    options.append(button('账户与 API', () => { menu.open = false; account.open(); }));
     options.append(button('退出登录', async () => {
       try { await GameAccount.logout(); api.accountChanged(); } catch (error) { modals.error(error); }
     })); menu.append(options); railControls.push(menu);
-    controls.push(button(profile.name, () => navigation.go('#/assets'), 'mobile-account'));
+    controls.push(button(profile.name, () => account.open(), 'mobile-account'));
   } else {
-    controls.push(button('登录', () => modals.login(), 'mobile-account'));
+    controls.push(button('登录', () => account.open(), 'mobile-account'));
     const login = button('', () => modals.login(), 'rail-login'), circle = element('span', '', 'avatar');
     const user = icon([['circle', { cx: 12, cy: 8, r: 4 }], ['path', { d: 'M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6' }]], 18);
     user.setAttribute('stroke-width', '1.6'); circle.append(user); login.append(circle, element('span', '登录'));

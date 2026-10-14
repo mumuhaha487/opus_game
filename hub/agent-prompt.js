@@ -580,13 +580,14 @@ export const PROMPT_PROJECTS = {
         "method": "POST",
         "path": "/transfer",
         "params": "from、to：必填 string，wallet / spot / futures / ashare，二者不同；amount：必填正数十进制字符串，按来源币种计价。" +
-                  "必须一端是 wallet；子账户之间须分两次经 wallet。",
+                  "任意两个不同账户均可直接划转；来源为 ashare 最多 2 位小数，其他来源最多 8 位小数。",
         "body": {
           "from": "wallet",
           "to": "spot",
           "amount": "5"
         },
-        "ability": "USD/USDT 子账户等值；涉及 ashare 时按可信 USDCNY 换汇，收取 0.2% 费用；只能转可用余额。"
+        "ability": "USD/USDT 等值；涉及 ashare 时按可信 USDCNY 换汇，出账单位收取 0.2% 费用并向上取整，" +
+                   "到账按目标精度向下取整；只能转可用余额。"
       },
       {
         "id": "leverage",
@@ -689,8 +690,10 @@ export function generatePrompt(key, { mode = 'environment', secret = '', policy 
     + '- A 股代码 sh600519 / sz000001；交易时段北京时间 09:30–11:30、13:00–15:00，交易日依服务端；'
     + '一手 100 股，科创板至少 200 股、超出步进 1 股；价格 0.01 元，按实时涨跌停，ST/注册制等以报价为准。'
     + 'T+1，当日有效；佣金 0.025%（最低 5 元）、过户费 0.001%、卖出印花税 0.05%。\n'
-    + '- 钱包 USD、现货 USDT、合约 USDT、A 股 CNY；划转必须一端为 wallet，子账户间经过钱包；'
-    + '涉及 CNY 换汇收 0.2% 费用，不能划走冻结/仓位保证金。签到奖励只能网页领取，API 不能签到。\n'
+    + '- 钱包 USD、现货 USDT、合约 USDT、A 股 CNY；任意两个不同账户均可直接划转，无须经过钱包。'
+    + '划转金额按来源币种，A 股来源最多 2 位小数，其他来源最多 8 位小数；USD/USDT 等值。'
+    + '涉及 CNY 换汇按出账单位收 0.2% 费用并向上取整，到账按目标精度向下取整；'
+    + '不能划走冻结/仓位保证金。签到奖励只能网页领取，API 不能签到。\n'
     + '\n## 7. 错误码表\n| 代码 | 含义 | 应对 |\n| --- | --- | --- |\n' + errors
     + '\n\n## 8. 推荐工作流程\n'
     + '先读 account 确认可用余额 → quote 查询 → 按精度及最小額计算数量 → 按确认策略下单 → '

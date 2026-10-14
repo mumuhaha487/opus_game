@@ -120,7 +120,9 @@ export async function authenticateKey(request, env) {
   // PLATFORM §6.2：每次同时核对元数据和索引，半撤销/半创建状态一律拒绝。
   const { rows } = await metadata(env.ACCOUNTS, index.uid), meta = rows.find(row => row.id === id);
   if (!meta || meta.revoked || index.revoked || meta.expires <= Date.now() || index.expires <= Date.now()
-    || index.project !== 'exchange' || meta.project !== 'exchange') fail(401, 'invalid_api_key', 'API 密钥无效');
+    || !Object.hasOwn(KEY_PROJECTS, index.project) || meta.project !== index.project) {
+    fail(401, 'invalid_api_key', 'API 密钥无效');
+  }
   return { id, uid: index.uid, scopes: index.scopes.filter(scope => meta.scopes.includes(scope)), meta };
 }
 export function keyRate(id, method, now = Date.now()) {
