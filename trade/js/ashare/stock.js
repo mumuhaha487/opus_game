@@ -122,6 +122,9 @@ export class Stock {
     this.book.append(middle);
     paint(quote.bids, 'buy');
     const details = element('div', '', 'stock-details'); details.append(title('TRADES', '逐笔成交'));
+    if (this.feed.detailsUnavailable) {
+      const message = element('div', '逐笔数据暂不可用', 'muted'); message.style.fontSize = '12px'; details.append(message);
+    }
     for (const row of this.feed.trades.slice(-12).reverse()) {
       const entry = element('div', '', 'stock-trade');
       entry.append(element('span', row.time), element('span', money(row.price), direction(row.price - quote.prevClose)),

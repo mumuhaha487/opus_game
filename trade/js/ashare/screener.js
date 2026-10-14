@@ -12,7 +12,7 @@ export class Screener {
     controls.append(segment(BOARDS.map(([name], index) => [index, name]), value => this.select('board', value)));
     const sort = element('select'); sort.setAttribute('aria-label', '排序');
     SORTS.forEach(([label], index) => { const option = element('option', label); option.value = index; sort.append(option); });
-    sort.onchange = () => this.select('sort', +sort.value); controls.append(sort);
+    sort.onchange = () => this.select('sort', +sort.value); controls.append(sort); this.sortSelect = sort;
     const searchBox = element('div', '', 'stock-search'), input = element('input'), results = element('div'); results.hidden = true;
     input.placeholder = '代码 / 名称 / 拼音'; input.setAttribute('aria-label', '搜索A股');
     searchBox.append(input, results); new Search(input, results); controls.append(searchBox);
@@ -27,6 +27,8 @@ export class Screener {
     this.feed.schedule(); this.render();
   }
   render() {
+    [...this.sortSelect.options].forEach((option, index) => { option.hidden = option.disabled = !!this.feed.listFallback && index > 2; });
+    this.sortSelect.value = String(this.feed.sort);
     this.indices.replaceChildren(...INDICES.map(([code, name]) => this.overview.ticker(code, name, true)));
     const clock = this.feed.clock();
     this.status.replaceChildren(element('span', clock.label, 'market-status ' + clock.status),

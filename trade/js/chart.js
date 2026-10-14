@@ -1,8 +1,8 @@
 // Lightweight Charts 5.2.1 图表、指标和用户委托价格线。
 // 配置与颜色逐项对应规格 9.4、9.6，保留 TradingView attribution。
 // 历史滚动使用 REST，实时末根使用 series.update，图例通过安全 DOM 更新。
-import { element, button, price, percent, time } from './format.js';
-import { chartTime } from './chart-time.js';
+import { element, button, price, percent } from './format.js';
+import { chartTime, chartDateTime } from './chart-time.js';
 const COLORS = ['#F2C66D', '#5B8DEF', '#A78BFA'];
 export function movingAverage(candles, period, exponential = false) {
   const values = []; let total = 0, previous;
@@ -51,7 +51,15 @@ export class Chart {
       const candle = feed.candles.find(entry => entry.time === event.time) || feed.candles.at(-1); this.paintLegend(candle);
     });
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(range => { if (range && range.from < 10) this.loadOlder(); });
-    new ResizeObserver(() => this.chart.resize(this.container.clientWidth, this.container.clientHeight)).observe(this.container);
+    new ResizeObserver(() => this.resize()).observe(this.container);
+  }
+  showLatest() {
+    const scale = this.chart.timeScale();
+    scale.applyOptions({ rightOffset: 3, shiftVisibleRangeOnNewBar: true }); scale.scrollToRealTime();
+  }
+  resize() {
+    const width = this.container.clientWidth, height = this.container.clientHeight;
+    if (width > 0 && height > 0) { this.chart.resize(width, height); this.showLatest(); }
   }
   options() {
     return {
@@ -62,7 +70,8 @@ export class Chart {
       crosshair: { mode: 0, vertLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' },
         horzLine: { color: '#59616F', style: 3, labelBackgroundColor: '#232833' } },
       rightPriceScale: { borderColor: '#232833' },
-      timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 6, barSpacing: 8,
+      timeScale: { borderColor: '#232833', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 8,
+        shiftVisibleRangeOnNewBar: true,
         tickMarkFormatter: (value, type) => chartTime(value, undefined, type < 3) },
       localization: { priceFormatter: value => price(value, this.feed.precision()),
         timeFormatter: value => chartTime(value) },
@@ -148,14 +157,15 @@ export class Chart {
     const data = feed.candles.map(candle => this.area ? { time: candle.time, value: candle.close } : candle);
     if (!data.length) { this.main.setData([]); return; }
     const missingBars = this.lastTime && data.filter(candle => candle.time > this.lastTime).length > 1;
-    if (changed || this.lastFirst !== data[0].time || missingBars) this.main.setData(data);
+    const reset = changed || this.lastFirst !== data[0].time || missingBars;
+    if (reset) this.main.setData(data);
     else this.main.update(data.at(-1));
     this.lastFirst = data[0].time; this.lastTime = data.at(-1).time;
     if (this.volume) this.volume.setData(feed.candles.map(candle => ({ time: candle.time, value: candle.volume,
       color: candle.close >= candle.open ? 'rgba(34,181,115,0.5)' : 'rgba(229,72,77,0.5)' })));
     for (const extra of this.extras) extra.series.setData(this.indicatorData(extra));
     this.paintLegend(feed.candles.at(-1)); this.priceLines(state);
-    if (changed) this.chart.timeScale().fitContent();
+    if (reset) this.showLatest();
   }
   priceLines(state) {
     const orders = (state?.openOrders || []).filter(order => order.market === this.feed.market && order.symbol === this.feed.symbol);
@@ -179,7 +189,7 @@ export class Chart {
   paintLegend(candle) {
     if (!candle) { this.legend.replaceChildren(); return; }
     const precision = this.feed.precision();
-    const first = element('div', time(candle.time * 1000, true).slice(0, 16).replaceAll('-', '/') + '  ', 'muted');
+    const first = element('div', chartDateTime(candle.time) + '  ', 'muted');
     for (const [label, value] of [['开', candle.open], ['高', candle.high], ['低', candle.low], ['收', candle.close]]) {
       first.append(element('span', label + ' ', 'muted'), element('span', price(value, precision) + '  ',
         candle.close >= candle.open ? 'up' : 'down'));

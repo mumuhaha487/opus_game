@@ -57,11 +57,46 @@ export function parseBars(data, trends = false) {
       open: +fields[1], close: +fields[2], high: +fields[3], low: +fields[4], volume: +fields[5], average: +fields[7] };
   }).filter(row => Number.isFinite(row.time) && row.close > 0);
 }
+export function parseTencentBars(payload, code, period) {
+  if (payload?.code !== 0) throw Error('tencent bars');
+  const data = payload.data?.[code], rows = [];
+  const minutes = (day, date) => {
+    const compact = String(date).replaceAll('-', '');
+    if (!/^\d{8}$/.test(compact) || !Array.isArray(day)) throw Error('minute data');
+    const localDate = compact.slice(0, 4) + '-' + compact.slice(4, 6) + '-' + compact.slice(6);
+    let previous = 0;
+    for (const text of day) {
+      const [hhmm, price, cumulative, amount] = text.split(/\s+/), value = Number(price), volume = Number(cumulative);
+      if (!/^\d{4}$/.test(hhmm) || !(value > 0) || !Number.isFinite(volume) || volume < previous) throw Error('minute row');
+      rows.push({ time: Date.parse(localDate + 'T' + hhmm.slice(0, 2) + ':' + hhmm.slice(2) + ':00+08:00') / 1000,
+        open: value, high: value, low: value, close: value, volume: volume - previous,
+        average: volume > 0 ? Number(amount) / (volume * 100) : 0 });
+      previous = volume;
+    }
+  };
+  if (period === 'trends') minutes(data?.data?.data, data?.data?.date);
+  else if (period === 'five') {
+    if (!Array.isArray(data?.data)) throw Error('five days');
+    for (const day of data.data) minutes(day.data, day.date);
+  } else {
+    const name = { 101: 'day', 102: 'week', 103: 'month' }[period];
+    const candles = data?.['qfq' + name] || data?.[name];
+    if (!name || !Array.isArray(candles)) throw Error('kline data');
+    for (const [date, open, close, high, low, volume] of candles) rows.push({
+      time: Date.parse(date + 'T09:30:00+08:00') / 1000,
+      open: +open, close: +close, high: +high, low: +low, volume: +volume, average: 0,
+    });
+  }
+  const valid = [...new Map(rows.filter(row => Number.isFinite(row.time) && row.close > 0).map(row => [row.time, row])).values()]
+    .sort((a, b) => a.time - b.time);
+  if (!valid.length) throw Error('empty bars'); return valid;
+}
 export class AshareFeed {
   constructor(onChange) {
     this.onChange = onChange; this.quotes = {}; this.bars = new Map(); this.trades = []; this.ranking = [];
     this.list = []; this.total = 0; this.tasks = new Map(); this.status = 'connecting'; this.page = 'overview';
     this.codes = INDICES.map(([code]) => code); this.board = 0; this.sort = 0; this.pageNumber = 1;
+    this.barsSource = new Map(); this.barsFetchedAt = new Map(); this.eastBarsRetryAt = 0;
     document.addEventListener('visibilitychange', () => {
       for (const task of this.tasks.values()) clearTimeout(task.timer);
       if (!document.hidden) this.schedule();
@@ -118,36 +153,68 @@ export class AshareFeed {
     Object.assign(this.quotes, parseTencent(new TextDecoder('gbk').decode(await response.arrayBuffer())));
   }
   async loadBars(code, period = 'trends') {
-    if (!['trends', 'five'].includes(period) && this.bars.has(code + ':' + period)) return this.bars.get(code + ':' + period);
+    const key = code + ':' + period;
+    if (this.bars.has(key) && Date.now() - this.barsFetchedAt.get(key) < 30000) return this.bars.get(key);
     const trends = ['trends', 'five'].includes(period), parameters = new URLSearchParams({ secid: secidFor(code),
       fields1: 'f1,f2,f3,f4,f5,f6,f7,f8', fields2: 'f51,f52,f53,f54,f55,f56,f57,f58',
       ...(trends ? { ndays: period === 'five' ? '5' : '1' } : { klt: period, fqt: '1', lmt: '500', end: '20500101' }) });
     const prefix = trends ? EAST + 'stock/trends2/get?' : 'https://push2his.eastmoney.com/api/qt/stock/kline/get?';
-    const rows = parseBars((await this.json(prefix + parameters)).data, trends);
-    this.bars.set(code + ':' + period, rows); return rows;
+    let rows, source = 'eastmoney';
+    try {
+      if (Date.now() < this.eastBarsRetryAt) throw Error('east cooldown');
+      const payload = await this.json(prefix + parameters);
+      if (payload.rc !== undefined && payload.rc !== 0) throw Error('east rc');
+      rows = parseBars(payload.data, trends); if (!rows.length) throw Error('empty bars');
+    } catch {
+      this.eastBarsRetryAt = this.eastBarsRetryAt || Date.now() + 600000;
+      if (Date.now() >= this.eastBarsRetryAt) this.eastBarsRetryAt = Date.now() + 600000;
+      const name = { 101: 'day', 102: 'week', 103: 'month' }[period];
+      const path = period === 'trends' ? 'minute/query?code=' + code : period === 'five' ? 'day/query?code=' + code
+        : name ? 'fqkline/get?param=' + code + ',' + name + ',,,320,qfq' : null;
+      if (!path) throw Error('unsupported fallback period');
+      rows = parseTencentBars(await this.json('https://web.ifzq.gtimg.cn/appstock/app/' + path), code, period);
+      source = 'tencent';
+    }
+    this.bars.set(key, rows); this.barsSource.set(key, source); this.barsFetchedAt.set(key, Date.now()); return rows;
   }
   async loadDetails() {
-    const code = this.code, data = (await this.json(EAST + 'stock/details/get?secid=' + secidFor(code)
-      + '&fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54,f55&pos=-50')).data;
-    if (code !== this.code) return;
-    this.trades = (data?.details || []).map(row => {
-      const fields = row.split(','); return { time: fields[0], price: +fields[1], qty: +fields[2], side: +fields[4] };
-    });
+    const code = this.code;
+    try {
+      const payload = await this.json(EAST + 'stock/details/get?secid=' + secidFor(code)
+        + '&fields1=f1,f2,f3,f4&fields2=f51,f52,f53,f54,f55&pos=-50');
+      if (payload.rc !== undefined && payload.rc !== 0 || !payload.data?.details?.length) throw Error('details');
+      if (code !== this.code) return;
+      this.trades = payload.data.details.map(row => {
+        const fields = row.split(','); return { time: fields[0], price: +fields[1], qty: +fields[2], side: +fields[4] };
+      }); this.detailsUnavailable = false;
+    } catch {
+      if (code !== this.code) return; this.trades = []; this.detailsUnavailable = true;
+    }
   }
   async listRequest(sort = this.sort, page = this.pageNumber) {
     const [, fid, po] = SORTS[sort], query = new URLSearchParams({ pn: page, pz: 50, po, np: 1, fltt: 2, invt: 2,
       fid, fs: BOARDS[this.board][1], fields: 'f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f15,f16,f17,f18' });
-    const data = (await this.json(EAST + 'clist/get?' + query)).data;
-    if (!data || !Array.isArray(data.diff)) throw Error('list');
-    return { total: data.total, rows: data.diff.map(row => ({ code: (row.f13 === 1 ? 'sh' : 'sz') + row.f12,
-      name: row.f14, last: row.f2, percent: row.f3, change: row.f4, turnover: row.f6, turnoverRate: row.f8,
-      high: row.f15, low: row.f16 })) };
+    try {
+      const payload = await this.json(EAST + 'clist/get?' + query), data = payload.data;
+      if (payload.rc !== undefined && payload.rc !== 0 || !data || !Array.isArray(data.diff) || !data.diff.length) {
+        throw Error('list');
+      }
+      this.listFallback = false;
+      return { total: data.total, source: 'eastmoney', rows: data.diff.map(row => ({
+        code: (row.f13 === 1 ? 'sh' : 'sz') + row.f12, name: row.f14, last: row.f2, percent: row.f3,
+        change: row.f4, turnover: row.f6, turnoverRate: row.f8, high: row.f15, low: row.f16 })) };
+    } catch {
+      this.listFallback = true;
+      if (sort > 2) { sort = 0; this.sort = 0; }
+      const parameters = new URLSearchParams({ board: String(this.board), sort: String(sort), page: String(page) });
+      return this.json('/api/market/ashare-list?' + parameters);
+    }
   }
   async loadList() {
-    const signature = [this.board, this.sort, this.pageNumber].join(':');
+    const board = this.board, sort = this.sort, page = this.pageNumber;
     const result = await this.listRequest();
-    if (signature !== [this.board, this.sort, this.pageNumber].join(':')) return;
-    this.list = result.rows; this.total = result.total;
+    if (board !== this.board || page !== this.pageNumber || this.sort !== sort && !(sort > 2 && this.sort === 0)) return;
+    this.list = result.rows; this.total = result.total; this.listSource = result.source;
   }
   async loadRank() { this.ranking = (await this.listRequest(this.rankSort || 0, 1)).rows.slice(0, 10); }
 }

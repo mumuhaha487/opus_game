@@ -24,6 +24,7 @@ export class AshareChart {
       grid: { vertLines: { color: '#1C2029' }, horzLines: { color: '#1C2029' } },
       crosshair: { vertLine: { color: '#59616F', style: 2 }, horzLine: { color: '#59616F', style: 2 } },
       rightPriceScale: { borderColor: '#232833' }, timeScale: { borderColor: '#232833', timeVisible: true,
+        rightOffset: 3, shiftVisibleRangeOnNewBar: true,
         tickMarkFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101) },
       localization: { timeFormatter: value => chartTime(value, 'Asia/Shanghai', +this.period >= 101),
         priceFormatter: value => price(value, 2) },
@@ -32,9 +33,15 @@ export class AshareChart {
       const rows = feed.bars.get(feed.code + ':' + this.period) || [];
       this.paintLegend(rows.find(row => row.time === event.time) || rows.at(-1));
     });
-    new ResizeObserver(() => {
-      if (this.canvas.clientWidth && this.canvas.clientHeight) this.chart.resize(this.canvas.clientWidth, this.canvas.clientHeight);
-    }).observe(this.canvas);
+    new ResizeObserver(() => this.resize()).observe(this.canvas);
+  }
+  showLatest() {
+    const scale = this.chart.timeScale();
+    scale.applyOptions({ rightOffset: 3, shiftVisibleRangeOnNewBar: true }); scale.scrollToRealTime();
+  }
+  resize() {
+    const width = this.canvas.clientWidth, height = this.canvas.clientHeight;
+    if (width > 0 && height > 0) { this.chart.resize(width, height); this.showLatest(); }
   }
   select(period) { this.period = this.feed.period = period; this.key = ''; this.feed.schedule(); }
   rebuild() {
@@ -60,12 +67,16 @@ export class AshareChart {
     if (changed) { this.key = key; this.rebuild(); }
     const line = ['trends', 'five'].includes(this.period);
     const unique = [...new Map(rows.map(row => [row.time, row])).values()].sort((a, b) => a.time - b.time);
-    this.main.setData(unique.map(row => line ? { time: row.time, value: row.close } : row));
+    const data = unique.map(row => line ? { time: row.time, value: row.close } : row);
+    const missingBars = this.lastTime && unique.filter(row => row.time > this.lastTime).length > 1;
+    const reset = changed || this.lastFirst !== unique[0]?.time || missingBars;
+    if (reset || !data.length) this.main.setData(data); else this.main.update(data.at(-1));
+    this.lastFirst = unique[0]?.time; this.lastTime = unique.at(-1)?.time;
     this.average.setData(line ? unique.filter(row => row.average > 0).map(row => ({ time: row.time, value: row.average }))
       : this.indicators ? movingAverage(unique, 7) : []);
     this.volume.setData(this.indicators ? unique.map(row => ({ time: row.time, value: row.volume,
       color: row.close >= row.open ? 'rgba(229,72,77,0.5)' : 'rgba(34,181,115,0.5)' })) : []);
-    this.paintLegend(unique.at(-1)); if (changed) this.chart.timeScale().fitContent();
+    this.paintLegend(unique.at(-1)); if (reset) this.showLatest();
   }
   paintLegend(row) {
     this.legend.textContent = row ? chartTime(row.time, 'Asia/Shanghai', +this.period >= 101) + '  开 ' + price(row.open, 2)

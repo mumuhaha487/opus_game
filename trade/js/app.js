@@ -218,7 +218,7 @@ function bar() {
 }
 function connectionColor() { return feed.status === 'connected' ? '#22B573' : feed.status === 'failed' ? '#E5484D' : '#F2C66D'; }
 function status() {
-  const state = ['stock', 'ashare'].includes(page) ? ashare.status : feed.status;
+  const state = feed.status;
   node('connection-status').textContent = state === 'connected' ? '实时行情已连接'
     : state === 'failed' ? '行情连接中断，正在重试' : '行情重连中…';
   node('connection-dot').style.backgroundColor = connectionColor();

@@ -7,6 +7,7 @@ import { regionView } from './trade/fx.js';
 import { auditSave } from './save-audit.js';
 import { manageKeys } from './api-keys.js';
 import { handleAgent } from './agent-api.js';
+import { ashareList } from './market-ashare.js';
 
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
@@ -43,6 +44,10 @@ export async function handle(request, env) {
     // PLATFORM §6.3–6.4：Bearer只用于Agent接口；带Cookie也不能回退到网页权限。
     if (request.headers.has('Authorization')) {
       return reply(403, { error: 'scope_denied', message: 'API 密钥不能调用此接口' });
+    }
+    if (new URL(request.url).pathname === '/api/market/ashare-list') {
+      const result = await ashareList(request, env);
+      return reply(result.status, result.body, result.headers);
     }
     // PLATFORM §2.3：公开只读地区接口，地区只决定显示货币。
     if (new URL(request.url).pathname === '/api/region') {
