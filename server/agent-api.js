@@ -13,9 +13,12 @@ import { getFx } from './trade/fx.js';
 import { parse, toStr, mul, div, roundTo, max } from './trade/decimal.js';
 import { pnl, MAKER, TAKER, maxLeverage } from './trade/futures.js';
 import { FEE_RATE } from './trade/spot.js';
+import { UsClient, usStock } from './trade/us-data.js';
+import { tradePrice, SEC_RATE, TAF_PER_SHARE, TAF_MAX } from './trade/usstock.js';
+import { usMarketStatus } from './trade/us-calendar.js';
 const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', 'orders/cancel': 'POST',
   transfer: 'POST', 'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST' };
-const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare' };
+const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare', usstock: 'usstock' };
 const denied = new Set(['checkin', 'keys', 'keys/delete', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
 const fail = (status, code, message) => { throw { status, code, message }; };
 function reply(status, data, headers) {
@@ -35,8 +38,14 @@ function positivePrice(value) {
   if (price <= 0n) fail(503, 'market_unavailable', '行情服务暂时不可用，请稍后再试');
   return price;
 }
-async function valuation(view, gate, ashare, now) {
-  let usd = parse(view.wallet.usd) + parse(view.futures.wallet) + parse(view.futures.locked);
+async function valuation(view, gate, ashare, now, us = new UsClient(gate, now)) {
+  let usd = parse(view.wallet.usd) + parse(view.futures.wallet) + parse(view.futures.locked)
+    + parse(view.usstock.cash.free) + parse(view.usstock.cash.locked);
+  const tickers = view.usstock.holdings.map(holding => holding.ticker);
+  if (tickers.length) {
+    const quotes = await us.quotes(tickers);
+    for (const holding of view.usstock.holdings) usd += mul(parse(holding.qty), positivePrice(quotes[holding.ticker].last), 'floor');
+  }
   let cny = parse(view.ashare.cash.free) + parse(view.ashare.cash.locked);
   for (const funds of view.spot.balances) {
     const quantity = parse(funds.free) + parse(funds.locked);
@@ -68,7 +77,9 @@ async function valuation(view, gate, ashare, now) {
     totalCNY: toStr(roundTo(mul(usd, rate, 'floor') + cny, 2, 'floor')), fx, valuation: fx };
 }
 async function quoteView(url, gate, ashare, now) {
-  const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
+  const market = url.searchParams.get('market'), raw = url.searchParams.get('symbol');
+  // 美股代码大小写不敏感（名单为大写）。
+  const symbol = market === 'usstock' && raw ? raw.toUpperCase() : raw;
   if (market === 'crypto') {
     marketFor(symbol);
     const [ticker, initialBook] = await Promise.all([gate.ticker(symbol), gate.executionBook(symbol)]);
@@ -80,6 +91,16 @@ async function quoteView(url, gate, ashare, now) {
     assertBookFresh(book, Date.now());
     return { market, symbol, last: toStr(positivePrice(ticker[0]?.last)),
       bid: book.bids[0]?.[0] || '0', ask: book.asks[0]?.[0] || '0', time: Number(book.current) };
+  }
+  if (market === 'usstock') {
+    usStock(symbol);
+    const us = new UsClient(gate, now), status = usMarketStatus(now);
+    const [display, live] = await Promise.all([us.quotes([symbol]), status.status === 'open' ? tradePrice(us, symbol, now) : null]);
+    const quote = display[symbol];
+    // 盘中 last 为实时成交价（与市价单成交价同源）；bid/ask 为腾讯一档，盘外为最近收盘数据。
+    return { market, symbol, name: quote.name, last: live ? live.last : quote.last, bid: quote.bid, ask: quote.ask,
+      time: live ? live.time : quote.time, realtime: !!live, prevClose: quote.prevClose, status: status.status,
+      nextOpen: status.nextOpen, closeAt: status.closeAt };
   }
   if (market !== 'ashare') fail(422, 'bad_request', '请求格式错误');
   validateCode(symbol);
@@ -95,7 +116,9 @@ async function specView(url, gate, ashare) {
   for (const name of url.searchParams.keys()) {
     if (!['market', 'symbol'].includes(name) || url.searchParams.getAll(name).length !== 1) fail(422, 'bad_request', '请求格式错误');
   }
-  const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
+  const market = url.searchParams.get('market'), raw = url.searchParams.get('symbol');
+  // 美股代码大小写不敏感（名单为大写）。
+  const symbol = market === 'usstock' && raw ? raw.toUpperCase() : raw;
   const text = value => value == null || value === '' ? null : String(value);
   if (market === 'crypto_spot') {
     marketFor(symbol);
@@ -112,6 +135,14 @@ async function specView(url, gate, ashare) {
       leverageMax: maxLeverage(contract), maintenanceRate: text(contract.maintenance_rate),
       makerFee: toStr(MAKER), takerFee: toStr(TAKER), markPrice: text(tickers[0]?.mark_price ?? contract.mark_price),
       fundingRate: text(contract.funding_rate), fundingIntervalSeconds: Number(contract.funding_interval) || null };
+  }
+  if (market === 'usstock') {
+    const stock = usStock(symbol), status = usMarketStatus(Date.now());
+    return { market, symbol, name: stock.name, exchange: stock.exchange, lot: { min: 1, step: 1 }, shortSelling: false,
+      tPlus: 0, priceDecimals: { '>=1': 2, '<1': 4 }, priceBand: '限价须在参考价 ±50% 内（防手误）', currency: 'USD',
+      fees: { commission: '0', secFeeRateOnSell: toStr(SEC_RATE), tafPerShareOnSell: toStr(TAF_PER_SHARE), tafMax: toStr(TAF_MAX) },
+      session: '09:30-16:00 America/New_York（节假日休市，部分日 13:00 提前收盘）', status: status.status,
+      nextOpen: status.nextOpen, closeAt: status.closeAt };
   }
   if (market !== 'ashare') fail(422, 'bad_request', '请求格式错误');
   validateCode(symbol);
@@ -157,6 +188,9 @@ async function dispatch(request, env, key, route, data, now) {
     if (typeof data.clientId !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(data.clientId)) {
       fail(422, 'bad_request', 'clientId 为必填字段');
     }
+    // 美股委托字段为 ticker；兼容 symbol，大小写不敏感。
+    const ticker = data.ticker ?? data.symbol;
+    if (market === 'usstock' && typeof ticker === 'string') data = { ...data, ticker: ticker.toUpperCase() };
     tradeRoute = market + '/order';
   }
   if (route === 'orders/cancel') tradeRoute = marketName(data.market) + '/cancel';

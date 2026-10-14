@@ -1,4 +1,4 @@
-// DESIGN §4.8、PLATFORM §2.3：四账户卡片、原生单位及显示货币估值；余额来自服务端。
+// DESIGN §4.8、PLATFORM §2.3：五账户卡片（含美股 USD）、原生单位及显示货币估值；余额来自服务端。
 import { element, button, money, quantity, time } from './format.js';
 import { title, segment, table } from './ui.js';
 import { ACCOUNTS, availableFunds, valuations, totalValue } from './wallet.js';
@@ -12,7 +12,7 @@ export class Assets {
   constructor(panel, feed, api, modals, ashare, wallet, navigate) {
     Object.assign(this, { panel, feed, api, modals, ashare, wallet, navigate, tab: 'ashare' });
     this.cards = element('div', '', 'asset-summary'); this.list = element('section', '', 'panel asset-list');
-    this.tabs = segment([['ashare', 'A 股持仓'], ['spot', '加密现货'], ['futures', '合约仓位'], ['ledger', '资金流水']], tab => {
+    this.tabs = segment([['ashare', 'A 股持仓'], ['usstock', '美股持仓'], ['spot', '加密现货'], ['futures', '合约仓位'], ['ledger', '资金流水']], tab => {
       this.tab = tab; this.ledgerLoaded = false; this.render(api.state); if (tab === 'ledger') this.loadLedger();
     });
     this.body = element('div'); this.list.append(this.tabs, this.body); panel.replaceChildren(this.cards, this.list);
@@ -30,7 +30,7 @@ export class Assets {
         element('small', this.wallet.display(values[id], id === 'ashare' ? 'CNY' : 'USD'), 'muted'));
       const actions = element('div', '', 'card-actions');
       actions.append(button('划转', () => this.modals.transfer(id, id === 'wallet' ? 'ashare' : 'wallet'), 'secondary'),
-        button('交易', () => this.navigate(id === 'ashare' ? '#/ashare'
+        button('交易', () => this.navigate(id === 'ashare' ? '#/ashare' : id === 'usstock' ? '#/usstock'
           : id === 'futures' ? '#/futures/' + this.feed.symbol : '#/crypto'), 'secondary')); card.append(actions); return card;
     });
     this.cards.replaceChildren(totalCard, ...cards);
@@ -42,6 +42,15 @@ export class Assets {
           const last = this.ashare.quotes[row.code]?.last;
           return [row.name, row.qty, row.available, money(row.cost), money(last),
             money(last == null ? null : (last - +row.cost) * +row.qty), this.trade('#/stock/' + row.code)];
+        })));
+    } else if (this.tab === 'usstock') {
+      this.body.className = '';
+      const usd = value => value == null ? '--' : '$' + money(value);
+      this.body.replaceChildren(table(['名称', '代码', '持仓', '可卖', '成本', '现价', '盈亏', '操作'],
+        (state.usstock?.holdings || []).map(row => {
+          const last = this.feed.us?.quotes[row.ticker]?.last;
+          return [row.name, row.ticker, row.qty, row.available, usd(+row.cost), usd(last),
+            usd(last == null ? null : (last - +row.cost) * +row.qty), this.trade('#/us/' + row.ticker)];
         })));
     } else if (this.tab === 'spot') {
       this.body.className = '';

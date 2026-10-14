@@ -11,11 +11,14 @@ import { marketFor } from './markets.js';
 import { getFx } from './fx.js';
 import { AshareClient, validateCode } from './ashare-data.js';
 import { placeAshareOrder, cancelAshareOrder } from './ashare.js';
+import { placeUsOrder, cancelUsOrder } from './usstock.js';
+import { UsClient, usStock } from './us-data.js';
 import { placeFuturesOrder, cancelFuturesOrder, closeFutures, changeLeverage, changeTPSL, changeMargin } from './futures.js';
 const ROUTES = {
   state: 'GET', summary: 'GET', history: 'GET', checkin: 'POST', transfer: 'POST',
   disclaimer: 'POST',
   'ashare/order': 'POST', 'ashare/cancel': 'POST', 'ashare/watch': 'POST',
+  'usstock/order': 'POST', 'usstock/cancel': 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
   'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
@@ -33,6 +36,7 @@ export const MESSAGES = {
   lot_size: '买入数量须为 100 股的整数倍（科创板至少 200 股）',
   t_plus_one: '可卖数量不足（当日买入的股票下一交易日才能卖出）', suspended: '该股票停牌', not_a_share: '仅支持沪深 A 股',
   market_stale: '行情暂时不同步，请稍后再试', daily_order_limit: '今日委托次数已达上限',
+  insufficient_position: '可卖股数不足（美股不能卖空）', price_out_of_band: '委托价格偏离现价超过 50%，请检查是否输错',
 };
 function reply(status, data, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: {
@@ -59,10 +63,13 @@ async function tradeRate(env, uid, now) {
   if (postBuckets.size > 10000) for (const [name, value] of postBuckets) if (now - value.time > 120000) postBuckets.delete(name);
   return tokens >= 1 ? 0 : retryAfter;
 }
-function prefetch(route, data, gate, ashare) {
+function prefetch(route, data, gate, ashare, us) {
   // 第五轮延迟修复：验证符号后才发起上游，与 R2 状态读取并行；回调共享这些 promise 与预算。
   try {
-    if (route === 'ashare/order') {
+    if (route === 'usstock/order') {
+      usStock(data.ticker);
+      us.realtime(data.ticker).catch(() => {}); us.quotes([data.ticker]).catch(() => {});
+    } else if (route === 'ashare/order') {
       validateCode(data.code);
       ashare.quotes([data.code, 'sh000001'], true).catch(() => {});
     } else if (route === 'spot/order') {
@@ -99,7 +106,7 @@ export async function handleTrade(request, env, session, data, services) {
       const { state } = await readState(env.ACCOUNTS, uid, now);
       if (route === 'summary') return reply(200, summary(state, now));
       const kind = url.searchParams.get('kind'), market = url.searchParams.get('market');
-      if (!['orders', 'trades', 'ledger'].includes(kind) || !['wallet', 'spot', 'futures', 'ashare'].includes(market)) {
+      if (!['orders', 'trades', 'ledger'].includes(kind) || !['wallet', 'spot', 'futures', 'ashare', 'usstock'].includes(market)) {
         throw { status: 400, code: 'bad_request' };
       }
       return reply(200, { [kind]: state.history[kind].filter(entry => entry.market === market) });
@@ -107,7 +114,8 @@ export async function handleTrade(request, env, session, data, services) {
     // PLATFORM §6.4：Agent结算、操作和估值共用同一个上游预算与请求缓存。
     const gate = services?.gate || new GateClient(now);
     const ashare = services?.ashare || new AshareClient(gate, now);
-    prefetch(route, data, gate, ashare);
+    const us = services?.us || new UsClient(gate, now);
+    prefetch(route, data, gate, ashare, us);
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
@@ -120,7 +128,7 @@ export async function handleTrade(request, env, session, data, services) {
         state.ashare.watch = [...new Set(data.codes)]; return { notices: [] };
       }
       if (method === 'POST' && !state.disclaimerAt && !session.apiKey) throw { status: 403, code: 'disclaimer_required' };
-      const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order'].includes(route);
+      const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order', 'usstock/order'].includes(route);
       const previous = ordering && state.clientIds.find(entry => entry.clientId === data.clientId);
       // PLATFORM §5.2.4–5：重放不新增委托；每日上限在同一个 etag 事务内检查与增加。
       if (previous) return { order: structuredClone(previous.result), notices: [] };
@@ -154,7 +162,7 @@ export async function handleTrade(request, env, session, data, services) {
           || candidate.ashare.cash.locked !== '0' || Object.keys(candidate.ashare.holdings).length)) {
           candidate.ashare.marketTime = (await ashare.quote('sh000001')).time;
         }
-        settlement = await settle(candidate, gate, now, method === 'POST', ashare);
+        settlement = await settle(candidate, gate, now, method === 'POST', ashare, us);
       } catch (error) {
         if (method !== 'GET' || error?.code !== 'market_unavailable') throw error;
         return { partial: true, stale: true, notices: [] };
@@ -164,6 +172,8 @@ export async function handleTrade(request, env, session, data, services) {
       if (route === 'checkin') reward = checkin(state, now);
       if (route === 'ashare/order') order = await placeAshareOrder(state, data, ashare, now);
       if (route === 'ashare/cancel') cancelAshareOrder(state, data.id, now);
+      if (route === 'usstock/order') order = await placeUsOrder(state, data, us, now);
+      if (route === 'usstock/cancel') cancelUsOrder(state, data.id, now);
       if (route === 'transfer') transferred = transfer(state, data, now, fx);
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);

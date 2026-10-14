@@ -23,6 +23,9 @@ import { Watchlist } from './ashare/watch.js';
 import { Screener } from './ashare/screener.js';
 import { Stock } from './ashare/stock.js';
 import { HOT_STOCKS } from './ashare/universe.js';
+import { UsFeed } from './usstock/feed.js';
+import { UsList } from './usstock/list.js';
+import { UsStock } from './usstock/stock.js';
 import { RenderSchedule } from './render-schedule.js';
 import { badge } from './ui.js';
 import { element, button, icon, gift, price, percent, quantity, large, countdown, direction } from './format.js';
@@ -37,6 +40,8 @@ const ashare = new AshareFeed(() => {
     firstAshareLists.add(name); renderSchedule.last.lists = -Infinity;
   }
 });
+const usFeed = new UsFeed(() => { feed.dirty = true; });
+feed.us = usFeed;   // 估值（总资产、资产页）读取美股报价
 const wallet = new WalletView(() => { feed.dirty = true; });
 let modals;
 const api = new TradeApi(() => { feed.dirty = true; }, text => modals.toast(text));
@@ -61,13 +66,14 @@ const chart = new Chart(node('chart'), feed, interval => feed.activate(feed.mark
 const compactTabs = segment([['chart', '图表'], ['book', '盘口']], tab => {
   node('desk').classList.toggle('compact-book', tab === 'book');
 }); compactTabs.classList.add('compact-chart-tabs'); node('chart').prepend(compactTabs);
-const NAVIGATION = [['overview', '总览'], ['ashare', 'A股'], ['crypto', '加密'],
+const NAVIGATION = [['overview', '总览'], ['ashare', 'A股'], ['usstock', '美股'], ['crypto', '加密'],
   ['futures', '合约'], ['assets', '资产'], ['api', 'API']];
 const NAV_ICONS = [
   [['rect', { x: 3, y: 3, width: 8, height: 8, rx: 1.5 }], ['rect', { x: 13, y: 3, width: 8, height: 5, rx: 1.5 }],
     ['rect', { x: 13, y: 10, width: 8, height: 11, rx: 1.5 }], ['rect', { x: 3, y: 13, width: 8, height: 8, rx: 1.5 }]],
   [['path', { d: 'M7 3v4M7 15v6M17 3v6M17 17v4' }], ['rect', { x: 5, y: 7, width: 4, height: 8, rx: 1 }],
     ['rect', { x: 15, y: 9, width: 4, height: 8, rx: 1 }]],
+  [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18' }]],
   [['circle', { cx: 12, cy: 12, r: 9 }],
     ['path', { d: 'M9.5 8h4a2 2 0 0 1 0 4h-4m0 0h4.5a2 2 0 0 1 0 4H9.5zM9.5 8v8M11 6.5V8M11 16v1.5' }]],
   [['path', { d: 'M4 18 20 6' }], ['circle', { cx: 7, cy: 16, r: 2.5 }], ['path', { d: 'M3 21h18M15 6h5v5' }]],
@@ -77,13 +83,16 @@ const NAV_ICONS = [
 ];
 let page = 'overview', picker, pickerList, accountSignature = '';
 const navigation = new Navigation({ overview: node('overview-page'), ashare: node('ashare-page'),
-  crypto: node('markets-page'), assets: node('assets-page'), desk: node('desk'), stock: node('stock-page') }, route);
+  crypto: node('markets-page'), assets: node('assets-page'), desk: node('desk'), stock: node('stock-page'),
+  usstock: node('us-page'), us: node('us-stock-page') }, route);
 const overview = new Overview(node('overview-page'), feed, ashare, api, modals, wallet, hash => navigation.go(hash));
 const watch = new Watchlist(api, modals, () => {
   feed.dirty = true; ashare.configure(page, stock.code, watch.codes.length ? watch.codes : HOT_STOCKS.map(([code]) => code));
 });
 const screener = new Screener(node('ashare-page'), ashare, overview, watch);
 const stock = new Stock(node('stock-page'), ashare, api, modals, watch);
+const usList = new UsList(node('us-page'), usFeed);
+const usStock = new UsStock(node('us-stock-page'), usFeed, api, modals);
 new Search(node('global-search'), node('search-results'));
 const barElements = createBar();
 for (const id of ['desktop-nav', 'mobile-nav']) NAVIGATION.forEach(([route, label], index) => {
@@ -227,12 +236,20 @@ function bar() {
   document.title = ticker.last ? price(ticker.last, feed.precision()) + ' | ' + coin + 'USDT | 模拟交易所'
     : '模拟交易所 · GAME.INC.RE';
 }
+const usPage = () => page === 'us' || page === 'usstock';
 function connectionColor() {
+  if (usPage()) return usFeed.status === 'failed' ? '#E5484D' : usFeed.status === 'ok' ? '#22B573' : '#F2C66D';
   const active = page === 'stock' || page === 'ashare' ? ashare : feed;
   return active.status === 'failed' ? '#E5484D' : active.degraded ? '#F2C66D'
     : active.status === 'connected' ? '#22B573' : '#F2C66D';
 }
 function status() {
+  if (usPage()) {
+    node('connection-status').textContent = usFeed.status === 'ok' ? '美股行情已连接'
+      : usFeed.status === 'failed' ? '行情暂不可用，正在重试' : '行情连接中…';
+    node('feed-source').textContent = '数据来源 ' + (usFeed.source || '腾讯行情');
+    node('connection-dot').style.backgroundColor = connectionColor(); return;
+  }
   const active = page === 'stock' || page === 'ashare' ? ashare : feed, state = active.status;
   node('connection-status').textContent = ashare.listBusy && ['ashare', 'overview'].includes(page) ? '列表更新放缓'
     : state === 'connected' ? '实时行情已连接'
@@ -251,29 +268,32 @@ async function route() {
   const parts = location.hash.slice(2).split('?')[0].split('/');
   const requested = parts[0] === 'markets' ? 'crypto' : parts[0], symbol = parts[1];
   const marketPage = ['spot', 'futures'].includes(requested);
-  const valid = ['overview', 'ashare', 'crypto', 'assets', 'spot', 'futures', 'stock'];
+  const valid = ['overview', 'ashare', 'usstock', 'us', 'crypto', 'assets', 'spot', 'futures', 'stock'];
   if (!valid.includes(requested) || marketPage && (!symbol
     || !globalThis.TRADE_MARKETS.some(market => market.spot === symbol))
     || requested === 'stock' && !/^(sh|sz)\d{6}$/.test(symbol || '')
-    || parts.length > (marketPage || requested === 'stock' ? 2 : 1)) {
+    || requested === 'us' && !globalThis.US_UNIVERSE.some(row => row.ticker === symbol)
+    || parts.length > (marketPage || requested === 'stock' || requested === 'us' ? 2 : 1)) {
     navigation.go('#/overview'); return;
   }
   closePicker(); closeChart(); page = requested;
   feed.sources.listVisible = () => ['crypto', 'overview'].includes(page)
     || [...document.querySelectorAll('.market-body')].some(node => node.getClientRects().length > 0);
   if (page === 'stock') stock.setCode(symbol);
+  if (page === 'us') usStock.setCode(symbol);
+  usFeed.configure(page, page === 'us' ? symbol : null);
   const pool = watch.codes.length ? watch.codes : HOT_STOCKS.map(([code]) => code);
   ashare.configure(page, page === 'stock' ? symbol : null, [...pool, ...(api.state?.ashare.holdings.map(row => row.code) || [])]);
   navigation.show(marketPage ? 'desk' : page, page);
   node('spot-form').hidden = page === 'futures'; node('futures-form').hidden = page !== 'futures';
   for (const link of document.querySelectorAll('[data-route]')) {
     const selected = link.dataset.route === page || page === 'spot' && link.dataset.route === 'crypto'
-      || page === 'stock' && link.dataset.route === 'ashare'
+      || page === 'stock' && link.dataset.route === 'ashare' || page === 'us' && link.dataset.route === 'usstock'
       || feed.mobile() && page === 'futures' && link.dataset.route === 'crypto';
     link.classList.toggle('selected', selected);
     if (['spot', 'futures'].includes(link.dataset.route)) link.href = '#/' + link.dataset.route + '/' + (symbol || feed.symbol);
   }
-  const active = page === 'stock' ? 'ashare' : page === 'spot' ? 'crypto' : page;
+  const active = page === 'stock' ? 'ashare' : page === 'us' ? 'usstock' : page === 'spot' ? 'crypto' : page;
   const index = NAVIGATION.findIndex(([name]) => name === active);
   node('rail-indicator').style.transform = 'translateY(' + Math.max(0, index) * 60 + 'px)';
   node('page-title').textContent = NAVIGATION.find(([name]) => name === active)?.[1] || '交易';
@@ -291,17 +311,21 @@ function renderFrame(timestamp) {
       header(); status(); watch.sync(api.state);
       if (['spot', 'futures'].includes(page)) { bar(); book.render(); tape.render(api.state); api.crossing(feed); }
       if (page === 'stock') { stock.renderHead(); stock.renderBook(); }
+      if (page === 'us') { usStock.renderHead(); usStock.renderBook(); }
     },
     chart: () => {
       if (['spot', 'futures'].includes(page)) {
         chart.render(api.state); if (page === 'spot') spot.render(); else futures.render();
       }
       if (page === 'stock') { stock.chart.render(); stock.renderTicket(); }
+      if (page === 'us') { usStock.chart.render(); usStock.renderTicket(); }
     },
     lists: () => {
       if (page === 'crypto') markets.render();
       else if (page === 'overview') overview.render(api.state);
       else if (page === 'ashare') screener.render();
+      else if (page === 'usstock') usList.render();
+      else if (page === 'us') usStock.renderDock(api.state);
       else if (page === 'assets') assets.render(api.state);
       else if (page === 'stock') stock.renderDock(api.state);
       else { side.render(); orders.render(api.state); }

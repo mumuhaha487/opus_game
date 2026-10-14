@@ -5,6 +5,7 @@ import { absent } from '../store.js';
 import { parse, toStr, mul, div, roundTo } from './decimal.js';
 import { checkinView } from './checkin.js';
 import { marketStatus } from './ashare-rules.js';
+import { usMarketStatus } from './us-calendar.js';
 import { dayKey } from '../likes.js';
 export const tradeKey = uid => `trade/${uid}.json`;
 export function defaultState(now = Date.now()) {
@@ -12,6 +13,8 @@ export function defaultState(now = Date.now()) {
     v: 2, created: now, updated: now, seq: 0,
     // PLATFORM §2.1：统一钱包、A 股现金及每日委托计数；旧字段继续保留。
     wallet: { usd: '0' }, ashare: { cash: { free: '0', locked: '0' }, holdings: {}, watch: [] },
+    // 美股子账户：USD 现金（2 位小数）与持仓 { name, qty, available, cost }，T+0 可卖。
+    usstock: { cash: { free: '0', locked: '0' }, holdings: {} },
     disclaimerAt: null, agent: { ordersToday: 0, day: null }, notices: [],
     spot: { balances: { USDT: { free: '0', locked: '0' } } },
     futures: { wallet: '0', locked: '0', leverage: {}, positions: {} },
@@ -104,18 +107,22 @@ export function stateView(state, now, partial = false, notices = []) {
     ashare: { cash: state.ashare.cash, watch: state.ashare.watch,
       holdings: Object.entries(state.ashare.holdings).map(([code, value]) => ({ code, ...value })),
       market: { ...marketStatus(now, { time: state.ashare.marketTime ?? now }), checked: state.ashare.marketTime != null } },
+    usstock: { cash: state.usstock.cash,
+      holdings: Object.entries(state.usstock.holdings).map(([ticker, value]) => ({ ticker, ...value })),
+      market: (({ status, nextOpen, closeAt }) => ({ status, nextOpen, closeAt }))(usMarketStatus(now)) },
     futures: { ...state.futures, positions: Object.entries(state.futures.positions).map(([symbol, value]) => ({ symbol, ...value })) },
     openOrders: state.orders, recent: Object.fromEntries(Object.entries(state.history).map(([kind, rows]) => [kind, rows.slice(0, 30)])),
     notices: [...state.notices, ...notices],
   };
 }
 export function transfer(state, data, now, fx) {
-  const accounts = ['wallet', 'spot', 'futures', 'ashare'];
+  const accounts = ['wallet', 'spot', 'futures', 'ashare', 'usstock'];
+  const cents = account => account === 'ashare' || account === 'usstock';
   if (!accounts.includes(data.from) || !accounts.includes(data.to) || data.from === data.to) {
     throw { status: 400, code: 'bad_request' };
   }
   const amount = parse(data.amount);
-  const decimals = data.from === 'ashare' ? 2 : 8;
+  const decimals = cents(data.from) ? 2 : 8;
   if (amount <= 0n || amount !== roundTo(amount, decimals, 'floor')) throw { status: 400, code: 'bad_request' };
   const exchanging = data.from === 'ashare' || data.to === 'ashare';
   // PLATFORM §2.2：出账单位扣 0.2% 费用（ceil），随后换算，到账按目标精度 floor。
@@ -124,16 +131,16 @@ export function transfer(state, data, now, fx) {
   const net = amount - fee, rate = exchanging ? parse(fx.rate) : parse('1');
   if (net <= 0n || rate <= 0n) throw { status: 400, code: 'bad_request' };
   const converted = !exchanging ? net : data.to === 'ashare' ? mul(net, rate, 'floor') : div(net, rate, 'floor');
-  const received = roundTo(converted, data.to === 'ashare' ? 2 : 8, 'floor');
+  const received = roundTo(converted, cents(data.to) ? 2 : 8, 'floor');
   if (!received) throw { status: 400, code: 'bad_request' };
   const location = account => account === 'wallet' ? [state.wallet, 'usd']
     : account === 'spot' ? [balance(state, 'USDT'), 'free']
-    : account === 'futures' ? [state.futures, 'wallet'] : [state.ashare.cash, 'free'];
+    : account === 'futures' ? [state.futures, 'wallet'] : account === 'usstock' ? [state.usstock.cash, 'free'] : [state.ashare.cash, 'free'];
   const [source, sourceField] = location(data.from), [target, targetField] = location(data.to);
   if (parse(source[sourceField]) < amount) throw { status: 400, code: 'insufficient_balance' };
   source[sourceField] = toStr(parse(source[sourceField]) - amount);
   target[targetField] = toStr(parse(target[targetField]) + received);
-  const asset = account => account === 'ashare' ? 'CNY' : account === 'wallet' ? 'USD' : 'USDT';
+  const asset = account => account === 'ashare' ? 'CNY' : account === 'wallet' || account === 'usstock' ? 'USD' : 'USDT';
   ledger(state, 'transfer_out', asset(data.from), -net, '划转', now, data.from);
   ledger(state, 'transfer_in', asset(data.to), received, '划转', now, data.to);
   if (fee) ledger(state, 'fx_fee', asset(data.from), -fee, '换汇费', now, data.from);

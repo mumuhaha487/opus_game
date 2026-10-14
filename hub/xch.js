@@ -3,10 +3,11 @@ import '../trade/js/markets.js';
 import { Feed } from '../trade/js/feed.js';
 import { AshareFeed } from '../trade/js/ashare/feed.js';
 import { WalletView, valuations, totalValue } from '../trade/js/wallet.js';
+import { parseUsQuotes } from '../trade/js/usstock/feed.js';
 const indices = [['sh000001', '上证指数'], ['sz399001', '深证成指'], ['sz399006', '创业板指'], ['sh000300', '沪深300']];
 const coins = ['BTC', 'ETH', 'SOL', 'DOGE'];
 const ns = 'http://www.w3.org/2000/svg', rows = [], mini = new Map();
-let state = null, quotes = {}, cryptoQuotes = new Map(), futuresQuotes = new Map(), timer, loading = false, revision = 0;
+let state = null, quotes = {}, usQuotes = {}, cryptoQuotes = new Map(), futuresQuotes = new Map(), timer, loading = false, revision = 0;
 const wallet = new WalletView(renderAccount);
 const live = new Feed(), stocks = new AshareFeed(() => {});
 live.connect('spot');
@@ -86,6 +87,7 @@ async function accountChanged() {
   try {
     const data = await GameAccount.request('/api/trade/state');
     if (token !== revision) return; state = data; renderAccount();
+    if (state.usstock?.holdings?.length) loadUsHoldings().then(renderAccount);
   } catch { /* session or upstream unavailable; keep the login/read prompt */ }
 }
 function renderAccount() {
@@ -108,12 +110,25 @@ function renderAccount() {
     assets.replaceChildren(node('p', '登录后查看资产'), login); return;
   }
   if (!state) { assets.replaceChildren(node('p', '正在读取资产…')); return; }
-  const feed = { tickers: { spot: cryptoQuotes, futures: futuresQuotes }, specs: new Map() };
+  const feed = { tickers: { spot: cryptoQuotes, futures: futuresQuotes }, specs: new Map(), us: { quotes: usQuotes } };
   const values = valuations(state, feed, { quotes });
   assets.replaceChildren(node('b', wallet.display(totalValue(values, wallet), wallet.currency), 'tile-total px'),
     node('p', '钱包 ' + wallet.display(values.wallet)),
     node('p', '加密 ' + wallet.display(values.spot == null || values.futures == null ? null : values.spot + values.futures)),
-    node('p', 'A 股 ' + wallet.display(values.ashare, 'CNY')));
+    node('p', 'A 股 ' + wallet.display(values.ashare, 'CNY')), node('p', '美股 ' + wallet.display(values.usstock)));
+}
+// 美股持仓估值：只取持仓代码的腾讯报价（qt → sqt 备用），没有持仓不请求。
+async function loadUsHoldings() {
+  const tickers = (state?.usstock?.holdings || []).map(row => row.ticker);
+  if (!tickers.length) return;
+  for (const host of ['qt.gtimg.cn', 'sqt.gtimg.cn']) {
+    try {
+      const response = await fetch('https://' + host + '/q=' + tickers.map(ticker => 'us' + ticker).join(','),
+        { signal: AbortSignal.timeout(6000) });
+      const parsed = parseUsQuotes(new TextDecoder('gbk').decode(await response.arrayBuffer()));
+      if (Object.keys(parsed).length) { usQuotes = { ...usQuotes, ...parsed }; return; }
+    } catch { /* try the backup host */ }
+  }
 }
 async function refresh() {
   if (document.hidden || loading) return; loading = true;
@@ -131,6 +146,7 @@ async function refresh() {
         }
         cryptoQuotes = live.tickers.spot;
       })(),
+      loadUsHoldings(),
       ...(state?.futures.positions.length ? [(async () => {
         live.setFuturesWanted(true); futuresQuotes = live.tickers.futures;
       })()] : []),

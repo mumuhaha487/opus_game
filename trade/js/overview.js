@@ -1,10 +1,11 @@
-// DESIGN §4.4：统一钱包、签到、市场状态、八项行情、榜单和三个市场持仓。
+// DESIGN §4.4：统一钱包、签到、市场状态（含美股时段）、八项行情、榜单和三个市场持仓。
 import { element, button, price, money, countdown } from './format.js';
 import { title, segment, change, spark, table } from './ui.js';
 import { INDICES } from './ashare/universe.js';
 import { valuations, totalValue, ACCOUNTS } from './wallet.js';
 import { positionMetrics } from './futures.js';
 import { marketClock } from './ashare/feed.js';
+import { MARKET_LABEL, beijingClock } from './usstock/stock.js';
 export class Overview {
   constructor(panel, feed, ashare, api, modals, wallet, navigate) {
     Object.assign(this, { panel, feed, ashare, api, modals, wallet, navigate, cryptoSort: 0 });
@@ -52,6 +53,11 @@ export class Overview {
       element('p', 'A 股交易时段 09:30–11:30 · 13:00–15:00（北京时间）', 'market-hours muted'),
       element('p', '下一次开盘：' + new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai',
         month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(nextOpen), 'muted'));
+    const us = this.feed.us?.market();
+    if (us) {
+      status.append(element('p', '美股 ' + MARKET_LABEL[us.status] + ' · 北京时间 '
+        + (us.status === 'open' ? beijingClock(us.closeAt) + ' 收盘' : beijingClock(us.nextOpen) + ' 开盘'), 'muted'));
+    }
     const cn = INDICES.map(([code, name]) => this.ticker(code, name, true));
     const crypto = ['BTC', 'ETH', 'SOL'].map(coin => this.ticker(coin, coin, false));
     tickers.replaceChildren(...(this.wallet.region === 'cn' ? [...cn, ...crypto] : [...crypto, ...cn]));

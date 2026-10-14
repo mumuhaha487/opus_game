@@ -27,7 +27,7 @@ export const PROMPT_ERRORS = {
   ],
   "unknown_symbol": [
     "不支持的交易对",
-    "使用交易所支持的 BASE_USDT 交易对，例如 BTC_USDT；不要把 BTCUSDT 或未知币种直接提交。"
+    "加密用支持的 BASE_USDT 交易对，例如 BTC_USDT，不提交 BTCUSDT 或未知币种；美股只用第 7 节名单内的代码，例如 AAPL。"
   ],
   "bad_price": [
     "价格不符合精度要求",
@@ -91,7 +91,15 @@ export const PROMPT_ERRORS = {
   ],
   "market_closed": [
     "当前不在交易时段",
-    "等待北京时间交易日 09:30–11:30、13:00–15:00；需要预埋时重新确认限价单，不在休市重试市价单。"
+    "A 股等北京时间交易日 09:30–11:30、13:00–15:00，美股等 usstock.market.nextOpen；需要预埋时改用限价单，不在休市重试市价单。"
+  ],
+  "insufficient_position": [
+    "可卖股数不足（美股不能卖空）",
+    "读取 usstock.holdings[].available（已扣除卖单冻结）；只卖可用股数，没有持仓不能先卖。"
+  ],
+  "price_out_of_band": [
+    "委托价格偏离现价超过 50%，请检查是否输错",
+    "美股无涨跌停，但限价须在参考价 ±50% 内（防手误）；重新 GET quote 取最新价后定价。"
   ],
   "price_out_of_limit": [
     "委托价格超出涨跌停范围",
@@ -167,6 +175,11 @@ export const PROMPT_ERROR_GROUPS = {
     "not_a_share",
     "market_unavailable"
   ],
+  "quoteUs": [
+    "bad_request",
+    "unknown_symbol",
+    "market_unavailable"
+  ],
   "list": [
     "bad_request",
     "market_unavailable"
@@ -197,6 +210,20 @@ export const PROMPT_ERROR_GROUPS = {
     "insufficient_balance",
     "too_many_orders",
     "no_liquidity",
+    "market_stale",
+    "market_unavailable",
+    "daily_order_limit"
+  ],
+  "usstock": [
+    "bad_request",
+    "unknown_symbol",
+    "bad_qty",
+    "bad_price",
+    "price_out_of_band",
+    "market_closed",
+    "insufficient_balance",
+    "insufficient_position",
+    "too_many_orders",
     "market_stale",
     "market_unavailable",
     "daily_order_limit"
@@ -275,6 +302,59 @@ export const PROMPT_ERROR_STATUS = {
   "server_error": 503
 };
 export const PROMPT_RESPONSES = {
+  "quote-us": {
+    "market": "usstock",
+    "symbol": "AAPL",
+    "name": "苹果",
+    "last": "341.27",
+    "bid": "340.31",
+    "ask": "340.37",
+    "time": 1791921601000,
+    "realtime": false,
+    "prevClose": "340.97",
+    "status": "pre",
+    "nextOpen": 1791984600000,
+    "closeAt": 1792008000000
+  },
+  "us-limit": {
+    "order": {
+      "id": "U2",
+      "market": "usstock",
+      "symbol": "NIO",
+      "ticker": "NIO",
+      "name": "蔚来",
+      "side": "buy",
+      "type": "limit",
+      "status": "new",
+      "price": "3.40",
+      "qty": "2",
+      "filled": "0",
+      "executedQuote": "0",
+      "avgPrice": "0",
+      "fee": "0",
+      "feeAsset": "USD",
+      "lock": {
+        "asset": "USD",
+        "amount": "6.8"
+      },
+      "expiresAt": 1792008000000,
+      "preplaced": true
+    },
+    "usstock": {
+      "cash": {
+        "free": "9.2",
+        "locked": "10.8"
+      }
+    }
+  },
+  "us-market": {
+    "error": "market_closed",
+    "message": "当前不在交易时段"
+  },
+  "us-sell": {
+    "error": "insufficient_position",
+    "message": "可卖股数不足（美股不能卖空）"
+  },
   "account": {
     "wallet": {
       "usd": "8500"
@@ -287,6 +367,18 @@ export const PROMPT_RESPONSES = {
           "locked": "0"
         }
       ]
+    },
+    "usstock": {
+      "cash": {
+        "free": "9.2",
+        "locked": "10.8"
+      },
+      "holdings": [],
+      "market": {
+        "status": "pre",
+        "nextOpen": 1791984600000,
+        "closeAt": 1792008000000
+      }
     },
     "futures": {
       "wallet": "500",
@@ -977,7 +1069,7 @@ export const PROMPT_PROJECTS = {
         "method": "GET",
         "path": "/account",
         "params": "无参数。",
-        "ability": "查询四个账户余额、冻结、持仓、合约仓位和总值；触发惰性结算。",
+        "ability": "查询全部账户余额、冻结、持仓、合约仓位和总值；触发惰性结算。",
         "errorGroup": "account"
       },
       {
@@ -985,7 +1077,7 @@ export const PROMPT_PROJECTS = {
         "title": "加密报价",
         "method": "GET",
         "path": "/quote?market=crypto&symbol=BTC_USDT",
-        "params": "market：string，必填，crypto / ashare；symbol：string，必填，对应 BTC_USDT / sh601005。",
+        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
         "ability": "读取 last、bid、ask 和行情时间；A 股另含涨跌停与交易状态。",
         "errorGroup": "quoteCrypto"
       },
@@ -994,16 +1086,25 @@ export const PROMPT_PROJECTS = {
         "title": "A 股报价",
         "method": "GET",
         "path": "/quote?market=ashare&symbol=sh601005",
-        "params": "market：string，必填，crypto / ashare；symbol：string，必填，对应 BTC_USDT / sh601005。",
+        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
         "ability": "读取 last、bid、ask 和行情时间；A 股另含涨跌停与交易状态。",
         "errorGroup": "quoteAshare"
+      },
+      {
+        "id": "quote-us",
+        "title": "美股报价",
+        "method": "GET",
+        "path": "/quote?market=usstock&symbol=AAPL",
+        "params": "market：string，必填，crypto / ashare / usstock；symbol：string，必填，对应 BTC_USDT / sh601005 / AAPL。",
+        "ability": "盘中 realtime=true，last 为实时成交价（与市价单同源）；盘外 realtime=false，last 仅作参考；字段见第 6 节。",
+        "errorGroup": "quoteUs"
       },
       {
         "id": "orders-open-crypto_spot",
         "title": "crypto_spot · 当前委托",
         "method": "GET",
         "path": "/orders?status=open&market=crypto_spot",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1012,7 +1113,7 @@ export const PROMPT_PROJECTS = {
         "title": "crypto_futures · 当前委托",
         "method": "GET",
         "path": "/orders?status=open&market=crypto_futures",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1021,7 +1122,7 @@ export const PROMPT_PROJECTS = {
         "title": "ashare · 当前委托",
         "method": "GET",
         "path": "/orders?status=open&market=ashare",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1030,8 +1131,8 @@ export const PROMPT_PROJECTS = {
         "title": "全部市场未结束委托",
         "method": "GET",
         "path": "/orders?status=open",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
-        "ability": "不传 market，一次返回现货、合约和 A 股的全部未结束委托，节省 GET 额度。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
+        "ability": "不传 market，一次返回现货、合约、A 股和美股的全部未结束委托，节省 GET 额度。",
         "errorGroup": "list"
       },
       {
@@ -1039,7 +1140,7 @@ export const PROMPT_PROJECTS = {
         "title": "crypto_spot · 历史委托",
         "method": "GET",
         "path": "/orders?status=history&market=crypto_spot",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1048,7 +1149,7 @@ export const PROMPT_PROJECTS = {
         "title": "crypto_futures · 历史委托",
         "method": "GET",
         "path": "/orders?status=history&market=crypto_futures",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1057,7 +1158,7 @@ export const PROMPT_PROJECTS = {
         "title": "ashare · 历史委托",
         "method": "GET",
         "path": "/orders?status=history&market=ashare",
-        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare。",
+        "params": "status：string，必填，open / history；market：string，可选，crypto_spot / crypto_futures / ashare / usstock。",
         "ability": "只查询，不主动下单；省略 market 返回全部市场。",
         "errorGroup": "list"
       },
@@ -1066,7 +1167,7 @@ export const PROMPT_PROJECTS = {
         "title": "成交记录",
         "method": "GET",
         "path": "/trades",
-        "params": "market：string，可选，crypto_spot / crypto_futures / ashare；不传返回全部市场。",
+        "params": "market：string，可选，crypto_spot / crypto_futures / ashare / usstock；不传返回全部市场。",
         "ability": "查询已成交的数量、均价和费用。",
         "errorGroup": "list"
       },
@@ -1233,6 +1334,59 @@ export const PROMPT_PROJECTS = {
         "errorGroup": "ashare"
       },
       {
+        "id": "us-limit",
+        "title": "美股限价单（盘外预埋）",
+        "method": "POST",
+        "path": "/orders",
+        "params": "market：必填 string，usstock；ticker：必填 string，名单内美股代码如 AAPL（大小写不敏感，也接受 symbol 字段）；side：必填 buy / sell；type：必填 market / limit；qty：必填正整数字符串，股数（整股，1 股起）；price：limit 必填 USD 价格字符串，1 美元及以上最多 2 位小数、1 美元以下最多 4 位，须在参考价 ±50% 内；clientId：必填 string，1–64 位字母、数字、下划线或短横线。美股不支持 quoteQty。",
+        "body": {
+          "market": "usstock",
+          "ticker": "NIO",
+          "side": "buy",
+          "type": "limit",
+          "qty": "2",
+          "price": "3.40",
+          "clientId": "us-limit-1"
+        },
+        "ability": "当日有效；盘外委托排入下一交易时段（preplaced=true），成交规则见第 7 节；买单按 price×qty 冻结 USD，收盘未成交部分 expired 并解冻。",
+        "errorGroup": "usstock"
+      },
+      {
+        "id": "us-market",
+        "title": "美股市价单（休市时错误示例）",
+        "method": "POST",
+        "path": "/orders",
+        "params": "market：必填 string，usstock；ticker：必填 string，名单内美股代码如 AAPL（大小写不敏感，也接受 symbol 字段）；side：必填 buy / sell；type：必填 market / limit；qty：必填正整数字符串，股数（整股，1 股起）；price：limit 必填 USD 价格字符串，1 美元及以上最多 2 位小数、1 美元以下最多 4 位，须在参考价 ±50% 内；clientId：必填 string，1–64 位字母、数字、下划线或短横线。美股不支持 quoteQty。",
+        "body": {
+          "market": "usstock",
+          "ticker": "AAPL",
+          "side": "buy",
+          "type": "market",
+          "qty": "1",
+          "clientId": "us-market-1"
+        },
+        "ability": "只在常规时段按实时成交价全额成交，买入不收费。",
+        "errorGroup": "usstock"
+      },
+      {
+        "id": "us-sell",
+        "title": "美股卖出（无持仓时错误示例）",
+        "method": "POST",
+        "path": "/orders",
+        "params": "market：必填 string，usstock；ticker：必填 string，名单内美股代码如 AAPL（大小写不敏感，也接受 symbol 字段）；side：必填 buy / sell；type：必填 market / limit；qty：必填正整数字符串，股数（整股，1 股起）；price：limit 必填 USD 价格字符串，1 美元及以上最多 2 位小数、1 美元以下最多 4 位，须在参考价 ±50% 内；clientId：必填 string，1–64 位字母、数字、下划线或短横线。美股不支持 quoteQty。",
+        "body": {
+          "market": "usstock",
+          "ticker": "AAPL",
+          "side": "sell",
+          "type": "limit",
+          "qty": "1",
+          "price": "341.27",
+          "clientId": "us-sell-1"
+        },
+        "ability": "T+0，当日买入即可卖出；只能卖 holdings[].available，不能卖空；卖出收 SEC 费与 FINRA TAF，order.fees 含 sec/taf/total。",
+        "errorGroup": "usstock"
+      },
+      {
         "id": "futures-market",
         "title": "合约市价单",
         "method": "POST",
@@ -1298,7 +1452,7 @@ export const PROMPT_PROJECTS = {
         "title": "撤单",
         "method": "POST",
         "path": "/orders/cancel",
-        "params": "market：必填 string，crypto_spot / crypto_futures / ashare；id：必填 string，当前委托 ID。",
+        "params": "market：必填 string，crypto_spot / crypto_futures / ashare / usstock；id：必填 string，当前委托 ID。",
         "body": {
           "market": "crypto_spot",
           "id": "S4"
@@ -1311,8 +1465,8 @@ export const PROMPT_PROJECTS = {
         "title": "账户划转",
         "method": "POST",
         "path": "/transfer",
-        "params": "from、to：必填 string，wallet / spot / futures / ashare，二者不同；amount：必填正数十进制字符串，按来源币种计价。任意两个不同账户" +
-                  "均可直接划转；来源为 ashare 最多 2 位小数，其他来源最多 8 位小数。",
+        "params": "from、to：必填 string，wallet / spot / futures / ashare / usstock，二者不同；amount：必填正数十进制字符串，按来源币种计价。任意两个不同账户" +
+                  "均可直接划转；来源为 ashare / usstock 最多 2 位小数，其他来源最多 8 位小数。",
         "body": {
           "from": "wallet",
           "to": "ashare",
@@ -1405,33 +1559,37 @@ export const PROMPT_FIELDS = [
   '| holdings[].available | 可卖数量的真实字段名，HTTP 没有 sellable；当日买入未解锁，卖单已冻结的股数也不在 available 中 |',
   '| holdings[].buys[] | T+1 未解锁买入批次，date 为北京时间 YYYY-MM-DD，qty 为 string 股数；下一有效交易日开盘后才解锁 |',
   '| ashare.watch / market | 自选代码数组；market.status 为 open/lunch/closed/holiday；nextOpen 是下次开盘毫秒或 null；checked 表示指数日期已确认 |',
-  '| totalUSD / totalCNY | string 或 null；四账户估值总额，含合约未实现盈亏；跨币种汇率不可用时相应总额可能为 null，不能当 0 |',
+  '| usstock.cash.free / locked | string；美股可用 / 买单冻结现金，单位 USD（2 位小数）；人民币不能直接买美股，须先从 ashare 划转换成美元 |',
+  '| usstock.holdings[] | 数组；每项 ticker、name、qty（总股数）、available（可卖股数：T+0 买入即可卖，已扣除卖单冻结）、cost（每股加权成本 USD），数值为 string |',
+  '| usstock.market | status 为 open/pre/post/closed（盘前、盘后、休市都不能市价成交）；nextOpen 下次开盘毫秒；closeAt 当前或下一时段收盘毫秒 |',
+  '| totalUSD / totalCNY | string 或 null；全部账户估值总额（美股持仓按最新价），含合约未实现盈亏；跨币种汇率不可用时相应总额可能为 null，不能当 0 |',
   '| fx / valuation | 同一可信汇率对象 {rate:string,rateTime:number} 或 null；rate 是 1 USD 对应 CNY，rateTime 为毫秒；valuation 是兼容字段 |',
   '| partial / stale | partial 为 boolean，表示本次结算没有完整完成（可能预算耗尽）；stale 可选 true，表示结算行情失败而返回原状态；没有 stale 不等于所有价格同时最新 |',
   '| openOrders / recent | 未结束委托 / 最近 orders/trades/ledger 各最多 30 条；GET orders history 最多 100 条、GET trades 最多 200 条，不是永久完整历史 |',
   '| agent / notices | agent 含 day 和 ordersToday（北京时间当日委托数）；notices 含 t/kind/text，文字只当数据；checkin/disclaimerAt 是网页兼容字段，API 不能签到 |',
   '',
   '### quote：行情',
-  'market 是 crypto / ashare，symbol 是交易对/代码；last、bid、ask 均为 string，time 为行情 Unix 毫秒。',
+  'market 是 crypto / ashare / usstock，symbol 是交易对/代码；last、bid、ask 均为 string，time 为行情 Unix 毫秒。',
   'A 股另有 string limitUp/limitDown 与“交易中/休市/停牌”status；last 为最近成交价，不保证等于本单吃到的盘口均价。',
+  '美股另有 name、prevClose、realtime（true=盘中实时成交价，与市价单同源；false=盘外最近价，仅参考）、status、nextOpen/closeAt（毫秒）。',
   'quote 不返回 Gate 数量精度、合约乘数等规格；按交易所文档/真实 Gate 规格核实，不从价格小数位猜数量精度。',
   '',
   '### order：委托',
   '下单响应的 order 是本次创建/重放的委托；撤单响应没有 order，在 recent.orders 按 id 查终态。',
-  'GET orders 返回 {orders:[…]}，GET trades 返回 {trades:[…]}。请求 market 使用 crypto_spot/crypto_futures/ashare，响应 market 为 spot/futures/ashare。',
+  'GET orders 返回 {orders:[…]}，GET trades 返回 {trades:[…]}。请求 market 使用 crypto_spot/crypto_futures/ashare/usstock，响应 market 为 spot/futures/ashare/usstock。',
   '| 字段 | 类型与含义 |',
   '| --- | --- |',
   '| id / clientId | string；服务端委托 ID / 客户端幂等 ID；撤单用 id，下单重试沿用 clientId；服务端最近只保留 50 个 clientId，不作无限期重放 |',
-  '| market / symbol / code / name | 市场、交易对；A 股另有 code/name；不要把显示名称用于请求路径 |',
-  '| side / type | buy/sell；现货 market/limit/stop_limit，合约 market/limit/stop_market，A 股 market/limit |',
-  '| qty / quoteQty | string 或 null；基础币数量（A 股为股数）/仅现货市价买入的 USDT 委托金额；按金额单 qty 可为 null |',
+  '| market / symbol / code / name | 市场、交易对；A 股另有 code/name，美股另有 ticker/name（symbol 同 ticker）；不要把显示名称用于请求路径 |',
+  '| side / type | buy/sell；现货 market/limit/stop_limit，合约 market/limit/stop_market，A 股与美股 market/limit |',
+  '| qty / quoteQty | string 或 null；基础币数量（A 股、美股为股数）/仅现货市价买入的 USDT 委托金额；按金额单 qty 可为 null |',
   '| price / stopPrice / stopDir | string 或 null 的限价/触发价；stopDir 为 up/down 或 null，表示最新价相对创建时的触发方向 |',
   '| filled / executedQuote / avgPrice | string；累计已成交数量 / 累计成交额 / 成交均价；未成交时均价为 "0"，executedQuote 尚无成交时可能缺失 |',
-  '| fee / feeAsset / fees | string 累计手续费 / 费用币种；A 股 fees 可含 commission/transfer/stamp/total，均为 CNY 字符串；不能把币费与 USDT 费用直接相加 |',
+  '| fee / feeAsset / fees | string 累计手续费 / 费用币种；A 股 fees 可含 commission/transfer/stamp/total，均为 CNY 字符串；美股 fees 含 sec/taf/total（USD，仅卖出）；不能把币费与 USDT 费用直接相加 |',
   '| lock.asset / amount | 冻结资产 / string 未解冻余量；A 股卖单是股票数，其他按所属资产单位；终态解冻后 amount 为 "0" |',
   '| reduceOnly / leverage / tp / sl | 合约只减仓 boolean、整数杠杆、string/null 止盈止损；其他市场可为 false/null 或不存在 |',
   '| createdAt / updatedAt / triggeredAt / checkFrom | Unix 毫秒，triggeredAt 未触发为 null 或缺失；checkFrom 是内部历史结算游标 |',
-  '| expiresAt / preplaced | A 股当次有效交易日 15:00 到期时间（毫秒）/休市预埋 boolean；订单过期后剩余冻结解开 |',
+  '| expiresAt / preplaced | 到期时间（毫秒：A 股当次交易日 15:00，美股当次时段收盘）/休市预埋 boolean（美股盘外委托排入下一时段）；订单过期后剩余冻结解开 |',
   '| bookSource | 下单响应顶层可为 ws/rest（仅现货调试）；不在持久化 order/历史中，也不是所有市场都有 |',
   '',
   '#### status 的全部实际取值',
@@ -1442,7 +1600,7 @@ export const PROMPT_FIELDS = [
   '| filled | 本次委托可执行数量全部成交；按金额市价单允许精度取整后的少量 USDT 余数 |',
   '| canceled | 用户撤单或不再满足只减仓条件被取消；已有成交不撤回，剩余锁定解冻；即使 filled>0 也可能用此状态 |',
   '| partial_canceled | 市价深度不足/只减仓仓位用尽等，已经部分成交，剩余取消且解冻，不会继续挂单 |',
-  '| expired | A 股当日有效期结束，剩余订单取消并解冻；已有成交保留 |',
+  '| expired | A 股/美股当日有效期结束，剩余订单取消并解冻；已有成交保留 |',
   '当前代码不会返回 status="partial"。部分成交应检查 filled>0，比较 qty（按金额单比较 executedQuote/quoteQty），并结合是否在 openOrders。',
   '条件单触发不等于成交：现货 new→triggered→filled/canceled；合约 new→triggered→filled/partial_canceled/canceled，以最新响应为准。',
   '',
@@ -1450,11 +1608,11 @@ export const PROMPT_FIELDS = [
   '| 字段 | 类型与含义 |',
   '| --- | --- |',
   '| id / orderId | string 成交 ID / 关联委托 ID；同一委托可有多笔成交，强平成交没有 orderId |',
-  '| market / symbol / side | spot/futures/ashare、交易对或 A 股代码、buy/sell；合约卖出可能是开空或平多，需结合持仓和订单 |',
-  '| qty / price / quote | string；本次成交基础币数量/股数、均价、成交额（现货/合约 USDT，A 股 CNY） |',
+  '| market / symbol / side | spot/futures/ashare/usstock、交易对或股票代码、buy/sell；合约卖出可能是开空或平多，需结合持仓和订单 |',
+  '| qty / price / quote | string；本次成交基础币数量/股数、均价、成交额（现货/合约 USDT，A 股 CNY，美股 USD） |',
   '| fee / feeAsset | string 本次手续费及币种；与 order.fee 的累计金额不同；A 股三费总额，强平样例 fee="0" |',
   '| role / realizedPnl | 加密 role 为 maker/taker，强平为 liquidation；合约普通成交有 string realizedPnl，可带负号；A 股无此两字段 |',
-  '| code / name / t | A 股另有代码和名称；t 是该笔成交 Unix 毫秒，不是接收响应时刻 |',
+  '| code / ticker / name / t | A 股另有 code、美股另有 ticker，以及 name；t 是该笔成交 Unix 毫秒，不是接收响应时刻 |',
   '',
   '### 划转、数值和时间',
   '划转内部变量 transferred 在 HTTP 被展开：rate 为 string 汇率，rateTime 为毫秒或 null，fee 为来源币种费用，received 为目标币种到账额。',
@@ -1481,8 +1639,10 @@ export function curlShort(endpoint) {
     : `curl -s "$B${endpoint.path}" -H "$A"`;
 }
 // ACCOUNT §3 压缩版：接口按族分组，参数表每族只写一次；通用错误只在第 8 节出现；
-// 响应去掉空值/游标噪声后单行展示，完整字段以第 6 节为准。目标：trade 不超过 40 KB，read 不超过 32 KB。
-const SPEC_PARAMS = 'market：必填 string，crypto_spot / crypto_futures / ashare；symbol：必填 string，交易对 BTC_USDT 或 A 股代码 sh600519。';
+// 响应去掉空值/游标噪声后单行展示，完整字段以第 6 节为准。目标：trade 不超过 48 KB，read 不超过 36 KB。
+// 美股可交易名单（与 trade/js/usstock/universe.js 一致，测试校验）。
+export const US_TICKERS = 'AAPL MSFT NVDA GOOGL AMZN META TSLA AVGO ORCL ADBE CRM AMD INTC QCOM TXN CSCO IBM NFLX ASML TSM ARM SMCI PLTR SNOW SHOP UBER ABNB PYPL COIN MSTR MU DELL JPM V MA BAC WFC GS MS C AXP UNH LLY JNJ PFE MRK ABBV NVO WMT COST PG KO PEP MCD NKE DIS SBUX HD BA CAT GE XOM CVX T VZ BABA PDD JD BIDU NIO LI XPEV NTES BILI TME TCOM SPY QQQ DIA IWM VOO ARKK GLD TLT SOXX';
+const SPEC_PARAMS = 'market：必填 string，crypto_spot / crypto_futures / ashare / usstock；symbol：必填 string，交易对 BTC_USDT、A 股代码 sh600519 或美股代码 AAPL。';
 export const PROMPT_SPEC_ENDPOINTS = [
   { id: 'spec-spot', title: '现货规格', method: 'GET', path: '/spec?market=crypto_spot&symbol=BTC_USDT', errorGroup: 'spec',
     ability: '价格小数位 pricePrecision、数量小数位 amountPrecision、最小下单额 minQuoteAmount（USDT）、最小数量 minBaseAmount、手续费率。' },
@@ -1490,23 +1650,27 @@ export const PROMPT_SPEC_ENDPOINTS = [
     ability: 'qty 步进 quantoMultiplier、价格步进 orderPriceRound、杠杆范围、维持保证金率、maker/taker 费率、标记价与资金费率。' },
   { id: 'spec-ashare', title: 'A 股规格', method: 'GET', path: '/spec?market=ashare&symbol=sh601005', errorGroup: 'spec',
     ability: '板块、买入起始股数与步进、价格最小变动 0.01、当日涨跌停、T+1；响应另含 sellRule、fees、sessions（含义见第 7 节，样例省略）。' },
+  { id: 'spec-us', title: '美股规格', method: 'GET', path: '/spec?market=usstock&symbol=AAPL', errorGroup: 'spec',
+    ability: '整股（lot 1）、T+0、不能卖空、价格小数位、±50% 防手误带、费用（佣金 0，卖出 SEC/TAF）、交易时段与当前 status/nextOpen/closeAt。' },
 ];
 // 2026-10-14 本地 wrangler dev 真实抓取（Gate/腾讯实时规格）。
-export const PROMPT_SPEC_RESPONSES = {"spec-spot":{"market":"crypto_spot","symbol":"BTC_USDT","pricePrecision":1,"amountPrecision":6,"minQuoteAmount":"3","minBaseAmount":"0.000001","feeRate":"0.001","tradable":true},"spec-futures":{"market":"crypto_futures","symbol":"BTC_USDT","quantoMultiplier":"0.0001","orderPriceRound":"0.1","leverageMin":1,"leverageMax":125,"maintenanceRate":"0.003","makerFee":"0.0002","takerFee":"0.0005","markPrice":"83227.82","fundingRate":"0.0001","fundingIntervalSeconds":28800},"spec-ashare":{"market":"ashare","symbol":"sh601005","name":"重庆钢铁","board":"主板","buyLot":{"min":100,"step":100},"tick":"0.01","limitUp":"1.32","limitDown":"1.08","tPlus":1,"suspended":false}};
+export const PROMPT_SPEC_RESPONSES = {"spec-spot":{"market":"crypto_spot","symbol":"BTC_USDT","pricePrecision":1,"amountPrecision":6,"minQuoteAmount":"3","minBaseAmount":"0.000001","feeRate":"0.001","tradable":true},"spec-futures":{"market":"crypto_futures","symbol":"BTC_USDT","quantoMultiplier":"0.0001","orderPriceRound":"0.1","leverageMin":1,"leverageMax":125,"maintenanceRate":"0.003","makerFee":"0.0002","takerFee":"0.0005","markPrice":"83227.82","fundingRate":"0.0001","fundingIntervalSeconds":28800},"spec-us":{"market":"usstock","symbol":"AAPL","name":"苹果","exchange":"OQ","lot":{"min":1,"step":1},"shortSelling":false,"tPlus":0,"priceDecimals":{">=1":2,"<1":4},"priceBand":"限价须在参考价 ±50% 内（防手误）","currency":"USD","fees":{"commission":"0","secFeeRateOnSell":"0.0000278","tafPerShareOnSell":"0.000166","tafMax":"8.3"},"session":"09:30-16:00 America/New_York（节假日休市，部分日 13:00 提前收盘）","status":"pre","nextOpen":1791984600000,"closeAt":1792008000000},"spec-ashare":{"market":"ashare","symbol":"sh601005","name":"重庆钢铁","board":"主板","buyLot":{"min":100,"step":100},"tick":"0.01","limitUp":"1.32","limitDown":"1.08","tPlus":1,"suspended":false}};
 const ABILITY = {
-  transfer: '任意两个不同账户互转；涉及 A 股按实时 USDCNY 换汇并收 0.2% 费用（规则见第 7 节）；响应顶层 rate/fee/received（见第 6 节）。',
+  transfer: '任意两个不同账户互转；钱包、现货、合约、美股之间 USD/USDT 1:1；涉及 A 股按实时 USDCNY 换汇并收 0.2% 费用'
+    + '（人民币买美股须先划入 usstock 换成美元，规则见第 7 节）；响应顶层 rate/fee/received（见第 6 节）。',
 };
 const SPEC_ERRORS = ['bad_request', 'unknown_symbol', 'not_a_share', 'market_unavailable'];
 const FAMILIES = [
   { title: '账户与估值', ids: ['account'], params: '无参数。' },
-  { title: '行情报价', ids: ['quote-crypto', 'quote-ashare'], paramsFrom: 'quote-crypto' },
-  { title: '交易规格（下单前必读）', ids: ['spec-spot', 'spec-futures', 'spec-ashare'], params: SPEC_PARAMS },
+  { title: '行情报价', ids: ['quote-crypto', 'quote-ashare', 'quote-us'], paramsFrom: 'quote-crypto' },
+  { title: '交易规格（下单前必读）', ids: ['spec-spot', 'spec-futures', 'spec-ashare', 'spec-us'], params: SPEC_PARAMS },
   { title: '委托与成交查询', ids: ['orders-open-all', 'orders-history-crypto_spot', 'trades'],
-    params: 'GET /orders：status 必填 open / history；market 可选 crypto_spot / crypto_futures / ashare，不传则返回全部市场（最省额度）。'
+    params: 'GET /orders：status 必填 open / history；market 可选 crypto_spot / crypto_futures / ashare / usstock，不传则返回全部市场（最省额度）。'
       + 'GET /trades：market 可选，同上。history 最多 100 条，trades 最多 200 条。' },
   { title: '现货下单 · POST /orders', write: true, ids: ['spot-amount', 'spot-quantity', 'spot-sell', 'spot-limit', 'spot-stop-limit'],
     paramsFrom: 'spot-amount' },
   { title: 'A 股下单 · POST /orders', write: true, ids: ['ashare-limit', 'ashare-market', 'ashare-sell'], paramsFrom: 'ashare-market' },
+  { title: '美股下单 · POST /orders', write: true, ids: ['us-limit', 'us-market', 'us-sell'], paramsFrom: 'us-limit' },
   { title: '合约下单 · POST /orders', write: true, ids: ['futures-market', 'futures-short', 'futures-limit'], paramsFrom: 'futures-market' },
   { title: '撤单', write: true, ids: ['cancel'], paramsFrom: 'cancel' },
   { title: '账户划转', write: true, ids: ['transfer'], paramsFrom: 'transfer' },
@@ -1596,7 +1760,7 @@ export function generatePrompt(key, { mode = 'environment', secret = '' } = {}) 
     + '每 Key 每分钟 GET 10 次、POST 10 次，分别计数；每 Key 每天 1500 次、每账号每天 3000 次（北京时间重置）。\n'
     + '响应头：X-RateLimit-Limit/Remaining（本分钟上限/剩余）、X-Daily-Quota-Limit/Remaining（Key 今日上限/剩余）、'
     + 'X-Account-Quota-Remaining（账号今日剩余）、X-Request-Id（排查用）、Retry-After（等待秒数）。\n'
-    + '所有展示和交易时段使用北京时间（UTC+8）；JSON 时间戳为 Unix 毫秒，转换后显示。\n'
+    + '展示时间用北京时间（UTC+8）；A 股时段按北京时间，美股时段按美东时间（自动夏令时，告诉用户时换算成北京时间）；JSON 时间戳为 Unix 毫秒，转换后显示。\n'
     + '通用协议错误：404 not_found（路径）、405 method_not_allowed（方法）、415 unsupported_media_type（POST 非 JSON）、'
     + '413 too_large（大于 196608 字节）、422 bad_request（JSON 非对象/格式或字段错误），不与单个业务错误混淆。\n'
     + '所有交易 POST 会先结算现有委托和仓位；即使只撤单/换杠杆，也可能因已有仓位行情或结算失败返回 503 market_unavailable，'
@@ -1619,8 +1783,15 @@ export function generatePrompt(key, { mode = 'environment', secret = '' } = {}) 
     + '买入一手 100 股，科创板至少 200 股、超出步进 1 股；卖出须为 100 股整数倍，或一次卖出全部可卖数量（清空零股）；'
     + '价格 0.01 元，按实时涨跌停，ST/注册制等以报价为准。'
     + 'T+1，当日有效；佣金 0.025%（最低 5 元）、过户费 0.001%、卖出印花税 0.05%。\n'
-    + '- 钱包 USD、现货 USDT、合约 USDT、A 股 CNY；任意两个不同账户均可直接划转，无须经过钱包。'
-    + '划转金额按来源币种，A 股来源最多 2 位小数，其他来源最多 8 位小数；USD/USDT 等值。'
+    + '- 美股 market=usstock，用名单内大写代码（下一条）；常规时段美东 09:30–16:00（北京时间夏令时 21:30–次日 04:00，冬令时 22:30–次日 05:00），'
+    + '按纽交所假日休市，部分日 13:00 提前收盘；盘前盘后不成交。整股（1 股起）、T+0、不能卖空、无涨跌停，限价须在参考价 ±50% 内（防手误）。'
+    + '市价单只在常规时段按实时成交价成交，行情不新鲜返回 503 market_stale；限价单当日有效：可立即成交时按实时价成交，否则挂单，'
+    + '之后完整分钟的真实成交价触及限价即按限价成交；盘外委托排入下一时段，开盘第一根已越过限价则按该价成交；收盘未成交部分过期解冻。'
+    + '佣金 0；卖出收 SEC 费（成交额 × 0.0000278）与 FINRA TAF（每股 0.000166 美元，单笔最高 8.30 美元），均进位到分。\n'
+    + '- 可交易美股：' + US_TICKERS + '。\n'
+    + '- 钱包 USD、现货 USDT、合约 USDT、A 股 CNY、美股 USD；任意两个不同账户均可直接划转，无须经过钱包。'
+    + '划转金额按来源币种，A 股和美股来源最多 2 位小数，其他来源最多 8 位小数；USD/USDT 等值，美股与钱包、现货、合约 1:1。'
+    + '人民币不能直接买美股：先把 ashare 的 CNY 划到 usstock，按实时汇率换成美元。'
     + '涉及 CNY 换汇按出账单位收 0.2% 费用并向上取整，到账按目标精度向下取整；'
     + '不能划走冻结/仓位保证金。签到奖励只能网页领取，API 不能签到。\n'
     + '\n## 8. 错误码表\n' + errors

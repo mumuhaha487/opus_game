@@ -4,8 +4,11 @@ import { segment } from '../ui.js';
 import { movingAverage } from '../chart.js';
 import { chartTime, chartPoint, marketTimestamp } from '../chart-time.js';
 export class AshareChart {
-  constructor(panel, feed) {
+  // options（美股复用）：up/down 涨跌色、shift 图表时间平移（秒→秒）、zone 说明时区、more 是否显示分钟周期。
+  // 不传时保持 A 股：红涨绿跌、北京时间、带分钟周期。
+  constructor(panel, feed, options = {}) {
     this.feed = feed; this.period = 'trends'; this.indicators = true;
+    for (const name of ['up', 'down', 'shift', 'zone']) if (options[name]) this[name] = options[name];
     const toolbar = element('div', '', 'chart-toolbar');
     toolbar.append(segment([['trends', '分时'], ['five', '五日'], ['101', '日K'], ['102', '周K'], ['103', '月K']],
       period => this.select(period)));
@@ -14,6 +17,7 @@ export class AshareChart {
       const option = element('option', text); option.value = value; more.append(option);
     }
     more.onchange = () => { if (more.value) this.select(more.value); };
+    if (options.more === false) more.hidden = true;
     toolbar.append(more, button('指标', () => { this.indicators = !this.indicators; this.key = ''; }),
       button('⛶', () => panel.classList.toggle('stock-fullscreen'), 'fullscreen-button'));
     this.canvas = element('div', '', 'chart-canvas'); this.legend = element('div', '', 'chart-legend');
@@ -31,7 +35,7 @@ export class AshareChart {
     });
     this.chart.subscribeCrosshairMove(event => {
       const rows = feed.bars.get(feed.code + ':' + this.period) || [];
-      this.paintLegend(rows.find(row => row.time === marketTimestamp(event.time)) || rows.at(-1));
+      this.paintLegend(rows.find(row => this.shift(row.time) === event.time) || rows.at(-1));
     });
     new ResizeObserver(() => this.resize()).observe(this.canvas);
   }
@@ -50,7 +54,7 @@ export class AshareChart {
     const library = globalThis.LightweightCharts, line = ['trends', 'five'].includes(this.period);
     this.main = this.chart.addSeries(line ? library.LineSeries : library.CandlestickSeries,
       line ? { color: '#F2C66D', lineWidth: 1.5, priceLineVisible: false }
-        : { upColor: '#E5484D', downColor: '#22B573', wickUpColor: '#E5484D', wickDownColor: '#22B573', borderVisible: false });
+        : { upColor: this.up, downColor: this.down, wickUpColor: this.up, wickDownColor: this.down, borderVisible: false });
     this.average = this.chart.addSeries(library.LineSeries, { color: '#5B8DEF', lineWidth: 1,
       priceLineVisible: false, lastValueVisible: false });
     this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' },
@@ -68,19 +72,24 @@ export class AshareChart {
     if (changed) { this.key = key; this.rebuild(); }
     const line = ['trends', 'five'].includes(this.period);
     const unique = [...new Map(rows.map(row => [row.time, row])).values()].sort((a, b) => a.time - b.time);
-    const data = unique.map(row => chartPoint(line ? { time: row.time, value: row.close } : row));
+    const point = row => ({ ...row, time: this.shift(row.time) });
+    const data = unique.map(row => point(line ? { time: row.time, value: row.close } : row));
     const missingBars = this.lastTime && unique.filter(row => row.time > this.lastTime).length > 1;
     const reset = changed || this.lastFirst !== unique[0]?.time || missingBars;
     if (reset || !data.length) this.main.setData(data); else this.main.update(data.at(-1));
     this.lastFirst = unique[0]?.time; this.lastTime = unique.at(-1)?.time;
     this.average.setData((line ? unique.filter(row => row.average > 0).map(row => ({ time: row.time, value: row.average }))
-      : this.indicators ? movingAverage(unique, 7) : []).map(chartPoint));
-    this.volume.setData(this.indicators ? unique.map(row => chartPoint({ time: row.time, value: row.volume,
-      color: row.close >= row.open ? 'rgba(229,72,77,0.5)' : 'rgba(34,181,115,0.5)' })) : []);
+      : this.indicators ? movingAverage(unique, 7) : []).map(point));
+    const tint = color => color + '80';
+    this.volume.setData(this.indicators ? unique.map(row => point({ time: row.time, value: row.volume,
+      color: row.close >= row.open ? tint(this.up) : tint(this.down) })) : []);
     this.paintLegend(unique.at(-1)); if (reset) this.showLatest();
   }
   paintLegend(row) {
-    this.legend.textContent = row ? chartTime(row.time, 'Asia/Shanghai', +this.period >= 101) + '  开 ' + price(row.open, 2)
+    this.legend.textContent = row ? chartTime(row.time, this.zone, +this.period >= 101) + '  开 ' + price(row.open, 2)
       + '  高 ' + price(row.high, 2) + '  低 ' + price(row.low, 2) + '  收 ' + price(row.close, 2) : '';
   }
 }
+// 默认（A 股）：红涨绿跌、北京时间平移；放在原型上，绕过构造函数创建的实例也有默认值。
+Object.assign(AshareChart.prototype, { up: '#E5484D', down: '#22B573', zone: 'Asia/Shanghai',
+  shift: time => chartPoint({ time }).time });

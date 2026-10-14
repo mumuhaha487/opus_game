@@ -6,6 +6,8 @@ import { applyFill, completeOrder } from './spot.js';
 import { settleFutures } from './futures-settle.js';
 import { AshareClient } from './ashare-data.js';
 import { settleAshare, hasAshareWork } from './ashare-settle.js';
+import { UsClient } from './us-data.js';
+import { settleUs, hasUsWork } from './us-settle.js';
 const MINUTE = 60000, HOUR = 3600000, DAY = 86400000;
 export function settlementPlan(from, now) {
   const plan = [];
@@ -105,7 +107,7 @@ async function settleSpot(state, gate, now, notices) {
   }
   return false;
 }
-export async function settle(state, gate, now, force = false, ashare = new AshareClient(gate, now)) {
+export async function settle(state, gate, now, force = false, ashare = new AshareClient(gate, now), us = new UsClient(gate, now)) {
   const notices = [];
   // 规格 6.5、7.8：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
   const hasAshare = hasAshareWork(state, now);
@@ -113,9 +115,16 @@ export async function settle(state, gate, now, force = false, ashare = new Ashar
   if (!force && now - (state.lastSettlement || 0) < 2000) return { partial: false, notices };
   const hasSpot = state.orders.some(order => order.market === 'spot');
   const hasFutures = state.orders.some(order => order.market === 'futures') || Object.keys(state.futures.positions).length;
-  // ASHARE §3.3：三个市场共享 30 次预算，先给 A 股分配其份额，随后恢复加密预算。
+  // ASHARE §3.3 + 美股：各市场共享 30 次预算。美股先按市场数平分剩余额度，再给 A 股分配份额，随后恢复加密预算。
+  const hasUs = hasUsWork(state);
+  let partial = false;
+  if (hasUs) {
+    if (hasAshare || hasSpot || hasFutures) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / (1 + hasAshare + hasSpot + !!hasFutures));
+    partial = await settleUs(state, us, now, notices);
+    gate.budgetLimit = 30;
+  }
   if (hasAshare && (hasSpot || hasFutures)) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / (1 + hasSpot + hasFutures));
-  let partial = hasAshare ? await settleAshare(state, ashare, now, notices) : false;
+  partial = (hasAshare ? await settleAshare(state, ashare, now, notices) : false) || partial;
   gate.budgetLimit = 30;
   // 规格 5.3、7.8：两类市场共用 30 次预算，混合积压时给合约保留一半剩余额度。
   if (hasSpot && hasFutures) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / 2);
