@@ -11,8 +11,9 @@ import { readState } from './trade/state.js';
 import { marketFor } from './trade/markets.js';
 import { getFx } from './trade/fx.js';
 import { parse, toStr, mul, div, roundTo, max } from './trade/decimal.js';
-import { pnl } from './trade/futures.js';
-const ROUTES = { account: 'GET', quote: 'GET', orders: 'GET, POST', trades: 'GET', 'orders/cancel': 'POST',
+import { pnl, MAKER, TAKER, maxLeverage } from './trade/futures.js';
+import { FEE_RATE } from './trade/spot.js';
+const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', 'orders/cancel': 'POST',
   transfer: 'POST', 'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST' };
 const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare' };
 const denied = new Set(['checkin', 'keys', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
@@ -89,6 +90,41 @@ async function quoteView(url, gate, ashare, now) {
     time: quote.time, limitUp: quote.limitUp, limitDown: quote.limitDown,
     status: quote.suspended ? '停牌' : state.status === 'open' ? '交易中' : '休市' };
 }
+// ACCOUNT §3：下单前计算合法数量所需的交易规格；只读、白名单参数，规格走 GateClient 1 小时缓存。
+async function specView(url, gate, ashare) {
+  for (const name of url.searchParams.keys()) {
+    if (!['market', 'symbol'].includes(name) || url.searchParams.getAll(name).length !== 1) fail(422, 'bad_request', '请求格式错误');
+  }
+  const market = url.searchParams.get('market'), symbol = url.searchParams.get('symbol');
+  const text = value => value == null || value === '' ? null : String(value);
+  if (market === 'crypto_spot') {
+    marketFor(symbol);
+    const spec = await gate.spec(symbol);
+    return { market, symbol, pricePrecision: Number(spec.precision), amountPrecision: Number(spec.amount_precision),
+      minQuoteAmount: text(spec.min_quote_amount), minBaseAmount: text(spec.min_base_amount),
+      feeRate: toStr(FEE_RATE), feeAsset: { buy: '基础币', sell: 'USDT' }, tradable: spec.trade_status === 'tradable' };
+  }
+  if (market === 'crypto_futures') {
+    marketFor(symbol);
+    const [contract, tickers] = await Promise.all([gate.contract(symbol), gate.futuresTicker(symbol)]);
+    return { market, symbol, quantoMultiplier: text(contract.quanto_multiplier),
+      orderPriceRound: text(contract.order_price_round), leverageMin: Number(contract.leverage_min) || 1,
+      leverageMax: maxLeverage(contract), maintenanceRate: text(contract.maintenance_rate),
+      makerFee: toStr(MAKER), takerFee: toStr(TAKER), markPrice: text(tickers[0]?.mark_price ?? contract.mark_price),
+      fundingRate: text(contract.funding_rate), fundingIntervalSeconds: Number(contract.funding_interval) || null };
+  }
+  if (market !== 'ashare') fail(422, 'bad_request', '请求格式错误');
+  validateCode(symbol);
+  const quote = (await ashare.quotes([symbol]))[symbol];
+  if (!quote.type.startsWith('GP-A')) fail(422, 'not_a_share', '仅支持沪深 A 股');
+  const star = quote.type.startsWith('GP-A-KCB');
+  return { market, symbol, name: quote.name, board: star ? '科创板' : quote.type.startsWith('GP-A-CYB') ? '创业板' : '主板',
+    buyLot: star ? { min: 200, step: 1 } : { min: 100, step: 100 },
+    sellRule: '卖出数量须为 100 股整数倍，或等于全部可卖数量（一次清空零股）', tick: '0.01',
+    limitUp: quote.limitUp, limitDown: quote.limitDown, tPlus: 1, suspended: !!quote.suspended,
+    fees: { commission: '0.00025', commissionMinCNY: '5', transfer: '0.00001', stampOnSell: '0.0005' },
+    sessions: ['09:30-11:30', '13:00-15:00'], timeZone: 'Asia/Shanghai' };
+}
 async function dispatch(request, env, key, route, data, now) {
   const url = new URL(request.url), method = request.method, gate = new GateClient(now), ashare = new AshareClient(gate, now);
   if (route === 'account') {
@@ -107,6 +143,7 @@ async function dispatch(request, env, key, route, data, now) {
       ...(codes.length ? [ashare.quotes(codes)] : [])]);
   }
   if (route === 'quote') return reply(200, await quoteView(url, gate, ashare, now));
+  if (route === 'spec') return reply(200, await specView(url, gate, ashare));
   if (method === 'GET' && ['orders', 'trades'].includes(route)) {
     const market = marketName(url.searchParams.get('market'), true), { state } = await readState(env.ACCOUNTS, key.uid, now);
     const status = url.searchParams.get('status');

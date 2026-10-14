@@ -156,7 +156,7 @@ function header() {
     })); menu.append(options); railControls.push(menu);
     controls.push(button(profile.name, () => account.open(), 'mobile-account'));
   } else {
-    controls.push(button('登录', () => account.open(), 'mobile-account'));
+    controls.push(button('登录', () => modals.login(), 'mobile-account'));
     const login = button('', () => modals.login(), 'rail-login'), circle = element('span', '', 'avatar');
     const user = icon([['circle', { cx: 12, cy: 8, r: 4 }], ['path', { d: 'M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6' }]], 18);
     user.setAttribute('stroke-width', '1.6'); circle.append(user); login.append(circle, element('span', '登录'));

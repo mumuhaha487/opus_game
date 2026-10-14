@@ -1473,6 +1473,86 @@ export function curlExample(endpoint, base = BASE) {
   const head = `curl -X ${endpoint.method} "${base}${endpoint.path}" -H "Authorization: Bearer $GAMEINC_API_KEY"`;
   return head + (endpoint.body ? ` -H "Content-Type: application/json" --data '${JSON.stringify(endpoint.body)}'` : '');
 }
+// 提示词内的紧凑写法：第 4 节先定义 $B/$A/$J，示例只引用变量，复制后同样可执行。
+export const CURL_VARIABLES = 'B=https://game.inc.re/api/v1; A="Authorization: Bearer $GAMEINC_API_KEY"; '
+  + 'J="Content-Type: application/json"';
+export function curlShort(endpoint) {
+  return endpoint.body ? `curl -s -X POST "$B${endpoint.path}" -H "$A" -H "$J" --data '${JSON.stringify(endpoint.body)}'`
+    : `curl -s "$B${endpoint.path}" -H "$A"`;
+}
+// ACCOUNT §3 压缩版：接口按族分组，参数表每族只写一次；通用错误只在第 8 节出现；
+// 响应去掉空值/游标噪声后单行展示，完整字段以第 6 节为准。目标：trade 不超过 40 KB，read 不超过 32 KB。
+const SPEC_PARAMS = 'market：必填 string，crypto_spot / crypto_futures / ashare；symbol：必填 string，交易对 BTC_USDT 或 A 股代码 sh600519。';
+export const PROMPT_SPEC_ENDPOINTS = [
+  { id: 'spec-spot', title: '现货规格', method: 'GET', path: '/spec?market=crypto_spot&symbol=BTC_USDT', errorGroup: 'spec',
+    ability: '价格小数位 pricePrecision、数量小数位 amountPrecision、最小下单额 minQuoteAmount（USDT）、最小数量 minBaseAmount、手续费率。' },
+  { id: 'spec-futures', title: '合约规格', method: 'GET', path: '/spec?market=crypto_futures&symbol=BTC_USDT', errorGroup: 'spec',
+    ability: 'qty 步进 quantoMultiplier、价格步进 orderPriceRound、杠杆范围、维持保证金率、maker/taker 费率、标记价与资金费率。' },
+  { id: 'spec-ashare', title: 'A 股规格', method: 'GET', path: '/spec?market=ashare&symbol=sh601005', errorGroup: 'spec',
+    ability: '板块、买入起始股数与步进、价格最小变动 0.01、当日涨跌停、T+1；响应另含 sellRule、fees、sessions（含义见第 7 节，样例省略）。' },
+];
+// 2026-10-14 本地 wrangler dev 真实抓取（Gate/腾讯实时规格）。
+export const PROMPT_SPEC_RESPONSES = {"spec-spot":{"market":"crypto_spot","symbol":"BTC_USDT","pricePrecision":1,"amountPrecision":6,"minQuoteAmount":"3","minBaseAmount":"0.000001","feeRate":"0.001","tradable":true},"spec-futures":{"market":"crypto_futures","symbol":"BTC_USDT","quantoMultiplier":"0.0001","orderPriceRound":"0.1","leverageMin":1,"leverageMax":125,"maintenanceRate":"0.003","makerFee":"0.0002","takerFee":"0.0005","markPrice":"83227.82","fundingRate":"0.0001","fundingIntervalSeconds":28800},"spec-ashare":{"market":"ashare","symbol":"sh601005","name":"重庆钢铁","board":"主板","buyLot":{"min":100,"step":100},"tick":"0.01","limitUp":"1.32","limitDown":"1.08","tPlus":1,"suspended":false}};
+const ABILITY = {
+  transfer: '任意两个不同账户互转；涉及 A 股按实时 USDCNY 换汇并收 0.2% 费用（规则见第 7 节）；响应顶层 rate/fee/received（见第 6 节）。',
+};
+const SPEC_ERRORS = ['bad_request', 'unknown_symbol', 'not_a_share', 'market_unavailable'];
+const FAMILIES = [
+  { title: '账户与估值', ids: ['account'], params: '无参数。' },
+  { title: '行情报价', ids: ['quote-crypto', 'quote-ashare'], paramsFrom: 'quote-crypto' },
+  { title: '交易规格（下单前必读）', ids: ['spec-spot', 'spec-futures', 'spec-ashare'], params: SPEC_PARAMS },
+  { title: '委托与成交查询', ids: ['orders-open-all', 'orders-history-crypto_spot', 'trades'],
+    params: 'GET /orders：status 必填 open / history；market 可选 crypto_spot / crypto_futures / ashare，不传则返回全部市场（最省额度）。'
+      + 'GET /trades：market 可选，同上。history 最多 100 条，trades 最多 200 条。' },
+  { title: '现货下单 · POST /orders', write: true, ids: ['spot-amount', 'spot-quantity', 'spot-sell', 'spot-limit', 'spot-stop-limit'],
+    paramsFrom: 'spot-amount' },
+  { title: 'A 股下单 · POST /orders', write: true, ids: ['ashare-limit', 'ashare-market', 'ashare-sell'], paramsFrom: 'ashare-market' },
+  { title: '合约下单 · POST /orders', write: true, ids: ['futures-market', 'futures-short', 'futures-limit'], paramsFrom: 'futures-market' },
+  { title: '撤单', write: true, ids: ['cancel'], paramsFrom: 'cancel' },
+  { title: '账户划转', write: true, ids: ['transfer'], paramsFrom: 'transfer' },
+  { title: '合约杠杆', write: true, ids: ['leverage'], paramsFrom: 'leverage' },
+  { title: '合约止盈止损', write: true, ids: ['tpsl'], paramsFrom: 'tpsl' },
+  { title: '合约平仓', write: true, ids: ['close', 'close-limit'], paramsFrom: 'close' },
+];
+const NOISE = new Set(['serverTime', 'checkFrom', 'nextCheck', 'fundedAt', 'updatedAt', 'stopDir', 'quoteQty', 'rateTime', 'bookSource']);
+export function briefResponse(value) {
+  if (Array.isArray(value)) {
+    const items = value.slice(0, 1).map(briefResponse); return value.length > 1 ? [...items, '…'] : items;
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).filter(([name, item]) => !NOISE.has(name) && item !== null && item !== false
+    && !(item && typeof item === 'object' && !Array.isArray(item) && !Object.keys(item).length)).map(([name, item]) => [name, briefResponse(item)]));
+}
+function endpointSection(project, trade) {
+  const all = [...project.endpoints, ...PROMPT_SPEC_ENDPOINTS], byId = Object.fromEntries(all.map(e => [e.id, e]));
+  const responses = { ...PROMPT_RESPONSES, ...PROMPT_SPEC_RESPONSES }, common = new Set(PROMPT_COMMON_ERRORS);
+  const specific = family => [...new Set(family.ids.flatMap(id => byId[id].errorGroup === 'spec' ? SPEC_ERRORS
+    : PROMPT_ERROR_GROUPS[byId[id].errorGroup] || []))].filter(code => !common.has(code));
+  const blocks = [], locked = [];
+  for (const family of FAMILIES) {
+    const members = family.ids.map(id => byId[id]).filter(Boolean), first = members[0];
+    if (family.write && !trade) {
+      locked.push(`| ${family.title.replace(' · POST /orders', '')} | ${first.method} ${first.path.split('?')[0]} | `
+        + members.map(e => e.title).join('、') + ' |');
+      continue;
+    }
+    const params = family.params || byId[family.paramsFrom]?.params || '';
+    const lines = [`### ${family.title}`, `权限：${family.write ? 'trade' : 'read'}。参数：${params}`];
+    for (const e of members) {
+      const where = family.title.includes(' · ') ? '' : `（${e.method} ${e.path.split('?')[0]}）`;
+      lines.push(`- **${e.title}**${where}：${ABILITY[e.id] || e.ability}`,
+        '```bash', curlShort(e), '```',
+        `  响应：\`${JSON.stringify(briefResponse(responses[e.id]))}\``);
+    }
+    lines.push(`本组特有错误：${specific(family).join('、') || '无'}（见第 8 节）。`);
+    blocks.push(lines.join('\n'));
+  }
+  if (locked.length) {
+    blocks.push('### 写操作（当前密钥无此权限）\n当前是只读密钥，以下接口会返回 403 scope_denied；需要时请用户新建带“交易”权限的密钥，'
+      + '新密钥会附带完整的写操作说明。\n| 操作 | 方法与路径 | 包含 |\n| --- | --- | --- |\n' + locked.join('\n'));
+  }
+  return blocks.join('\n\n');
+}
 export function generatePrompt(key, { mode = 'environment', secret = '', policy = 'A', limit = 10 } = {}) {
   const project = PROMPT_PROJECTS[key.project];
   if (!project) throw new Error('该项目暂未提供提示词');
@@ -1482,14 +1562,13 @@ export function generatePrompt(key, { mode = 'environment', secret = '', policy 
     : policy === 'B' ? `策略 B：单笔交易不得超过 ${amount} USDT；超出或无法可靠换算时先征求用户同意。`
       + '撤单、划转、杠杆、止盈止损等非金额操作也须先复述完整参数并取得确认。'
       : '策略 A：每次下单、撤单、划转、杠杆、平仓、止盈止损等写操作前，复述完整参数，等用户确认后才发请求。';
-  const endpoints = project.endpoints.map(e => `### ${e.title}\n${e.method} ${project.base}${e.path}\n`
-    + `权限：${e.method === 'GET' ? 'read' : trade ? 'trade' : 'trade；当前密钥无此权限，请新建带交易权限的密钥'}\n`
-    + `参数：${e.params}\n能力：${e.ability}\n\n\`\`\`bash\n${curlExample(e)}\n\`\`\`\n`
-    + `响应（真实抓取样例截短，价格/ID/余额仅示例，以本次响应为准）：\n\`\`\`json\n`
-    + `${JSON.stringify(PROMPT_RESPONSES[e.id], null, 2)}\n\`\`\`\n常见错误（本接口）：\n`
-    + [...PROMPT_COMMON_ERRORS, ...PROMPT_ERROR_GROUPS[e.errorGroup]].map(code =>
-      `- ${PROMPT_ERROR_STATUS[code] || 422} ${code}：${PROMPT_ERRORS[code][1]}`).join('\n')).join('\n\n');
-  const errors = Object.entries(PROMPT_ERRORS).map(([code, info]) => `| ${code} | ${info[0]} | ${info[1]} |`).join('\n');
+  const endpoints = endpointSection(project, trade);
+  const status = code => PROMPT_ERROR_STATUS[code] || 422;
+  const errorRow = ([code, info]) => `| ${status(code)} ${code} | ${info[0]} | ${info[1]} |`;
+  const commonRows = PROMPT_COMMON_ERRORS.map(code => errorRow([code, PROMPT_ERRORS[code]]));
+  const otherRows = Object.entries(PROMPT_ERRORS).filter(([code]) => !PROMPT_COMMON_ERRORS.includes(code)).map(errorRow);
+  const errors = '所有接口通用：\n| 代码 | 含义 | 应对 |\n| --- | --- | --- |\n' + commonRows.join('\n')
+    + '\n\n业务错误：\n| 代码 | 含义 | 应对 |\n| --- | --- | --- |\n' + otherRows.join('\n');
   return `# GAME.INC.RE · 模拟交易助手\n\n## 1. 身份与目标\n`
     + '你是用户在 game.inc.re「模拟交易所」里的交易助手。所有资产为模拟资产，仅教学练习，不是真实证券，'
     + '不构成投资建议，不能用于实际开户交易。\n\n## 2. 你的凭据\n'
@@ -1507,34 +1586,38 @@ export function generatePrompt(key, { mode = 'environment', secret = '', policy 
     + '\n## 4. 基础信息\n'
     + `Base URL：${project.base}\nAuthorization: Bearer ${credential}\nContent-Type: application/json（POST）\n`
     + '每 Key 每分钟 GET 10 次、POST 10 次，分别计数；每 Key 每天 1500 次、每账号每天 3000 次（北京时间重置）。\n'
-    + 'X-RateLimit-Limit：当前分钟/拒绝时对应额度上限；X-RateLimit-Remaining：估计剩余次数；'
-    + 'X-Daily-Quota-Limit：Key 每日上限；X-Daily-Quota-Remaining：Key 今日剩余；'
-    + 'X-Account-Quota-Remaining：账号今日剩余；X-Request-Id：排查用请求 ID；Retry-After：等待秒数。\n'
+    + '响应头：X-RateLimit-Limit/Remaining（本分钟上限/剩余）、X-Daily-Quota-Limit/Remaining（Key 今日上限/剩余）、'
+    + 'X-Account-Quota-Remaining（账号今日剩余）、X-Request-Id（排查用）、Retry-After（等待秒数）。\n'
     + '所有展示和交易时段使用北京时间（UTC+8）；JSON 时间戳为 Unix 毫秒，转换后显示。\n'
     + '通用协议错误：404 not_found（路径）、405 method_not_allowed（方法）、415 unsupported_media_type（POST 非 JSON）、'
     + '413 too_large（大于 196608 字节）、422 bad_request（JSON 非对象/格式或字段错误），不与单个业务错误混淆。\n'
     + '所有交易 POST 会先结算现有委托和仓位；即使只撤单/换杠杆，也可能因已有仓位行情或结算失败返回 503 market_unavailable，'
     + '应先查账户状态，不盲目重试。GET account 的结算失败可能返回 200 partial=true/stale=true；预加载/估值失败仍可能 503。\n'
-    + 'curl 示例是 bash 语法；PowerShell 请使用 curl.exe 与 $env:GAMEINC_API_KEY，JSON 推荐保存请求文件后 --data-binary @request.json。\n'
+    + 'curl 示例是 bash 语法，先执行一次下面的变量定义（之后所有示例直接复制即可）；'
+    + 'PowerShell 请改用 curl.exe 与 $env:GAMEINC_API_KEY，JSON 建议存成文件再用 --data-binary @request.json。\n'
+    + '```bash\n' + (mode === 'inline' && secret ? `export GAMEINC_API_KEY='${secret}'\n` : '') + CURL_VARIABLES + '\n```\n'
     + '\n## 5. 接口清单\n示例是独立操作，执行前读余额、规格与最新报价；示例 ID 需换成真实返回 ID，'
-    + '新交易意图需改 clientId。不允许盲目执行全部例子。\n\n' + endpoints
+    + '新交易意图需改 clientId。不允许盲目执行全部例子。响应为真实抓取后去掉空值字段的单行样例，'
+    + '价格、ID、余额仅示例，以实际返回为准；完整字段见第 6 节。\n\n' + endpoints
     + '\n\n## 6. 字段说明\n' + PROMPT_FIELDS
     + '\n\n## 7. 交易规则速查\n'
+    + '- 下单前先 GET spec 读取实时规格（精度、最小额、合约步进、涨跌停），不要凭价格小数位猜数量精度。\n'
     + '- 加密格式 BTC_USDT；规格与最小额/精度依 Gate.io（BTC 示例 min_quote_amount=3 USDT，规格会变化）。'
     + '按金额仅现货市价买入可用；数量取整为 0 时 bad_qty。现货手续费 0.1%（买入扣基础币、卖出扣 USDT）；成交只认 Gate 盘口，备用显示源不能成交。\n'
     + '- 合约逐仓；qty 是基础币数量，按 quanto_multiplier 步进；杠杆 1–合约上限（封顶 125）。'
     + '挂单成交 maker 0.02%、立即吃单 taker 0.05%（限价也可能吃单）；保证金不足拒绝，强平亏损以逐仓保证金为限；资金费按 Gate 历史结算，'
     + '止盈止损按标记价触发；先读仓位再平仓。\n'
     + '- A 股代码 sh600519 / sz000001；交易时段北京时间 09:30–11:30、13:00–15:00，交易日依服务端；'
-    + '一手 100 股，科创板至少 200 股、超出步进 1 股；价格 0.01 元，按实时涨跌停，ST/注册制等以报价为准。'
+    + '买入一手 100 股，科创板至少 200 股、超出步进 1 股；卖出须为 100 股整数倍，或一次卖出全部可卖数量（清空零股）；'
+    + '价格 0.01 元，按实时涨跌停，ST/注册制等以报价为准。'
     + 'T+1，当日有效；佣金 0.025%（最低 5 元）、过户费 0.001%、卖出印花税 0.05%。\n'
     + '- 钱包 USD、现货 USDT、合约 USDT、A 股 CNY；任意两个不同账户均可直接划转，无须经过钱包。'
     + '划转金额按来源币种，A 股来源最多 2 位小数，其他来源最多 8 位小数；USD/USDT 等值。'
     + '涉及 CNY 换汇按出账单位收 0.2% 费用并向上取整，到账按目标精度向下取整；'
     + '不能划走冻结/仓位保证金。签到奖励只能网页领取，API 不能签到。\n'
-    + '\n## 8. 错误码表\n| 代码 | 含义 | 应对 |\n| --- | --- | --- |\n' + errors
+    + '\n## 8. 错误码表\n' + errors
     + '\n\n## 9. 推荐工作流程\n'
-    + '先读 account 确认可用余额 → quote 查询 → 按精度及最小额计算数量 → 按确认策略下单 → '
+    + '先读 account 确认可用余额 → spec 读取规格 → quote 查询 → 按精度及最小额计算数量 → 按确认策略下单 → '
     + '间隔至少 10 秒查询 orders/trades（合并市场，遵守额度）→ 报告成交价、数量、手续费、未成交和冻结。\n'
     + '下面仅查询，不下单；不打印密钥，401 停止，429 串行等待。\n\n```python\n'
     + 'import os, time, requests\nkey = os.environ["GAMEINC_API_KEY"]\n'

@@ -1,6 +1,8 @@
 import { GameKeys } from '../hub/keys-ui.js';
 // DESIGN §5 / PLATFORM §6：网页会话管理密钥；样例只展示，所有动态文本使用 textContent。
 import { documentationExamples } from './examples.js';
+import { specExamples } from './spec-examples.js';
+const allExamples = [...documentationExamples.examples, ...specExamples];
 const byId = id => document.getElementById(id);
 const element = (tag, text = '', className = '') => {
   const node = document.createElement(tag); node.textContent = text; node.className = className; return node;
@@ -75,6 +77,11 @@ const groups = [
     'GET /api/v1/quote · read。market=crypto 或 ashare，symbol=BTC_USDT 或 sh600519。',
     '返回 last、bid、ask、time；A 股另含 limitUp、limitDown、status。行情来自服务端公开数据源。',
   ]],
+  ['spec', '交易规格', [27, 28, 29], [
+    'GET /api/v1/spec · read。market=crypto_spot / crypto_futures / ashare，symbol=BTC_USDT 或 sh600519。下单前先读规格再计算数量。',
+    '现货返回价格/数量小数位、最小下单额与最小数量、手续费率；合约返回 qty 步进、价格步进、杠杆范围、维持保证金率、maker/taker 费率、标记价与资金费率。',
+    'A 股返回板块、买入起始股数与步进、卖出规则、价格最小变动、当日涨跌停、T+1、费率与交易时段。规格来自 Gate.io 与腾讯，服务端缓存 1 小时。',
+  ]],
   ['orders', '委托与下单', [10, 12, 9, 17, 20], [
     'GET /api/v1/orders · read。status=open 或 history；market=crypto_spot、crypto_futures、ashare。',
     'POST /api/v1/orders · trade。market 与 clientId 必填；股票用 code，加密用 symbol；side=buy/sell、type=market/limit。',
@@ -95,7 +102,7 @@ const groups = [
 ];
 for (const [id, title, indices, paragraphs] of groups) {
   const node = section(id, title, paragraphs);
-  for (const index of indices) sample(node, documentationExamples.examples[index]);
+  for (const index of indices) sample(node, allExamples[index]);
 }
 const agent = section('agent', 'AI Agent 示例', [
   'Python 示例每 60 秒查询余额和报价，余额满足条件时提交一次模拟买单。先在网站签到并划入现货账户。',

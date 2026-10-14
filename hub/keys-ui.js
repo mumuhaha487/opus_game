@@ -118,7 +118,8 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
     try {
       const result = await request;
       if (token === generation && editor.d.open && !disposed) {
-        secret = result.key; delete result.key; current = result; renderResult(); onChange();
+        secret = result.key; delete result.key; current = result; editor.h.textContent = '密钥已创建';
+        renderResult(); onChange();
       } else { delete result.key; }
       if (!disposed && token === generation) await refresh();
     } catch (error) { if (token === generation) formMessage.textContent = errorText(error); }
@@ -172,7 +173,8 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       }));
       actions.append(btn('下载 .md', () => confirm(() => {
         const blob = new Blob([prompt('inline')], { type: 'text/markdown;charset=utf-8' });
-        const url = URL.createObjectURL(blob), a = el('a'); a.href = url; a.download = 'gameinc-agent.md'; a.click();
+        const url = URL.createObjectURL(blob), a = el('a'); a.href = url; a.download = 'gameinc-agent.md'; a.hidden = true;
+        document.body.append(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 0);
       })));
     }
@@ -192,10 +194,11 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       if (!project) { const group = row([meta.name]); group.firstChild.colSpan = 6; group.className = 'k-group'; rows.append(group); }
       for (const key of filtered.filter(k => k.project === slug)) {
         const actions = el('div', '', 'k-actions');
-        actions.append(btn('提示词', () => {
+        if (active(key)) actions.append(btn('提示词', () => {
           focusOrigin = document.activeElement; clearSecret(); current = key; editor.h.textContent = 'AI 提示词';
           editor.d.showModal(); renderResult();
-        }), btn('调用记录', () => showLog(key)));
+        }));
+        actions.append(btn('调用记录', () => showLog(key)));
         if (active(key)) actions.append(btn('撤销', () => {
           revokeId = key.id; revokeDetail.textContent = '撤销「' + key.name + '」后，使用此密钥的调用立即失效。';
           revoke.d.showModal();
@@ -206,7 +209,8 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       }
     }
     create.disabled = keys.filter(active).length >= 5 || !Object.keys(projects).length;
-    status.textContent = keys.filter(active).length >= 5 ? '最多保留 5 个有效密钥' : '';
+    status.textContent = keys.filter(active).length >= 5 ? '最多保留 5 个有效密钥'
+      : filtered.length ? '' : '还没有密钥。创建后，AI 可以用它查询行情或代你交易。';
   }
   async function refresh() {
     const token = ++revision, logged = !!GameAccount.profile();
@@ -223,7 +227,8 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       }
       select.hidden = select.options.length <= 1; singleProject.hidden = !select.hidden;
       singleProject.textContent = projects[select.value]?.name || '暂无可用项目';
-      editor.h.textContent = '新建密钥'; render();
+      if (!editor.d.open) editor.h.textContent = '新建密钥';
+      render();
     } catch (e) {
       if (token !== revision || disposed) return;
       rows.replaceChildren(); status.textContent = errorText(e);
