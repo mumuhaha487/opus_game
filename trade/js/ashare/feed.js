@@ -101,12 +101,13 @@ export class AshareFeed {
     this.list = []; this.total = 0; this.tasks = new Map(); this.status = 'connecting'; this.page = 'overview';
     this.codes = INDICES.map(([code]) => code); this.board = 0; this.sort = 0; this.pageNumber = 1;
     this.barsSource = new Map(); this.barsFetchedAt = new Map(); this.eastBarsRetryAt = 0;
-    this.barChains = new Map(); this.detailsChain = new SourceChain(2); this.listChain = new SourceChain(3);
+    this.barChains = new Map(); this.detailsChain = new SourceChain(2, undefined, 'ashare-details');
+    this.listChain = new SourceChain(3, undefined, 'ashare-list');
     this.workerLists = new Map(); this.workerDelay = 60000;
     this.quoteChain = new SourceChain(3, health => {
       this.source = health.index === 2 ? '腾讯行情（中转·30秒）' : '腾讯行情'; this.degraded = health.index > 0;
       this.status = health.unavailable ? 'failed' : 'connecting'; this.onChange();
-    });
+    }, 'ashare-quotes');
     document.addEventListener('visibilitychange', () => {
       for (const task of this.tasks.values()) clearTimeout(task.timer);
       if (!document.hidden) this.schedule();
@@ -204,7 +205,7 @@ export class AshareFeed {
       ...(trends ? { ndays: period === 'five' ? '5' : '1' } : { klt: period, fqt: '1', lmt: '500', end: '20500101' }) });
     const prefix = trends ? EAST + 'stock/trends2/get?' : 'https://push2his.eastmoney.com/api/qt/stock/kline/get?';
     let source;
-    if (!this.barChains.has(key)) this.barChains.set(key, new SourceChain(2));
+    if (!this.barChains.has(key)) this.barChains.set(key, new SourceChain(2, undefined, 'ashare-bars-' + period));
     const rows = await this.barChains.get(key).read([async () => {
       const payload = await this.json(prefix + parameters);
       if (payload.rc !== undefined && payload.rc !== 0) throw Error('east rc');
@@ -240,7 +241,7 @@ export class AshareFeed {
   async listRequest(sort = this.sort, page = this.pageNumber) {
     const [, fid, po] = SORTS[sort], query = new URLSearchParams({ pn: page, pz: 50, po, np: 1, fltt: 2, invt: 2,
       fid, fs: BOARDS[this.board][1], fields: 'f12,f13,f14,f2,f3,f4,f5,f6,f7,f8,f15,f16,f17,f18' });
-    return this.listChain.read([...['push2', 'push2delay'].map(host => async () => {
+    const direct = ['push2', 'push2delay'].map(host => async () => {
       const payload = await this.json(`https://${host}.eastmoney.com/api/qt/clist/get?` + query), data = payload.data;
       if (payload.rc !== undefined && payload.rc !== 0 || !data || !Array.isArray(data.diff) || !data.diff.length) {
         throw Error('list');
@@ -249,7 +250,18 @@ export class AshareFeed {
       return { total: data.total, source: 'eastmoney', rows: data.diff.map(row => ({
         code: (row.f13 === 1 ? 'sh' : 'sz') + row.f12, name: row.f14, last: row.f2, percent: row.f3,
         change: row.f4, turnover: row.f6, turnoverRate: row.f8, high: row.f15, low: row.f16 })) };
-    }), async () => {
+    });
+    const health = this.listChain.health;
+    if (!document.hidden && health.index === 0 && !health.worked.size && !this.listPrefetched) {
+      // Only the first public-list attempt overlaps the two hosts. Selection stays ordered;
+      // the Worker loader remains lazy and is never called unless both public requests fail.
+      this.listPrefetched = true;
+      direct.forEach((load, index) => {
+        const pending = load(); pending.catch(() => {}); let first = true;
+        direct[index] = () => { if (first) { first = false; return pending; } return load(); };
+      });
+    }
+    return this.listChain.read([...direct, async () => {
       this.listFallback = true;
       if (sort > 2) { sort = 0; this.sort = 0; }
       const parameters = new URLSearchParams({ board: String(this.board), sort: String(sort), page: String(page) });

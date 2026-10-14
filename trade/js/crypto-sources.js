@@ -13,7 +13,7 @@ export class CryptoSources {
         if (state.health.unavailable) state.exhausted = true;
         state.revision++; state.errors = {}; this.stop(market); this.status(market);
         if (!document.hidden) this.start(market);
-      });
+      }, 'crypto-' + market);
       this.states[market] = state;
     }
     return this.states[market];
@@ -73,13 +73,14 @@ export class CryptoSources {
     const state = this.state(market), revision = state.revision;
     const socket = new WebSocket(sockets[market]);
     this.feed.connections[market] = { socket, paused: false };
+    let failedOnce = false;
     const failed = () => {
-      if (!this.active(market, revision)) return;
+      if (failedOnce || !this.active(market, revision)) return; failedOnce = true;
       state.health.failure();
       if (state.health.index === 0) this.timer(market, 'retry', () => this.gateSocket(market), 1000);
     };
     let errored = false;
-    socket.onerror = () => { errored = true; socket.close(); };
+    socket.onerror = () => { errored = true; failed(); socket.close(); };
     socket.onclose = () => { if (!this.feed.connections[market]?.paused) failed(); };
     socket.onopen = () => {
       if (!this.active(market, revision)) { socket.close(); return; }
@@ -96,8 +97,11 @@ export class CryptoSources {
     };
     socket.onmessage = message => {
       if (!this.active(market, revision) || errored) return;
-      state.health.message(); this.healthy(market);
-      try { this.feed.message(market, JSON.parse(message.data)); } catch {}
+      try {
+        const row = JSON.parse(message.data); state.health.lastMessage = Date.now();
+        if (row.event === 'update' && row.result && !row.error) { state.health.message(); this.healthy(market); }
+        this.feed.message(market, row);
+      } catch {}
     };
   }
   async probe(market) {
@@ -128,7 +132,7 @@ export class CryptoSources {
   }
   async rest(path) {
     if (!path.startsWith('/futures/')) return sourceJson('https://api.gateio.ws/api/v4' + path);
-    this.futuresRest ||= new SourceChain(2);
+    this.futuresRest ||= new SourceChain(2, undefined, 'gate-futures-rest');
     return this.futuresRest.read(['fx-api.gateio.ws', 'api.gateio.ws'].map(host =>
       () => sourceJson('https://' + host + '/api/v4' + path)));
   }
@@ -146,7 +150,7 @@ export class CryptoSources {
   }
   miniHistory(symbol, limit = 24) {
     this.miniChains ||= new Map();
-    if (!this.miniChains.has(symbol)) this.miniChains.set(symbol, new SourceChain(2));
+    if (!this.miniChains.has(symbol)) this.miniChains.set(symbol, new SourceChain(2, undefined, 'crypto-mini'));
     return this.miniChains.get(symbol).read([async () => {
       const rows = await this.rest('/spot/candlesticks?currency_pair=' + symbol + '&interval=1h&limit=' + limit);
       return rows.map(row => this.feed.normalizeCandle(row, 'spot', 1));
@@ -196,12 +200,13 @@ export class CryptoSources {
           }
         } catch {}
       };
+      let failedOnce = false;
       const failed = () => {
-        if (!this.active('spot', revision)) return;
+        if (failedOnce || !this.active('spot', revision)) return; failedOnce = true;
         state.health.failure();
         if (state.health.index === 2) this.timer('spot', 'retry', () => this.binanceSocket(revision), 1000);
       };
-      socket.onerror = () => socket.close();
+      socket.onerror = () => { failed(); socket.close(); };
       socket.onclose = () => { if (!this.feed.connections.spot?.paused) failed(); };
     } catch (error) {
       if (this.active('spot', revision)) {
@@ -223,7 +228,8 @@ export class CryptoSources {
             state.errors[name] = 0; if (name === 'price') this.healthy(market);
           }
         } catch {
-          if (this.active(market, revision) && (state.errors[name] = (state.errors[name] || 0) + 1) >= 2) {
+          if (this.active(market, revision)
+            && (state.errors[name] = (state.errors[name] || 0) + 1) >= state.health.failureLimit) {
             state.health.select(state.health.index + 1);
           }
         }

@@ -9,7 +9,7 @@ export function tencentFx(text) {
   if (!Number.isFinite(rateTime)) throw Error('fx'); return { rate, rateTime };
 }
 export class FxFeed {
-  constructor() { this.chain = new SourceChain(3); this.regionDelay = 600000; }
+  constructor() { this.chain = new SourceChain(3, undefined, 'fx'); this.regionDelay = 600000; }
   async regionRate() {
     const now = Date.now();
     if (this.regionNext > now) {

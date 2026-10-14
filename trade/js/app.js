@@ -26,10 +26,16 @@ import { RenderSchedule } from './render-schedule.js';
 import { badge } from './ui.js';
 import { element, button, icon, gift, price, percent, quantity, large, countdown, direction } from './format.js';
 const node = id => document.getElementById(id);
+const renderSchedule = new RenderSchedule(), firstAshareLists = new Set();
 const feed = new Feed();
 // DESIGN §6：两个市场连接在入口建立，导航保留已有实例；隐藏60秒后统一暂停。
 feed.connect('spot'); feed.setFuturesWanted(true);
-const ashare = new AshareFeed(() => { feed.dirty = true; });
+const ashare = new AshareFeed(() => {
+  feed.dirty = true;
+  for (const name of ['list', 'ranking']) if (ashare[name].length && !firstAshareLists.has(name)) {
+    firstAshareLists.add(name); renderSchedule.last.lists = -Infinity;
+  }
+});
 const wallet = new WalletView(() => { feed.dirty = true; });
 let modals;
 const api = new TradeApi(() => { feed.dirty = true; }, text => modals.toast(text));
@@ -274,7 +280,6 @@ async function route() {
   if (page === 'crypto') feed.setFuturesWanted(markets.tab === 'futures');
   feed.dirty = true; mobileChartActions();
 }
-const renderSchedule = new RenderSchedule();
 function renderFrame(timestamp) {
   if (!document.hidden) renderSchedule.run(timestamp, {
     fast: () => {

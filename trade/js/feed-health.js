@@ -5,9 +5,24 @@ export async function sourceJson(url) {
   return response.json();
 }
 export class SourceHealth {
-  constructor(count, onChange = () => {}) {
-    this.count = count; this.onChange = onChange; this.index = 0; this.failures = 0;
+  constructor(count, onChange = () => {}, chain = '') {
+    this.count = count; this.onChange = onChange; this.index = 0; this.failures = 0; this.worked = new Set();
+    this.storageKey = chain ? 'gameinc_feed_' + chain : '';
+    try {
+      const saved = this.storageKey && JSON.parse(sessionStorage.getItem(this.storageKey));
+      if (Number.isInteger(saved?.index) && saved.index >= 0 && saved.index < count && Number.isFinite(saved.at)
+        && saved.at > 0 && Date.now() - saved.at >= 0 && Date.now() - saved.at < 600000) this.index = saved.index;
+    } catch { /* Missing, expired or damaged session memory starts at the primary. */ }
     this.recoveries = 0; this.lastProbe = Date.now(); this.lastMessage = Date.now(); this.unavailable = false;
+  }
+  get failureLimit() { return this.worked.has(this.index) ? 2 : 1; }
+  remember() {
+    if (!this.storageKey || this.index >= this.count) return;
+    const now = Date.now();
+    if (this.savedIndex === this.index && now - this.savedAt < 60000) return;
+    try { sessionStorage.setItem(this.storageKey, JSON.stringify({ index: this.index, at: now }));
+      this.savedIndex = this.index; this.savedAt = now;
+    } catch { /* Storage denial must not interrupt feeds. */ }
   }
   select(index) {
     // Recovery belongs to the primary, not the backup transport. A backup switch must not
@@ -16,19 +31,19 @@ export class SourceHealth {
     this.index = index; this.failures = 0;
     this.lastMessage = Date.now(); this.unavailable = index >= this.count; this.onChange(this);
   }
-  success() { this.failures = 0; this.unavailable = false; }
-  failure() { if (++this.failures >= 2) this.select(this.index + 1); }
+  success() { this.failures = 0; this.unavailable = false; this.worked.add(this.index); this.remember(); }
+  failure() { if (++this.failures >= this.failureLimit) this.select(this.index + 1); }
   message() { this.lastMessage = Date.now(); this.success(); }
   silent() { if (Date.now() - this.lastMessage >= 10000) { this.select(this.index + 1); return true; } return false; }
   probeDue() { return this.index > 0 && Date.now() - this.lastProbe >= 60000; }
   recovered(ok) {
     this.lastProbe = Date.now(); this.recoveries = ok ? this.recoveries + 1 : 0;
-    if (this.recoveries >= 2) this.select(0);
+    if (this.recoveries >= 2) { this.select(0); this.success(); }
   }
 }
 export class SourceChain {
-  constructor(count, onChange = () => {}) {
-    this.health = new SourceHealth(count, health => { onChange(health); this.armProbe(); });
+  constructor(count, onChange = () => {}, chain = '') {
+    this.health = new SourceHealth(count, health => { onChange(health); this.armProbe(); }, chain);
     this.retry = 0; this.retryAt = 0;
     globalThis.document?.addEventListener?.('visibilitychange', () => this.armProbe());
   }
