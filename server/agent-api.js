@@ -16,10 +16,12 @@ import { FEE_RATE } from './trade/spot.js';
 import { UsClient, usStock } from './trade/us-data.js';
 import { tradePrice, SEC_RATE, TAF_PER_SHARE, TAF_MAX } from './trade/usstock.js';
 import { usMarketStatus } from './trade/us-calendar.js';
-const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', 'orders/cancel': 'POST',
-  transfer: 'POST', 'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST' };
+// 网页能做的交易操作 API 都能做：含签到、资金流水、一键撤单、逐仓保证金和 A 股自选。
+const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', ledger: 'GET',
+  'orders/cancel': 'POST', 'orders/cancel-all': 'POST', transfer: 'POST', checkin: 'POST', 'ashare/watch': 'POST',
+  'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST' };
 const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare', usstock: 'usstock' };
-const denied = new Set(['checkin', 'keys', 'keys/delete', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
+const denied = new Set(['keys', 'keys/delete', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
 const fail = (status, code, message) => { throw { status, code, message }; };
 function reply(status, data, headers) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8',
@@ -175,6 +177,11 @@ async function dispatch(request, env, key, route, data, now) {
   }
   if (route === 'quote') return reply(200, await quoteView(url, gate, ashare, now));
   if (route === 'spec') return reply(200, await specView(url, gate, ashare));
+  if (route === 'ledger') {
+    const value = url.searchParams.get('market'), { state } = await readState(env.ACCOUNTS, key.uid, now);
+    const market = value === null ? null : value === 'wallet' ? 'wallet' : marketName(value, true);
+    return reply(200, { ledger: state.history.ledger.filter(row => !market || row.market === market) });
+  }
   if (method === 'GET' && ['orders', 'trades'].includes(route)) {
     const market = marketName(url.searchParams.get('market'), true), { state } = await readState(env.ACCOUNTS, key.uid, now);
     const status = url.searchParams.get('status');
@@ -194,6 +201,11 @@ async function dispatch(request, env, key, route, data, now) {
     tradeRoute = market + '/order';
   }
   if (route === 'orders/cancel') tradeRoute = marketName(data.market) + '/cancel';
+  if (route === 'orders/cancel-all') {
+    const market = data.market == null ? null : marketName(data.market);
+    const symbol = typeof data.symbol === 'string' && market === 'usstock' ? data.symbol.toUpperCase() : data.symbol ?? null;
+    tradeRoute = 'cancel-all'; data = { market, symbol };
+  }
   const target = new URL('/api/trade/' + tradeRoute, url.origin);
   const response = await handleTrade(new Request(target, { method }), env, { user: { uid: key.uid }, apiKey: true },
     data, { gate, ashare });

@@ -21,8 +21,20 @@ const ROUTES = {
   'usstock/order': 'POST', 'usstock/cancel': 'POST',
   'spot/order': 'POST', 'spot/cancel': 'POST', 'spot/cancel-all': 'POST',
   'futures/order': 'POST', 'futures/cancel': 'POST', 'futures/close': 'POST',
-  'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST',
+  'futures/leverage': 'POST', 'futures/tpsl': 'POST', 'futures/margin': 'POST', 'cancel-all': 'POST',
 };
+// 一键撤单：可按市场（spot/futures/ashare/usstock）和代码筛选，同一次写入完成，返回被撤委托 ID。
+const CANCELERS = { spot: cancelOrder, futures: cancelFuturesOrder, ashare: cancelAshareOrder, usstock: cancelUsOrder };
+function cancelEverything(state, data, now) {
+  const market = data.market ?? null, symbol = data.symbol ?? null;
+  if ((market !== null && !Object.hasOwn(CANCELERS, market))
+    || (symbol !== null && (typeof symbol !== 'string' || !/^[A-Za-z0-9_.]{1,32}$/.test(symbol)))) {
+    throw { status: 400, code: 'bad_request' };
+  }
+  const targets = state.orders.filter(order => (!market || order.market === market) && (!symbol || order.symbol === symbol));
+  for (const order of targets) CANCELERS[order.market](state, order.id, now);
+  return targets.map(order => order.id);
+}
 export const MESSAGES = {
   bad_request: '请求格式错误', unknown_symbol: '不支持的交易对', bad_price: '价格不符合精度要求',
   bad_qty: '数量不符合精度要求', insufficient_balance: '可用余额不足', too_many_orders: '当前委托最多 50 笔',
@@ -119,7 +131,7 @@ export async function handleTrade(request, env, session, data, services) {
     const result = await updateState(env.ACCOUNTS, uid, async state => {
       // PLATFORM §4：确认免责先独立落盘；所有交易类 POST 在读行情之前检查。
       if (route === 'disclaimer') { state.disclaimerAt ||= now; return { notices: [] }; }
-      // ASHARE §6：会话自选最多50个，严格代码形状、去重，不开放到Agent路由。
+      // ASHARE §6：自选最多50个，严格代码形状、去重；网页与 API 共用。
       if (route === 'ashare/watch') {
         if (!Array.isArray(data.codes) || data.codes.length > 50
           || data.codes.some(code => typeof code !== 'string' || !/^(sh|sz)\d{6}$/.test(code))) {
@@ -168,7 +180,7 @@ export async function handleTrade(request, env, session, data, services) {
         return { partial: true, stale: true, notices: [] };
       }
       if (method === 'GET') Object.assign(state, candidate);
-      let order, reward, transferred;
+      let order, reward, transferred, canceled;
       if (route === 'checkin') reward = checkin(state, now);
       if (route === 'ashare/order') order = await placeAshareOrder(state, data, ashare, now);
       if (route === 'ashare/cancel') cancelAshareOrder(state, data.id, now);
@@ -178,6 +190,7 @@ export async function handleTrade(request, env, session, data, services) {
       if (route === 'spot/order') order = await placeOrder(state, data, gate, now);
       if (route === 'spot/cancel') cancelOrder(state, data.id, now);
       if (route === 'spot/cancel-all') cancelAll(state, data.symbol, now);
+      if (route === 'cancel-all') canceled = cancelEverything(state, data, now);
       if (route === 'futures/order') order = await placeFuturesOrder(state, data, gate, now);
       if (route === 'futures/close') order = await closeFutures(state, data, gate, now);
       if (route === 'futures/cancel') cancelFuturesOrder(state, data.id, now);
@@ -185,14 +198,15 @@ export async function handleTrade(request, env, session, data, services) {
       if (route === 'futures/tpsl') await changeTPSL(state, data, gate, now);
       if (route === 'futures/margin') await changeMargin(state, data, gate, now);
       if (ordering) state.agent = { ...state.agent, day, ordersToday: ordersToday + 1 };
-      return { ...settlement, order, reward, transferred };
+      return { ...settlement, order, reward, transferred, canceled };
     }, now);
     const { bookSource, ...order } = result.order || {};
     return reply(200, { ...stateView(result.state, now, result.partial, result.notices),
       ...result.transferred,
       ...(result.stale ? { stale: true } : {}),
       ...(result.order ? { order, ...(bookSource ? { bookSource } : {}) } : {}),
-      ...(result.reward ? { reward: result.reward } : {}) },
+      ...(result.reward ? { reward: result.reward } : {}),
+      ...(result.canceled ? { canceled: result.canceled } : {}) },
     route === 'state' ? { 'X-Poll-After': String(statePollAfter(result.state)) } : {});
   } catch (error) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';

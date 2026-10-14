@@ -43,7 +43,7 @@ const auth = section('authentication', '鉴权与权限', [
   '基址：https://game.inc.re/api/v1/。在服务端使用 Authorization: Bearer <API_KEY> 调用。',
   '读取权限用于余额、行情、委托与成交；交易权限用于下单、撤单、划转和合约操作。',
   '接口只认 API Key；同时携带 Cookie 时也按 Key 认证。第三方网页受同源策略限制，AI Agent 应在服务端调用。',
-  '签到、密钥管理、账号操作、游戏存档和点赞使用网站会话。创建密钥时确认使用须知；密钥只在生成时显示一次。',
+  '带 trade 权限的密钥能做网页上的全部交易操作（含签到、资金流水、一键撤单、保证金调整、A 股自选），直接执行。密钥管理、账号操作、游戏存档和点赞使用网站会话。密钥只在生成时显示一次。',
 ]);
 codeBlock(auth, '鉴权头', 'Authorization: Bearer <API_KEY>');
 section('limits', '额度与轮询', [
@@ -91,15 +91,19 @@ const groups = [
     'A 股交易时段为北京时间 09:30–11:30、13:00–15:00；撮合、费用、每日上限与网站相同。',
     '美股以美元结算，qty 为整数股（1 股起）、T+0、不能卖空；常规时段美东 09:30–16:00，市价单只在时段内按实时成交价成交，盘外的限价单排入下一交易时段。',
   ]],
-  ['cancel', '撤销委托', [11], ['POST /api/v1/orders/cancel · trade。提交 market 和委托 id；撤销后释放未成交部分冻结资金。']],
-  ['trades', '成交记录', [18], ['GET /api/v1/trades · read。market 可筛选 crypto_spot、crypto_futures、ashare 或 usstock。']],
+  ['cancel', '撤销委托', [11], ['POST /api/v1/orders/cancel · trade。提交 market 和委托 id；撤销后释放未成交部分冻结资金。',
+    'POST /api/v1/orders/cancel-all · trade。market、symbol 均可选，都不传则一次撤销全部市场的全部未结束委托；响应 canceled 为被撤委托 ID。']],
+  ['trades', '成交记录与资金流水', [18], ['GET /api/v1/trades · read。market 可筛选 crypto_spot、crypto_futures、ashare 或 usstock。',
+    'GET /api/v1/ledger · read。最近 200 条资金变动（签到、划转、手续费、换汇费、资金费、盈亏、保证金）；market 另可为 wallet。']],
+  ['checkin-watch', '签到与自选', [], ['POST /api/v1/checkin · trade。每天一次，本周第 1–7 次依次奖励 20–50 USD 到钱包，每周一重置；响应 reward 为本次奖励。',
+    'POST /api/v1/ashare/watch · trade。codes 为 sh/sz + 6 位数字的数组（最多 50 个），整体替换 A 股自选。']],
   ['transfer', '账户划转', [6, 13, 14, 16], [
     'POST /api/v1/transfer · trade。from、to 为 wallet / spot / futures / ashare / usstock，amount 使用来源账户的单位。',
     'USD、USDT 与美股账户按 1:1；涉及 A 股 CNY 时按服务端汇率换算，换汇费 0.2%，人民币需先划到美股账户换成美元才能买美股。响应含 rate、rateTime、fee、received。',
   ]],
   ['futures', '合约管理', [19, 21, 22], [
-    'POST /api/v1/futures/leverage、/tpsl、/close · trade。设置杠杆、仓位止盈止损与平仓。',
-    'leverage 提交 symbol、leverage；tpsl 提交 symbol、tp、sl；close 提交 symbol、type、clientId（限价另含 price）。',
+    'POST /api/v1/futures/leverage、/tpsl、/close、/margin · trade。设置杠杆、仓位止盈止损、平仓与逐仓保证金。',
+    'leverage 提交 symbol、leverage；tpsl 提交 symbol、tp、sl；close 提交 symbol、type、clientId（限价另含 price）；margin 提交 symbol、action（add / remove）、amount。',
   ]],
 ];
 for (const [id, title, indices, paragraphs] of groups) {
@@ -107,7 +111,7 @@ for (const [id, title, indices, paragraphs] of groups) {
   for (const index of indices) sample(node, allExamples[index]);
 }
 const agent = section('agent', 'AI Agent 示例', [
-  'Python 示例每 60 秒查询余额和报价，余额满足条件时提交一次模拟买单。先在网站签到并划入现货账户。',
+  'Python 示例每 60 秒查询余额和报价，余额满足条件时提交一次模拟买单。先签到（网页或 POST /api/v1/checkin）并划入现货账户。',
   '仅需安装 requests；os、time、uuid 为 Python 标准库。将密钥放入环境变量 GAME_API_KEY。',
   '此示例演示调用流程，仅供教学练习。运行前按自己的练习目标调整判断与下单条件。',
 ]);

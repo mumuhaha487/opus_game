@@ -147,7 +147,7 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
     const preview = el('textarea', '', 'k-prompt'); preview.readOnly = true; preview.setAttribute('aria-label', 'AI 提示词');
     const prompt = mode => generatePrompt(current, { mode, secret });
     const update = () => { preview.value = prompt('environment'); };
-    if (current.scopes.includes('trade')) resultBox.append(el('p', 'AI 将按你的目标实时自主交易，不逐笔等你确认；提示词已写入以你利益为先的风控原则，你也可以在对话里给它更严格的规则。', 'k-status'));
+    if (current.scopes.includes('trade')) resultBox.append(el('p', '这把密钥能做网页上的全部交易操作。AI 收到你的指令后实时直接执行，下单前后都不再找你确认，做完立即汇报。', 'k-status'));
     resultBox.append(el('h3', 'AI 提示词'), preview); update();
     const actions = el('div', '', 'k-actions');
     actions.append(btn('复制提示词（推荐：密钥放环境变量）', e => copy(prompt('environment'), e.currentTarget), 'k-primary'));
