@@ -83,24 +83,24 @@ export function parseDetails(data, date) {
   }).filter(event => parse(event.volume) > 0n);
 }
 export function parseTencentMinutes(payload, code) {
+  // 撮合只使用本分钟确实成交过的单个价格，不能把上一分钟收盘价算作本分钟高低价。
+  // 客户端 parseTencentBars 用上一分钟收盘作 open 仅供画图；这里扩大价格区间会造成虚假成交。
   const data = payload?.data?.[code];
   if (payload?.code !== 0 || !data) throw Error('missing tencent minutes');
-  const days = Array.isArray(data.data) ? data.data : [{ ...data.data, prec: data.qt?.[code]?.[QUOTE_FIELDS.prevClose] }];
+  const days = Array.isArray(data.data) ? data.data : [data.data];
   return days.flatMap(day => {
     const date = String(day.date).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
     if (!Array.isArray(day.data) || !day.data.length) throw Error('missing minute rows');
-    let cumulative = 0n, previous = numeric(day.prec), previousTime = 0;
-    if (parse(previous) <= 0n) throw Error('missing previous close');
+    let cumulative = 0n, previousTime = 0;
     return day.data.map(row => {
       const [hhmm, price, lots] = row.split(/\s+/);
       if (!/^\d{4}$/.test(hhmm)) throw Error('invalid minute');
       const end = localTimestamp(date + ' ' + hhmm.slice(0, 2) + ':' + hhmm.slice(2));
-      const close = numeric(price), total = parse(numeric(lots)), open = previous;
+      const close = numeric(price), total = parse(numeric(lots));
       if (parse(close) <= 0n || total < cumulative || end <= previousTime) throw Error('invalid minute');
-      const volume = toStr(total - cumulative), rising = parse(close) >= parse(open);
-      previous = close; cumulative = total; previousTime = end;
-      return { t: end - 60000, end, candle: true, open, close,
-        high: rising ? close : open, low: rising ? open : close, volume };
+      const volume = toStr(total - cumulative);
+      cumulative = total; previousTime = end;
+      return { t: end - 60000, end, candle: true, open: close, close, high: close, low: close, volume };
     }).filter(event => parse(event.volume) > 0n);
   }).sort((left, right) => left.t - right.t);
 }
@@ -168,7 +168,7 @@ export class AshareClient {
       });
     } catch (error) {
       if (error.code === 'upstream_budget') throw error;
-      // 当日用 minute/query；跨日仍保留原五日分钟线结算范围，每日用各自 prec。
+      // 当日用 minute/query；跨日仍保留原五日分钟线结算范围，每日独立累计量。
       const today = new Date(this.now + 28800000).toISOString().slice(0, 10);
       const path = from && from < today ? 'day/query?code=' : 'minute/query?code=';
       return this.load(tencentPath + path + validateCode(code), 5,
