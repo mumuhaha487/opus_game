@@ -277,119 +277,7 @@ td { color: var(--text); border-bottom: 1px solid var(--line); }
   .header-actions { gap: 8px; }
   .bar { gap: 24px; }
 }
-@media (max-width: 767px), (max-height: 499px) {
-  body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
-  .trade-header { display: none; }
-  .desk { grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); grid-template-rows: 48px auto auto;
-    grid-template-areas: "bar bar" "form book" "orders orders"; }
-  .bar { height: 48px; padding: 0 12px; gap: 12px; flex-wrap: nowrap; }
-  .pair-button { font-size: 16px; } .market-tag, .bar .latest-price { display: none; }
-  .bar-stat { display: none; } .bar-stat.change { display: block; }
-  .bar-stat.change span { display: none; }
-  .bar-stat.change .change-absolute { display: none; }
-  .bar-mobile-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .bar-mobile-actions button { padding: 0; } .bar-mobile-actions .connection-dot { margin: 0; }
-  .desk > .aux, .desk > .chart { display: none; }
-  .panel { border-radius: 8px; }
-  .book-title, .book-ratio { display: none; }
-  .book-header, .book-row { grid-template-columns: 55% 45%; padding: 0 8px; }
-  .book-header { height: 24px; font-size: 11px; }
-  .book-header span:last-child, .book-row span:last-child { display: none; }
-  .book-row { height: 22px; font-size: 11px; }
-  .book-middle { font-size: 16px; height: 40px; padding: 0 8px; }
-  .book-middle small { font-size: 10px; }
-  .mobile-precision { display: flex; height: 28px; justify-content: flex-end; padding: 2px 8px; }
-  .form-top { display: none; }
-  .side-tabs { display: flex; height: 32px; margin: 8px; background: var(--input); border-radius: 8px; overflow: hidden; }
-  .side-tabs button { flex: 1; color: var(--muted); }
-  .side-tabs .buy.selected { background: var(--up-btn); color: #fff; }
-  .side-tabs .sell.selected { background: var(--down-btn); color: #fff; }
-  .mobile-order-type { display: block; height: 28px; width: calc(100% - 16px); margin: 8px; }
-  .spot-columns { display: block; padding: 0 8px 12px; }
-  .spot-column.mobile-hidden { display: none; }
-  .spot-column { gap: 12px; }
-  .futures-tags { padding: 8px; }
-  .futures-columns { display: block; padding: 0 8px 12px; }
-  .futures-account { display: none; }
-  .futures-actions { grid-template-columns: minmax(0, 1fr); }
-  .futures-actions > div { min-width: 0; }
-  .futures-actions button { font-size: 14px; }
-  .futures-cost, .futures-liq { font-size: 11px; overflow-wrap: anywhere; }
-  .futures-field-price { flex-wrap: wrap; height: auto; min-height: 40px; }
-  .futures-field-price .field-label { width: 100%; }
-  .futures-field-price input { flex: 1; width: 40px; }
-  .input-row { padding: 0 4px; gap: 2px; font-size: 12px; }
-  .input-row input, .quantity-unit { font-size: 12px; }
-  .stepper { display: block; padding: 0 2px; color: var(--muted); font-size: 14px; }
-  .field-label { font-size: 11px; }
-  .available { order: 5; font-size: 11px; flex-wrap: wrap; }
-  .maximum { order: 6; font-size: 11px; } .spot-column > button { order: 7; }
-  .orders { min-height: 180px; }
-  .orders-tabs { padding: 0 12px; gap: 20px; overflow: auto; }
-  .orders-tabs button { font-size: 12px; } .order-controls { display: none; }
-  .orders-body { min-height: 140px; }
-  .empty-message { margin-top: 32px; }
-  .mobile-nav { position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; display: flex;
-    height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
-    background: var(--panel); border-top: 1px solid var(--line); }
-  .mobile-nav a { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
-    color: var(--muted); gap: 2px; font-size: 11px; }
-  .mobile-nav .selected { color: var(--brand); }
-  .trade-footer { height: auto; min-height: 28px; padding: 4px 12px; font-size: 11px; }
-  .trade-footer > div:last-child { display: none; }
-  .market-page { padding: 12px; min-height: calc(100vh - 92px); }
-  .market-page .market-search-box { max-width: none; }
-  .market-page .market-search { height: 36px; }
-  .market-page .market-header { display: none; }
-  .market-page .market-row { height: 60px; grid-template-columns: 1fr 1fr 76px; gap: 12px; }
-  .market-page .market-name { display: block; position: relative; }
-  .market-page .market-name b { font-size: 16px; font-weight: 600; }
-  .market-page .market-name > .muted { font-size: 12px; }
-  .market-page .star { margin-right: 4px; }
-  .market-volume { display: block; font-size: 11px; color: var(--muted); }
-  .market-page .market-last { font-size: 16px; }
-  .market-page .market-change { width: 76px; height: 32px; line-height: 32px; border-radius: 6px;
-    background: var(--input); color: #fff; text-align: center; font-size: 14px; font-weight: 600; }
-  .market-page .market-change.up { background: var(--up-btn); }
-  .market-page .market-change.down { background: var(--down-btn); }
-  .market-page .market-row > span:nth-child(n+4), .market-actions { display: none; }
-  .assets-page { padding: 16px; }
-  .asset-accounts { grid-template-columns: 1fr; }
-  .day-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-  .toast { max-width: calc(100vw - 32px); white-space: normal; }
-  .market-picker { inset: 0; width: auto; height: auto; padding: 16px 16px 72px; }
-  .market-picker .market-search { height: 36px; }
-  .market-picker .market-body { max-height: calc(100vh - 180px); }
-  .market-picker .market-row { height: 40px; }
-  .mobile-chart .desk { display: flex; flex-direction: column; }
-  .mobile-chart .desk > .chart { order: 1; }
-  .mobile-chart .desk > .aux { order: 2; }
-  .mobile-chart .desk > .book { order: 3; }
-  .mobile-chart .desk > .chart { display: flex; height: calc(55vh + 40px); }
-  .mobile-chart .chart-canvas { height: 55vh; flex: none; }
-  .mobile-chart .chart-toolbar { padding: 0 4px; gap: 0; overflow-x: auto; }
-  .mobile-chart .chart-toolbar button { padding: 4px; }
-  .mobile-chart .bar { height: auto; min-height: 144px; display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 8px 12px; }
-  .mobile-chart .bar .pair-control { grid-column: 1 / 4; }
-  .mobile-chart .bar .bar-mobile-actions { grid-column: 4; grid-row: 1; }
-  .mobile-chart .bar-stat { display: block; width: auto; }
-  .mobile-chart .bar-stat span { display: block; }
-  .mobile-chart .bar .latest-price { display: none; }
-  .mobile-chart .desk > .form, .mobile-chart .orders { display: none; }
-  .mobile-chart .desk > .aux { display: block; }
-  .mobile-chart .aux-tabs { display: flex; height: 40px; align-items: center; gap: 24px; padding: 0 16px; }
-  .mobile-chart .aux .side { display: none; }
-  .mobile-chart .aux .tape { display: block; height: 360px; }
-  .mobile-chart .desk > .book { display: none; }
-  .mobile-chart.show-chart-book .desk > .book { display: block; }
-  .mobile-chart.show-chart-book .aux .tape { display: none; }
-  .mobile-chart .mobile-nav { display: none; }
-  .mobile-chart .chart-mobile-actions { display: flex; position: fixed; bottom: 0; z-index: 30;
-    left: 0; right: 0; height: 56px; background: var(--panel); padding: 8px; gap: 8px; }
-  .chart-mobile-actions button { flex: 1; }
-  .mobile-chart .chart-legend { font-size: 10px; left: 8px; }
-}
+
 
 /* DESIGN §4.2–4.3：外壳和公共组件；手机保留原交易布局。 */
 body { font-size: 13px; }
@@ -469,20 +357,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   flex-direction: column; justify-content: center; align-items: center; }
 .empty-dock .empty-message { margin: 0; }
 .empty-dock .empty-login { height: 44px; margin: 8px 0 0; }
-@media (max-width: 767px), (max-height: 499px) {
-  .top { gap: 8px; padding: 0 12px; }
-  .global-search { display: none; }
-  .top .header-actions { gap: 8px; font-size: 12px; }
-  .header-actions > a { display: none; }
-  main { padding: 8px; }
-  .desk { padding: 0; }
-  .desk > .book, .desk > .form, .desk > .bar { padding: 0; }
-  .chart { padding: 0; }
-  .trade-modal { margin: auto 0 0; width: 100%; max-height: 85vh; border-radius: 16px 16px 0 0;
-    animation: sheet-in 220ms; }
-  .trade-modal, .trade-modal.checkin-modal { width: 100%; max-width: none; }
-  @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
-}
+
 @media (prefers-reduced-motion: reduce) { .rail-indicator { transition: none; } .trade-modal { animation: none; } }
 
 /* DESIGN §4.4、§4.8：总览12列网格，资产4+2+2+2+2，原生余额与换算并列。 */
@@ -545,16 +420,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .asset-summary .asset-total { grid-column: span 12; } .asset-summary .asset-account { grid-column: span 3; }
   .global-search { width: 280px; }
 }
-@media (max-width: 767px), (max-height: 499px) {
-  .overview-page { display: flex; flex-direction: column; }
-  .overview-tickers { display: flex; overflow-x: auto; }
-  .ticker-card { min-width: 140px; }
-  .asset-summary { grid-template-columns: 1fr 1fr; }
-  .asset-summary .asset-total { grid-column: span 2; } .asset-summary .asset-account { grid-column: span 1; }
-  .header-actions .seg, .top .checkin-button, .wallet-chip > span { display: none; }
-  .mobile-account { min-height: 44px; }
-  .top .wallet-chip { height: 44px; }
-}
+
 
 /* DESIGN §4.5–4.6：A股视图，五档/逐笔、单列ticket；1024处图表/盘口分段。 */
 .index-cards { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
@@ -624,28 +490,7 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .compact-book > .chart > :not(.compact-chart-tabs) { visibility: hidden; }
   .compact-book > .book { display: block; grid-area: chart; margin-top: 36px; z-index: 1; }
 }
-@media (max-width: 767px), (max-height: 499px) {
-  #stock-page { display: flex; flex-direction: column; gap: 8px; }
-  .stock-head { height: auto; min-height: 80px; padding: 12px; gap: 12px; flex-wrap: wrap; }
-  .stock-statistics, .stock-head > .market-status, .stock-head > button { display: none; }
-  .stock-head .latest-price { font-size: 24px; }
-  .stock-identity .badge-circle, .stock-identity .star { display: none; }
-  .stock-head .stock-identity { flex: 1; }
-  #stock-page .chart { height: 284px; }
-  #stock-page .chart-canvas { height: 240px; flex: none; }
-  #stock-page .chart-toolbar { overflow: auto; }
-  .stock-mobile-actions { display: flex; position: fixed; left: 0; right: 0;
-    bottom: calc(56px + env(safe-area-inset-bottom)); background: var(--surface); z-index: 20; }
-  .stock-mobile-actions button { flex: 1; border-radius: 0; height: 48px; }
-  .stock-ticket { display: none; }
-  .stock-ticket.sheet-open { display: block; position: fixed; z-index: 50; bottom: 0; left: 0; right: 0;
-    border-radius: 16px 16px 0 0; max-height: 85vh; overflow: auto; padding: 16px; animation: sheet-in 220ms; }
-  .ticket-close { display: block; margin-bottom: 12px; }
-  .stock-book { padding: 0; }
-  .index-cards { display: flex; overflow-x: auto; }
-  .screener-controls > .seg { overflow: auto; width: 100%; }
-  .screener-controls .seg button { white-space: nowrap; }
-}
+
 
 /* DESIGN §4.6–4.7：加密单列ticket、盘口/成交共用实例及窄屏图表/盘口分段。 */
 .spot-columns { display: block; padding: 0; }
@@ -702,75 +547,8 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .futures-bar .bar-stat:nth-of-type(n+6) { display: none; }
 }
 @media (min-width: 1440px) { .futures-bar .bar-stat:nth-of-type(n+7) { display: none; } }
-/* DESIGN §8、§10.9：保留手机的交易双列与底栏，所有实际点击目标至少44×44。 */
-@media (max-width: 767px), (max-height: 499px) {
-  .top { display: flex; height: 56px; }
-  .asset-currency { display: flex; margin-top: 12px; }
-  .desk .pair-control .badge-circle, .desk .pair-subtitle, .desk .pair-control > .star { display: none; }
-  .desk .pair-button { font-size: 14px; }
-  .desk .bar { min-height: 56px; height: auto; gap: 4px; padding: 0 8px; }
-  .desk .bar-mobile-actions { gap: 0; }
-  .desk .bar-mobile-actions .connection-dot { display: none; }
-  .desk .bar-stat.change { display: none; }
-  .form-top { display: none; }
-  .mobile-order-type { min-height: 44px; }
-  .side-tabs { height: 50px; margin: 8px; }
-  .side-tabs button { height: 44px; }
-  .spot-columns, .futures-columns { padding: 0 8px 12px; }
-  .field .input-row { flex-wrap: wrap; height: auto; min-height: 88px; padding: 4px; gap: 4px; }
-  .field .input-row input { flex: 1; width: 40px; min-height: 44px; }
-  .field .input-row .stepper { width: 44px; height: 44px; }
-  .field .input-row .quantity-unit { min-width: 44px; min-height: 44px; }
-  .field .input-row .stepper:first-of-type { margin-left: auto; }
-  .spot-columns .ticket-summary { padding: 8px; margin: 8px 0; }
-  .ticket-summary > div { flex-wrap: wrap; gap: 4px; }
-  .ratio-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-  .ratio-buttons button { width: 100%; }
-  .book-switch { display: none; }
-  .book-title { height: auto; flex-wrap: wrap; padding: 0 4px; }
-  .book-title > span { width: 100%; }
-  .book-title select { width: 100%; }
-  .book-header, .book-row { padding: 0 4px; }
-  .book-row { height: 44px; font-size: 10px; }
-  .book-row span:last-of-type, .book-header span:last-child { display: none; }
-  .book-row, .book-header { grid-template-columns: 1fr 1fr; }
-  .book-row .depth { display: block; }
-  .market-page .market-row { height: 72px; }
-  .market-page .coin-chinese { display: block; }
-  .market-page .badge-circle { display: none; }
-  .market-page .market-name { display: block; }
-  .market-page .market-name .star { float: left; }
-  .market-page .market-change.up { color: var(--rise); background: var(--rise-bg); }
-  .market-page .market-change.down { color: var(--fall); background: var(--fall-bg); }
-  .stock-book-tabs { display: flex; }
-  .stock-book:not(.stock-book-trades) .stock-details { display: none; }
-  .stock-book-trades .stock-level, .stock-book-trades .book-middle { display: none; }
-  .stock-book-trades > .panel-title { display: none; }
-  .stock-ticket .field .input-row { min-height: 44px; flex-wrap: nowrap; }
-  .stock-ticket .field input { min-height: 44px; }
-  .stock-ticket .quick-ratios { display: grid; grid-template-columns: repeat(4,1fr); }
-  button, a[role=link], a[href], select, summary, input:not([type=hidden]) { min-width: 44px; min-height: 44px; }
-  a[href] { display: inline-flex; align-items: center; }
-  .mobile-nav a { display: flex; }
-  .ranking-list a { display: grid; height: 48px; }
-  .ticker-card { display: block !important; }
-  .input-row .stepper, .field .stepper { min-width: 44px; min-height: 44px; }
-  .stock-level { height: 44px; }
-  .seg { overflow-x: auto; }
-  .seg button { min-height: 44px; }
-  .chart-toolbar { height: 44px; }
-  .chart-toolbar .seg { flex: none; }
-  .stock-ticket .ticket-sides { height: 50px; }
-  .stock-dock .seg { max-width: 100%; }
-  .stock-head .stock-price small { display: none; }
-  .stock-watch, .screener-controls { min-width: 0; }
-  .trade-modal .modal-header button { min-width: 44px; }
-  .trade-modal .consent-label input { flex: none; margin: 0; }
-  .trade-modal .day-cards { gap: 4px; }
-  .day-card { padding: 8px 4px; }
-  .day-card b { font-size: 12px; }
-  .stock-mobile-actions button { min-height: 48px; }
-}
+
+
 /* 第三轮评审：签到金额、紧凑统计与独立登录标签。 */
 .rail-login { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; font-size: 11px; }
 .rail-checkin { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; }
@@ -786,3 +564,301 @@ td { height: 44px; } tbody tr:hover { background: var(--surface-2); }
   .stock-head .stock-price small { grid-column: span 2; }
 }
 .overview-status > p:last-child { margin-top: auto; }
+
+/* PHONE — SPEC-MOBILE */
+@media (max-width: 767px), (max-height: 499px) {
+  body { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  main { padding: 8px; }
+  .panel { padding: 12px; border-radius: 12px; }
+  .primary, .buy-button, .sell-button { height: 44px; font-size: 15px; }
+  .secondary { height: 36px; }
+  .seg { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; }
+  .seg button { flex-shrink: 0; height: 30px; white-space: nowrap; }
+  .top { display: flex; height: 56px; padding: 0 12px; gap: 8px; }
+  .global-search, .header-actions .seg, .top .checkin-button, .wallet-chip > span { display: none; }
+  .top .header-actions { gap: 8px; font-size: 13px; min-width: 0; }
+  .header-actions > a:not(.wallet-chip) { display: none; }
+  .top .wallet-chip { height: 32px; padding: 0 10px; font-size: 13px; }
+  .mobile-account { height: 32px; max-width: 96px; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-nav { position: fixed; z-index: 30; bottom: 0; left: 0; right: 0; display: flex;
+    height: calc(56px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
+    background: var(--panel); border-top: 1px solid var(--line); }
+  .mobile-nav a { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center;
+    color: var(--muted); gap: 2px; font-size: 11px; }
+  .mobile-nav .selected { color: var(--brand); }
+  .trade-footer { height: auto; min-height: 28px; padding: 4px 12px; font-size: 11px; }
+  .trade-footer > div:last-child { display: none; }
+
+  /* §3：卡片带与总览。 */
+  .overview-page { display: flex; flex-direction: column; gap: 8px; padding: 0 4px; }
+  .overview-tickers, .index-cards { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory;
+    scrollbar-width: none; mask-image: linear-gradient(to right, #000 88%, transparent); }
+  .overview-tickers::-webkit-scrollbar, .index-cards::-webkit-scrollbar { display: none; }
+  .ticker-card { display: grid; flex: 0 0 132px; width: 132px; height: 88px; padding: 10px;
+    grid-template-columns: minmax(0,1fr) 48px; grid-template-rows: 18px 28px 20px;
+    border-radius: 10px; background: var(--surface-2); scroll-snap-align: start; }
+  .ticker-card > span:first-child, .ticker-card b { grid-column: span 2; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .ticker-card > span:first-child { font-size: 12px; color: var(--muted); }
+  .ticker-card b { font-size: 16px; font-weight: 600; margin: 0; }
+  .ticker-card .chg { font-size: 12px; padding: 0; background: transparent; align-self: center; }
+  .ticker-card .spark { width: 48px; height: 20px; margin: 0; }
+  .checkin-squares { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); width: 100%; gap: 6px; }
+  .checkin-day span { width: 100%; height: auto; max-width: 40px; aspect-ratio: 1; }
+  .checkin-day small { font-size: 11px; }
+  .wallet-statistics { gap: 12px; }
+  .wallet-total { font-size: 24px; }
+  .wallet-statistics > div { min-width: 0; }
+  .wallet-statistics span { font-size: 12px; }
+  .wallet-statistics b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wallet-statistics small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .overview-status > p:last-child, .overview-checkin > button { margin-top: 10px; }
+  .ranking-list a { grid-template-columns: minmax(0,1fr) auto 72px; height: 52px; }
+  .ranking-list a > span:first-child { font-size: 14px; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .ranking-list small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .ranking-list a > span:nth-child(2) { font-size: 14px; text-align: right; }
+  .ranking-list .chg { width: 72px; height: 28px; padding: 0; line-height: 28px; text-align: center; font-size: 12px; }
+
+  /* §4：加密行情三列，第二行复用 market-volume。 */
+  .market-page { margin: 0 4px; padding: 12px; min-height: calc(100vh - 112px); }
+  .market-page .market-search-box { max-width: none; }
+  .market-page .market-search { height: 36px; }
+  .market-page .market-header { display: none; }
+  .market-page .market-row { height: 64px; grid-template-columns: minmax(0,1fr) auto 80px; gap: 12px; }
+  .market-page .market-name { display: block; min-width: 0; white-space: nowrap; }
+  .market-page .market-name b { font-size: 15px; font-weight: 600; }
+  .market-page .market-name > .muted { font-size: 12px; }
+  .market-page .market-name .star { float: left; height: 28px; margin-right: 4px; }
+  .market-page .badge-circle, .market-page .coin-chinese, .market-page .perp-tag { display: none; }
+  .market-page .market-volume { display: block; clear: both; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); }
+  .market-page .market-last { font-size: 15px; }
+  .market-page .market-change { width: 80px; height: 32px; line-height: 32px; padding: 0;
+    font-size: 13px; text-align: center; }
+  .market-page .market-row > span:nth-child(n+4), .market-page .market-actions { display: none; }
+
+  /* §5：现货/合约双列与单行输入。 */
+  .desk { padding: 0; gap: 8px; grid-template-columns: minmax(0,56fr) minmax(0,44fr);
+    grid-template-rows: 52px auto auto; grid-template-areas: 'bar bar' 'form book' 'orders orders'; }
+  .desk > .bar, .desk > .book, .desk > .form, .chart { padding: 0; }
+  .desk > .chart, .desk > .aux { display: none; }
+  .desk .bar { height: 52px; min-height: 0; padding: 0 8px; gap: 6px; flex-wrap: nowrap; }
+  .desk .pair-control { gap: 4px; min-width: 0; flex-shrink: 1; }
+  .desk .pair-control > div { min-width: 0; }
+  .desk .pair-button { font-size: 16px; min-width: 0; max-width: 100%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .desk .pair-control .badge-circle, .desk .pair-subtitle, .desk .pair-control > .star { display: none; }
+  .desk .market-tag, .desk .bar > .latest-price, .desk .bar-stat { display: none; }
+  .desk .bar-stat.change { display: block; }
+  .desk .bar-stat.change span, .desk .change-absolute { display: none; }
+  .desk .bar-stat.change .chg { font-size: 12px; padding: 3px 6px; }
+  .bar-mobile-actions { margin-left: auto; display: flex; align-items: center; gap: 0; flex: none; }
+  .bar-mobile-actions button { width: 40px; height: 40px; padding: 0; }
+  .bar-mobile-actions .connection-dot { display: none; }
+  .form-top { display: none; }
+  .side-tabs, .ticket-sides { height: 36px; margin: 8px; padding: 3px; }
+  .side-tabs button, .ticket-sides button { height: 30px; font-size: 13px; }
+  .mobile-order-type { display: block; height: 36px; font-size: 13px; width: calc(100% - 16px); margin: 8px; }
+  .spot-columns, .futures-columns { display: block; padding: 0 8px 12px; }
+  .spot-column { gap: 0; }
+  .futures-tags { display: flex; gap: 8px; padding: 0 8px; }
+  .futures-tags button { flex: 1; height: 32px; font-size: 13px; }
+  .futures-account { display: none; }
+  .futures-actions > div { min-width: 0; }
+  .futures-actions button, .futures-login > .primary, .spot-column > button:not(.register-link) { height: 44px; font-size: 15px; }
+  .register-link { min-height: 28px; }
+  .field, .spot-column .field { position: relative; margin: 8px 0; }
+  .field > label { font-size: 12px; margin-bottom: 6px; padding-right: 52px; }
+  .field .input-row { display: grid; grid-template-columns: 32px minmax(0,1fr) 32px; height: 40px;
+    min-height: 0; padding: 3px; gap: 2px; flex-wrap: nowrap; }
+  .field .input-row input { grid-column: 2; grid-row: 1; width: 100%; height: 32px; min-height: 0;
+    font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+  .field .input-row input::placeholder { font-size: 11px; }
+  .field .input-row .stepper { width: 32px; height: 32px; font-size: 14px; }
+  .field .input-row .stepper:first-of-type { grid-column: 1; grid-row: 1; }
+  .field .input-row .stepper:last-of-type { grid-column: 3; grid-row: 1; }
+  .field .field-unit, .field .quantity-unit { position: absolute; right: 0; top: 0; font-size: 12px; }
+  .field .quantity-unit { height: 24px; background: transparent; padding: 0 2px; max-width: 64px; }
+  .futures-field-tp > label, .futures-field-sl > label { white-space: normal; }
+  .quick-ratios { margin: 12px 0; overflow: visible; }
+  .ratio-buttons, .stock-ticket .quick-ratios { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+  .ratio-buttons button, .stock-ticket .quick-ratios button { width: 100%; height: 28px; font-size: 12px; }
+  .ticket-summary, .spot-columns .ticket-summary { padding: 8px; margin: 8px 0; font-size: 12px; }
+  .ticket-summary > div, .ticket-summary .available { display: flex; justify-content: space-between; gap: 4px; flex-wrap: nowrap; }
+  .ticket-summary b, .ticket-summary .available > span:last-child, .ticket-summary .maximum { min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .ticket-summary > div > span:first-child { flex: none; }
+  .ticket-summary .maximum { margin: 0; }
+  .futures-checkbox { height: 32px; font-size: 13px; gap: 6px; }
+  .futures-checkbox input { appearance: none; width: 18px; height: 18px; margin: 0; flex: none;
+    border: 1.5px solid var(--line-2); border-radius: 4px; background: transparent; }
+  .futures-checkbox input:checked { border-color: var(--gold); background: var(--gold); position: relative; }
+  .futures-checkbox input:checked::after { content: ''; position: absolute; width: 8px; height: 4px;
+    left: 3px; top: 4px; border-left: 2px solid var(--gold-ink); border-bottom: 2px solid var(--gold-ink);
+    transform: rotate(-45deg); }
+  .ticket-balance { padding: 8px; margin-top: 8px; gap: 4px; font-size: 12px; flex-wrap: nowrap; }
+  .ticket-balance span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ticket-balance button { height: 32px; padding: 0; font-size: 12px; margin-left: auto; }
+  .book-title, .book-ratio, .book-switch { display: none; }
+  .book-header, .book-row { grid-template-columns: 1fr 1fr; padding: 0 4px; }
+  .book-header { height: 24px; font-size: 11px; }
+  .book-header span:last-child, .book-row span:last-of-type { display: none; }
+  .book-row { height: 22px; font-size: 12px; }
+  .book-middle { font-size: 18px; height: auto; min-height: 40px; padding: 4px; display: block; }
+  .book-middle small { display: block; font-size: 11px; }
+  .book-middle small::before { content: '标记 '; }
+  .mobile-precision { display: flex; justify-content: flex-end; height: 32px; padding: 2px 4px; }
+  .mobile-precision select { height: 28px; font-size: 12px; }
+  .orders, .empty-dock.orders { height: auto; min-height: 0; padding: 0; }
+  .orders-tabs { height: 40px; padding: 0 12px; gap: 20px; overflow-x: auto; flex-wrap: nowrap; }
+  .orders-tabs button { font-size: 13px; flex: none; }
+  .order-controls { display: none; }
+  .orders-body, .empty-dock .orders-body { min-height: 0; height: auto; }
+  .empty-dock .orders-body { padding: 24px 12px; }
+  .empty-message { margin: 24px 0; }
+  .empty-dock .empty-message { margin: 0; }
+
+  /* §6：保留图表模式，用 sticky 固定右侧控件，不改现有 DOM。 */
+  .mobile-chart .desk { display: flex; flex-direction: column; }
+  .mobile-chart .desk > .chart { order: 1; display: flex; height: calc(55vh + 40px); }
+  .mobile-chart .chart-canvas { height: 55vh; flex: none; }
+  .mobile-chart .desk > .aux { order: 2; display: block; }
+  .mobile-chart .desk > .book { order: 3; display: none; }
+  .mobile-chart .desk > .form, .mobile-chart .orders, .mobile-chart .mobile-nav { display: none; }
+  .mobile-chart .desk .bar { height: auto; display: grid; padding: 8px 12px; gap: 8px;
+    grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .mobile-chart .desk .bar .pair-control { grid-column: 1; grid-row: 1; }
+  .mobile-chart .bar-mobile-actions { grid-column: 2; grid-row: 1; justify-self: end; }
+  .mobile-chart .pair-control > button { height: 28px; padding: 0; font-size: 12px; flex: none; }
+  .mobile-chart .desk .bar > .latest-price { display: block; grid-column: 1; grid-row: 2; font-size: 24px; }
+  .mobile-chart .desk .bar-stat.change { grid-column: 2; grid-row: 2; justify-self: end; }
+  .mobile-chart .desk .bar-stat:nth-of-type(n+4):nth-of-type(-n+7) { display: block; min-width: 0; }
+  .mobile-chart .desk .bar-stat:nth-of-type(n+8) { display: none; }
+  .mobile-chart .bar-stat:not(.change) span { display: none; }
+  .mobile-chart .bar-stat:not(.change)::before { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .mobile-chart .bar-stat:nth-of-type(4)::before { content: '24h高'; }
+  .mobile-chart .bar-stat:nth-of-type(5)::before { content: '24h低'; }
+  .mobile-chart .bar-stat:nth-of-type(6)::before { content: '24h量'; }
+  .mobile-chart .bar-stat:nth-of-type(7)::before { content: '24h额'; }
+  .mobile-chart .bar-stat:not(.change) b { font-size: 12px; }
+  .chart-toolbar { display: flex; height: 40px; padding: 0; gap: 0; overflow-x: auto; scrollbar-width: none;
+    position: relative; isolation: isolate; }
+  .chart-toolbar::-webkit-scrollbar { display: none; }
+  .chart-toolbar > button, .chart-toolbar > .seg { flex: none; }
+  .chart-toolbar button { height: 36px; padding: 0 8px; font-size: 13px; }
+  .chart-toolbar > select { position: sticky; right: 80px; z-index: 2; flex: 0 0 auto;
+    margin-left: auto;
+    height: 36px; width: auto; min-width: 68px; padding: 0 16px 0 8px; border-radius: 0;
+    background-color: var(--surface); border-left: 1px solid var(--line-2);
+    box-shadow: -16px 0 12px -4px var(--surface); }
+  .chart-toolbar > .indicator-menu, #stock-page .chart-toolbar > button:not(.fullscreen-button) {
+    position: sticky; right: 36px; z-index: 3; flex: 0 0 44px; margin: 0; background: var(--surface); }
+  .chart-toolbar summary { height: 36px; padding: 8px; font-size: 13px; }
+  .chart-toolbar > .fullscreen-button { position: sticky; right: 0; z-index: 3; flex: 0 0 36px; background: var(--surface); }
+  .chart-toolbar .indicator-choices { position: fixed; top: auto; right: 48px; }
+  .mobile-chart .aux-tabs { display: flex; height: 40px; align-items: center; gap: 24px; padding: 0 16px; }
+  .mobile-chart .aux .side { display: none; }
+  .mobile-chart .aux .tape { display: block; height: 360px; }
+  .mobile-chart .tape-tabs { display: none; }
+  .mobile-chart.show-chart-book .desk > .book { display: block; }
+  .mobile-chart.show-chart-book .aux .tape { display: none; }
+  .mobile-chart .chart-mobile-actions { display: flex; position: fixed; bottom: 0; z-index: 30; left: 0; right: 0;
+    height: calc(60px + env(safe-area-inset-bottom)); background: var(--panel); gap: 8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+  .chart-mobile-actions button { flex: 1; height: 44px; }
+  .chart-legend { font-size: 11px; left: 8px; }
+
+  /* §7：A 股三列列表与个股。热门表的代码移到名称下方，保持 JS 不变。 */
+  .ashare-page { padding: 0 4px; }
+  .ashare-status { flex-wrap: wrap; gap: 8px; font-size: 12px; }
+  .ashare-status small { font-size: 11px; }
+  .screener-controls { min-width: 0; gap: 8px; }
+  .screener-controls > .seg { width: 100%; height: 36px; }
+  .stock-search { min-width: 0; flex: 1; }
+  .stock-search input { width: 100%; }
+  .stock-search > div { width: 100%; }
+  .ashare-page .table-scroll { overflow: visible; }
+  .ashare-page table, .ashare-page tbody { display: block; }
+  .ashare-page thead { display: none; }
+  .ashare-page tr { display: grid; grid-template-columns: minmax(0,1fr) auto 80px; gap: 8px; align-items: center;
+    height: 56px; border-bottom: 1px solid var(--line); }
+  .ashare-page td { height: auto; padding: 0; border: 0; min-width: 0; }
+  .ashare-page td:first-child, .ashare-page td:nth-child(n+5) { display: none; }
+  .ashare-page td:nth-child(2) { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ashare-page td small { font-size: 11px; }
+  .ashare-page td:nth-child(3) { font-size: 14px; text-align: right; }
+  .ashare-page td .chg { display: block; width: 80px; height: 28px; padding: 0; line-height: 28px; text-align: center; }
+  .stock-watch tr { position: relative; }
+  .stock-watch td:nth-child(2) { grid-column: 1; grid-row: 1; padding-bottom: 16px; }
+  .stock-watch td:first-child { display: block; grid-column: 1; grid-row: 1; align-self: center;
+    padding-top: 22px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  .stock-watch td:nth-child(3) { grid-column: 2; grid-row: 1; }
+  .stock-watch td:nth-child(4) { grid-column: 3; grid-row: 1; }
+  #stock-page { display: flex; flex-direction: column; gap: 8px; padding-bottom: 48px; }
+  .stock-head { height: auto; min-height: 80px; padding: 12px; gap: 8px; flex-wrap: nowrap; }
+  .stock-statistics, .stock-head > .market-status, .stock-head > button { display: none; }
+  .stock-identity .badge-circle, .stock-identity .star { display: none; }
+  .stock-head .stock-identity { flex: 1; min-width: 0; }
+  .stock-identity > div { min-width: 0; }
+  .stock-identity b { display: block; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stock-identity small { font-size: 12px; }
+  .stock-price { display: flex; flex-direction: column; align-items: flex-end; }
+  .stock-head .latest-price { display: block; font-size: 22px; }
+  .stock-price .chg { font-size: 12px; }
+  .stock-head .stock-price > small { display: none; }
+  #stock-page .chart { height: 280px; }
+  #stock-page .chart-canvas { height: 240px; flex: none; }
+  #stock-page .chart-toolbar > .seg { max-width: none; overflow: visible; }
+  .stock-book { padding: 0; }
+  .stock-book-tabs { display: flex; height: 36px; margin: 8px; }
+  .stock-book > .panel-title { display: none; }
+  .stock-book:not(.stock-book-trades) .stock-details { display: none; }
+  .stock-book-trades .stock-level, .stock-book-trades .book-middle { display: none; }
+  .stock-level { height: 32px; font-size: 13px; grid-template-columns: 48px minmax(0,1fr) 64px; }
+  .stock-dock { overflow: hidden; }
+  .stock-dock .seg { height: 40px; flex: none; }
+  .stock-dock .seg button { height: 34px; font-size: 13px; white-space: nowrap; }
+  .stock-dock .seg button small { font-size: 11px; }
+  .stock-mobile-actions { display: flex; position: fixed; left: 0; right: 0;
+    bottom: calc(56px + env(safe-area-inset-bottom)); background: var(--surface); z-index: 20; }
+  .stock-mobile-actions button { flex: 1; border-radius: 0; height: 48px; }
+  .stock-ticket { display: none; }
+  .stock-ticket.sheet-open { display: block; position: fixed; z-index: 50; bottom: 0; left: 0; right: 0;
+    border-radius: 16px 16px 0 0; max-height: 85vh; overflow: auto; padding: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom)); animation: sheet-in 220ms; }
+  .ticket-close { display: block; height: 28px; margin-bottom: 12px; }
+  .stock-ticket > small { font-size: 11px; }
+
+  /* §8–9：账户、表格和底部抽屉。 */
+  .assets-page { margin: 0 4px; padding: 0; }
+  .asset-summary { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .asset-summary .asset-total { grid-column: span 2; }
+  .asset-summary .asset-account { grid-column: span 1; padding: 12px; }
+  .asset-summary .panel-title { flex-wrap: wrap; height: auto; min-height: 32px; gap: 4px 8px; }
+  .asset-account small { font-size: 11px; }
+  .asset-account b { font-size: 14px; }
+  .asset-account .card-actions { gap: 8px; }
+  .asset-account .secondary { height: 36px; padding: 0 10px; }
+  .asset-currency { display: inline-flex; width: auto; height: 36px; margin-top: 12px; }
+  .asset-list .seg { height: 36px; }
+  .asset-list .seg button { padding: 0 8px; }
+  .asset-list .table-scroll { mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent); }
+  .asset-list th:first-child, .asset-list td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  .trade-modal, .trade-modal.checkin-modal { margin: auto 0 0; width: 100%; max-width: none; max-height: 85vh;
+    border-radius: 16px 16px 0 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); animation: sheet-in 220ms; }
+  .trade-modal .modal-header button { width: 44px; height: 44px; }
+  .trade-modal .consent-label input { flex: none; margin: 0; }
+  .trade-modal small { font-size: 11px; }
+  .day-cards { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; }
+  .day-card { padding: 8px 4px; }
+  .day-card b { font-size: 12px; }
+  .toast { max-width: calc(100vw - 32px); white-space: normal; }
+  .market-picker { inset: 0; width: auto; height: auto; padding: 16px 16px calc(72px + env(safe-area-inset-bottom)); }
+  .market-picker .market-search { height: 36px; }
+  .market-picker .market-body { max-height: calc(100vh - 180px); }
+  .market-picker .market-row { height: 40px; }
+  @keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .trade-modal, .stock-ticket { animation: none; } }
+}

@@ -46,7 +46,8 @@ export class AshareChart {
         : { upColor: '#E5484D', downColor: '#22B573', wickUpColor: '#E5484D', wickDownColor: '#22B573', borderVisible: false });
     this.average = this.chart.addSeries(library.LineSeries, { color: '#5B8DEF', lineWidth: 1,
       priceLineVisible: false, lastValueVisible: false });
-    this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' } });
+    this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' },
+      lastValueVisible: false, priceLineVisible: false });
     this.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     this.main.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.2 } });
     this.series = [this.main, this.average, this.volume];

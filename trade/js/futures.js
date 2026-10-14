@@ -27,6 +27,7 @@ const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_market', '条�
 export class Futures {
   constructor(panel, feed, api, modals) {
     Object.assign(this, { feed, api, modals, type: 'limit', fields: {}, side: 'buy' });
+    window.addEventListener('hashchange', () => { this.prefillKey = null; });
     const sideTabs = segment([['buy', '开多'], ['sell', '开空']], side => { this.side = side; this.render(); });
     sideTabs.classList.add('ticket-sides'); panel.append(sideTabs);
     const tags = element('div', '', 'futures-tags'); this.leverageButton = button('20x', () => modals.leverage(feed));
@@ -117,9 +118,16 @@ export class Futures {
     return unitCost ? Math.floor(Math.min(Number(this.api.state?.futures.wallet || 0) / unitCost,
       Number(this.feed.spec?.risk_limit_base || 0) / this.orderPrice()) / tick) * tick : 0;
   }
-  setType(type) { this.type = type; this.select.value = type; this.feed.dirty = true; }
+  setType(type) { this.type = type; this.select.value = type; this.prefillKey = null; this.feed.dirty = true; }
+  prefillPrice() {
+    const key = this.feed.symbol + ':' + this.type, latest = this.feed.tickers.futures.get(this.feed.symbol)?.last;
+    if (this.type !== 'limit' || this.prefillKey === key || !this.feed.spec || !(Number(latest) > 0)) return;
+    if (!this.fields.price.input.value) this.fields.price.input.value = Number(latest).toFixed(this.feed.precision());
+    this.prefillKey = key;
+  }
   setPrice(value) { this.setType('limit'); this.fields.price.input.value = value; }
   render() {
+    this.prefillPrice();
     const coin = this.feed.symbol.split('_')[0], logged = this.api.logged(), wallet = this.api.state?.futures.wallet || '0';
     const leverage = this.leverage(); this.leverageButton.textContent = leverage + 'x';
     [...this.tabs.children].forEach((control, index) => control.classList.toggle('selected', TYPES[index][0] === this.type));

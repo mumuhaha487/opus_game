@@ -98,7 +98,7 @@ export class MarketList {
       const amount = ticker?.quote_volume || ticker?.volume_24h_quote;
       change.textContent = this.metric === 'volume' && !this.full ? large(amount) : percent(ticker?.change_percentage);
       change.className = 'market-change chg ' + direction(ticker?.change_percentage);
-      volume.textContent = '成交额 ' + large(amount);
+      volume.textContent = this.full && this.feed.mobile() ? market.name + ' · ' + large(amount) : '成交额 ' + large(amount);
       extra[0].textContent = price(ticker?.high_24h, digits); extra[1].textContent = price(ticker?.low_24h, digits);
       extra[2].textContent = large(amount); this.body.append(row);
     }

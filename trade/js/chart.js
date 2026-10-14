@@ -80,7 +80,8 @@ export class Chart {
       { ...options, priceFormat: specification });
     this.series.push(this.main); this.extras = [];
     if (this.indicators.includes('VOL')) {
-      this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' } });
+      this.volume = this.chart.addSeries(library.HistogramSeries, { priceScaleId: 'vol', priceFormat: { type: 'volume' },
+        lastValueVisible: false, priceLineVisible: false });
       this.volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } }); this.series.push(this.volume);
     } else this.volume = null;
     this.buildIndicators();

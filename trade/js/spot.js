@@ -7,6 +7,7 @@ const TYPES = [['limit', '限价'], ['market', '市价'], ['stop_limit', '条件
 export class Spot {
   constructor(panel, feed, api, modals) {
     this.feed = feed; this.api = api; this.modals = modals; this.type = 'limit'; this.side = 'buy'; this.columns = {};
+    window.addEventListener('hashchange', () => { this.prefillKey = null; });
     const top = element('div', '', 'form-top'), tabs = element('div', '', 'order-types'); this.tabs = new Map();
     for (const [type, label] of TYPES) {
       const control = button(label, () => this.setType(type)); tabs.append(control); this.tabs.set(type, control);
@@ -85,7 +86,17 @@ export class Spot {
     const latest = this.feed.tickers.spot.get(this.feed.symbol)?.last;
     return this.type === 'market' ? latest || '0' : this.columns[side].limit.input.value;
   }
-  setType(type) { this.type = type; this.typeSelect.value = type; this.feed.dirty = true; }
+  setType(type) {
+    this.type = type; this.typeSelect.value = type; this.prefillKey = null; this.feed.dirty = true;
+  }
+  prefillPrice() {
+    const key = this.feed.symbol + ':' + this.type, latest = this.feed.tickers.spot.get(this.feed.symbol)?.last;
+    if (this.type === 'market' || this.prefillKey === key || !this.feed.spec || !(Number(latest) > 0)) return;
+    for (const column of Object.values(this.columns)) {
+      if (!column.limit.input.value) column.limit.input.value = Number(latest).toFixed(this.feed.precision());
+    }
+    this.prefillKey = key;
+  }
   setPrice(value) {
     this.setType('limit');
     for (const side of ['buy', 'sell']) { this.columns[side].limit.input.value = value; this.linked(side, 'price'); }
@@ -100,6 +111,7 @@ export class Spot {
     this.feed.dirty = true;
   }
   render() {
+    this.prefillPrice();
     const coin = this.feed.symbol.split('_')[0], logged = this.api.logged();
     for (const [type, control] of this.tabs) control.classList.toggle('selected', this.type === type);
     [...this.sideTabs.children].forEach(control => control.classList.toggle('selected', control.classList.contains(this.side)));
