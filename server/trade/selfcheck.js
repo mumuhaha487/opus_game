@@ -3,7 +3,7 @@
 // 强平价与合约保证金使用生产函数核对，全部检查保持纯函数。
 import * as decimal from './decimal.js';
 import { defaultState, transfer } from './state.js';
-import { checkin, nextStreak, REWARDS } from './checkin.js';
+import { checkin, weekKey, REWARDS } from './checkin.js';
 import { FEE_RATE } from './spot.js';
 import { liquidation, removable, MAKER, TAKER } from './futures.js';
 const assert = (condition, label) => { if (!condition) throw new Error('trade selfcheck: ' + label); };
@@ -45,12 +45,15 @@ export function runSelfcheck() {
   assert(removable(position, parse('100')) === parse('10'), 'removable margin');
   assert(toStr(debit(mul(parse('100'), MAKER, 'ceil'))) === '0.02', 'futures maker');
   assert(toStr(debit(mul(parse('100'), TAKER, 'ceil'))) === '0.05', 'futures taker');
-  const now = Date.parse('2026-12-31T15:59:00Z'), state = defaultState(now);
-  assert(checkin(state, now) === REWARDS[0], 'first reward');
-  assert(nextStreak(state.checkin, now + 60000) === 2, 'CST cross year');
-  assert(nextStreak(state.checkin, now + 2 * 86400000) === 1, 'missed day');
-  // PLATFORM §3：新奖励表逐日递增，第七天以后保持 50 USD。
-  for (let i = 1; i < 10; i++) assert(checkin(state, now + i * 86400000) === REWARDS[Math.min(i, 6)], 'reward cap');
+  // 每周循环：2026-12-31 23:59 北京时间是周四。本周第 n 次签到领第 n 档，不要求连续；周一重置。
+  const now = Date.parse('2026-12-31T15:59:00Z'), state = defaultState(now), day = 86400000;
+  assert(weekKey(now) === '2026-12-28' && weekKey(now + 60000) === '2026-12-28', 'CST week across the new year');
+  assert(checkin(state, now) === REWARDS[0], 'first check-in of the week');
+  assert(checkin(state, now + day) === REWARDS[1], 'second check-in (Fri)');
+  assert(checkin(state, now + 3 * day) === REWARDS[2], 'skipped Saturday still counts as the third (Sun)');
+  assert(checkin(state, now + 4 * day) === REWARDS[0], 'Monday resets the weekly cycle');
+  for (let i = 5; i < 11; i++) assert(checkin(state, now + i * day) === REWARDS[i - 4], 'weekly tiers rise to the cap');
+  assert(checkin(state, now + 11 * day) === REWARDS[0], 'next Monday resets again');
   // PLATFORM §2.2：生产划转核对 0.2% 费用、CNY floor 与往返资产守恒。
   const funds = defaultState(now); funds.wallet.usd = '10';
   const fx = { rate: '6.6944', rateTime: now };

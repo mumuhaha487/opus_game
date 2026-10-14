@@ -74,7 +74,7 @@ export async function handle(request, env) {
     const likeMatch = /^\/api\/like\/([a-z0-9-]{1,32})$/.exec(path);
     const liked = likeMatch && likeable(likeMatch[1]) ? likeMatch[1] : null;
     const trading = path.startsWith('/api/trade/');
-    const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/revoke': 'POST', '/api/keys/log': 'GET' };
+    const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/delete': 'POST', '/api/keys/revoke': 'POST', '/api/keys/log': 'GET' };
     const managingKeys = Object.hasOwn(keyMethods, path);
     const allow = trading ? method
       : managingKeys ? keyMethods[path] : game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;

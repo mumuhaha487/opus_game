@@ -239,6 +239,42 @@
   $('gd').addEventListener('click', e => { if (e.target === $('gd')) $('gd').close(); });
   $('gd').addEventListener('close', () => { for (const [id, list] of likeEls) likeEls.set(id, list.filter(x => x.btn.isConnected)); });
 
+  // ---------- nav highlight follows the section in view ----------
+  // 首页 = top doors; 游戏馆 = #games; 交易所 = #market preview. A section counts once its top passes
+  // just below the sticky header; at the very bottom the last section wins.
+  (function navSpy() {
+    const nav = document.querySelector('.site-nav'), bar = document.querySelector('.bar');
+    if (!nav) return;
+    const links = { home: nav.querySelector('a[href="#"]'), games: nav.querySelector('a[href="#games"]'),
+      market: nav.querySelector('a[href^="trade/"]') };
+    const sections = [['games', $('games')], ['market', $('market')]];
+    let current = '', queued = false;
+    function update() {
+      queued = false;
+      // Anchor jumps park a section scroll-margin-top below the viewport top (120px here), so the threshold
+      // is whichever is lower: just under the sticky bar, or the section's own scroll margin.
+      const barLine = (bar ? bar.getBoundingClientRect().bottom : 0) + 48;
+      const bottom = innerHeight + scrollY >= document.documentElement.scrollHeight - 4;
+      let active = 'home';
+      for (const [name, el] of sections) {
+        if (!el) continue;
+        const line = Math.max(barLine, (parseFloat(getComputedStyle(el).scrollMarginTop) || 0) + 8);
+        if (el.getBoundingClientRect().top <= line || (bottom && name === 'market')) active = name;
+      }
+      if (active === current) return;
+      current = active;
+      for (const [name, a] of Object.entries(links)) {
+        if (!a) continue;
+        if (name === active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+      }
+    }
+    const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(update); } };
+    addEventListener('scroll', schedule, { passive: true });
+    addEventListener('resize', schedule);
+    addEventListener('hashchange', schedule);
+    update();
+  })();
+
   // ---------- boot ----------
   $('door-count').textContent = GAMES.length + ' 款游戏 · 横版动作 · 挂机刷宝 · 云存档同步';
   chips(); renderAll();

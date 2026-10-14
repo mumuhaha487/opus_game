@@ -38,10 +38,10 @@ export class Overview {
       const square = element('span', '', index < data.streak ? 'taken' : index === Math.min(6, data.streak) ? 'today' : '');
       const day = element('div', '', 'checkin-day'), cny = this.wallet.currency === 'CNY';
       const amount = cny ? this.wallet.rate ? Math.round(+reward * this.wallet.rate) : '--' : Math.round(+reward);
-      square.title = '第 ' + (index + 1) + ' 天 · ' + this.wallet.display(+reward);
+      square.title = '本周第 ' + (index + 1) + ' 次 · ' + this.wallet.display(+reward);
       day.append(square, element('small', '+' + (cny ? '¥' : '') + amount)); days.append(day);
     });
-    checkin.replaceChildren(title('CHECK-IN', '每日签到'), days, element('p', '连续 ' + data.streak + ' 天'),
+    checkin.replaceChildren(title('CHECK-IN', '每周签到'), days, element('p', '本周已签 ' + data.streak + ' 次 · 每周一重置'),
       element('p', '下次 +' + this.wallet.display(+data.nextReward)),
       button(data.checkedToday ? '今日已签到' : '签到', () => this.modals.checkin(), 'primary'));
     const clock = this.ashare.clock(), pill = element('span', clock.label, 'market-status ' + clock.status);

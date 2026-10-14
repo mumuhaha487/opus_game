@@ -56,7 +56,7 @@ section('limits', '额度与轮询', [
 ]);
 const errors = section('errors', '错误与重试', [
   '错误统一返回 { error, message }。记录 X-Request-Id 可帮助定位调用；限流返回 Retry-After。',
-  '401：Key 无效、到期或撤销；403：权限不足或需要确认使用须知；404：接口或资源不存在。',
+  '401：Key 无效、已过期或已删除；403：权限不足或需要确认使用须知；404：接口或资源不存在。',
   '409：密钥数量上限、委托冲突；422：参数或交易规则不满足；429：分钟、每日调用或委托额度用尽。',
   '503：行情、汇率或服务暂时不可用，稍后重试；413：请求体过大；415：媒体类型错误；405：方法不支持。',
   '下单 clientId 必填。重试同一次意图时沿用 clientId；新的交易意图使用新的 clientId。',
@@ -65,7 +65,7 @@ sample(errors, documentationExamples.examples[3]); sample(errors, documentationE
 sample(errors, documentationExamples.examples[26]);
 const groups = [
   ['key-lifecycle', '网页密钥管理', [0, 4, 5, 24, 25], [
-    'GET /api/keys 列表，POST /api/keys 创建，GET /api/keys/log?id= 调用记录，POST /api/keys/revoke 撤销。',
+    'GET /api/keys 列表，POST /api/keys 创建，GET /api/keys/log?id= 调用记录，POST /api/keys/delete 删除（立即失效，密钥与调用记录一并删除）。',
     '使用同源 Cookie 会话；创建要求登录密码、exchange 项目、read 或 read+trade 权限、30/90/180 天有效期和免责确认。',
     '每个账号最多 5 个有效密钥。以下创建响应已脱敏，实际创建响应另含只返回一次的 key 字段。',
   ]],

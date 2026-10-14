@@ -21,7 +21,7 @@ export class Modals {
   error(error) { this.toast(error.data?.message || GameAccount.errorText(error), true); }
   open(title) {
     if (this.locked) return this.content;
-    this.dialog.classList.toggle('checkin-modal', title === '每日签到');
+    this.dialog.classList.toggle('checkin-modal', title === '每周签到');
     this.content.replaceChildren();
     const header = element('div', '', 'modal-header'); header.append(element('h2', title), button('×', () => this.dialog.close()));
     this.content.append(header); if (!this.dialog.open) this.dialog.showModal(); return this.content;
@@ -103,13 +103,13 @@ export class Modals {
     if (!this.api.logged()) { this.login(); return; }
     if (!this.api.state) await this.api.refresh();
     const state = this.api.state; if (!state) return;
-    const box = this.open('每日签到'), cards = element('div', '', 'day-cards'), data = state.checkin;
+    const box = this.open('每周签到'), cards = element('div', '', 'day-cards'), data = state.checkin;
     data.rewards.forEach((reward, index) => {
       const card = element('div', '', 'day-card');
       const day = data.checkedToday ? data.streak : data.streak + 1;
       const taken = data.checkedToday ? index < data.streak : index < data.streak;
       if (taken) card.classList.add('taken'); else if (index === Math.min(6, day - 1)) card.classList.add('today');
-      card.append(element('span', '第' + (index + 1) + '天'), element('b', this.wallet.display(+reward)));
+      card.append(element('span', '第' + (index + 1) + '次'), element('b', this.wallet.display(+reward)));
       if (taken) card.append(element('i', '✓', 'up')); cards.append(card);
     });
     box.append(cards);
@@ -120,8 +120,8 @@ export class Modals {
         this.toast('签到成功，+' + this.wallet.display(+result.reward)); await this.checkin();
       } catch (error) { this.error(error); submit.disabled = false; }
     }, 'primary'); submit.disabled = data.checkedToday; box.append(submit);
-    box.append(element('p', '连续签到奖励逐日递增，第 7 天起每天 ' + this.wallet.display(+data.cap)
-      + '，断签后从第 1 天重新开始。奖励进入账号钱包。', 'muted'));
+    box.append(element('p', '每天可签到一次：本周第 1 次 ' + this.wallet.display(+data.rewards[0]) + '，之后每次递增，第 7 次 '
+      + this.wallet.display(+data.cap) + '；不要求连续，每周一（北京时间）重新从第 1 次计算。奖励进入账号钱包。', 'muted'));
     this.focus();
   }
   async transfer(defaultFrom = 'wallet', defaultTo = 'ashare') {

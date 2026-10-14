@@ -64,13 +64,13 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
   const logHeaders = el('thead'); logHeaders.append(logHead); logTable.append(logHeaders, logRows);
   const logScroll = el('div', '', 'k-table-scroll'); logScroll.append(logTable); log.box.append(logMessage, logScroll);
   log.d.addEventListener('close', () => { if (!log.d.open) { logToken++; logRows.replaceChildren(); } });
-  const revoke = dialog('key-revoke', '撤销密钥'), revokeDetail = id(el('p'), 'key-revoke-detail');
+  const revoke = dialog('key-revoke', '删除密钥'), revokeDetail = id(el('p'), 'key-revoke-detail');
   const revokeMessage = id(el('p', '', 'k-status'), 'key-revoke-message'); let revokeId = null;
-  const confirmRevoke = id(btn('确认撤销', async () => {
+  const confirmRevoke = id(btn('确认删除', async () => {
     if (!revokeId || confirmRevoke.disabled) return;
     const token = generation, keyId = revokeId; confirmRevoke.disabled = true;
     try {
-      await GameAccount.request('/api/keys/revoke', 'POST', { id: keyId });
+      await GameAccount.request('/api/keys/delete', 'POST', { id: keyId });
       if (token !== generation || disposed) return;
       revoke.d.close(); await refresh(); onChange();
     } catch (e) { if (token === generation) revokeMessage.textContent = errorText(e); }
@@ -133,7 +133,7 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
   }
   function renderResult() {
     form.hidden = true; resultBox.hidden = false; resultBox.replaceChildren();
-    resultBox.append(el('p', secret ? '密钥只显示这一次。关闭后无法再次查看；遗失请撤销后重建。'
+    resultBox.append(el('p', secret ? '密钥只显示这一次。关闭后无法再次查看；遗失请删除后重建。'
       : '密钥只在创建时显示；如需含密钥的版本，请新建密钥', 'k-warning key-warning'));
     if (secret) {
       const line = el('div', '', 'k-secret-line'), text = id(el('code', maskKey(secret), 'k-secret'), 'key-secret');
@@ -144,24 +144,10 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
       const copyKey = id(btn('复制', e => copy(secret, e.currentTarget)), 'key-copy');
       line.append(text, reveal, copyKey); resultBox.append(line);
     }
-    let policy = 'A';
-    const amount = el('input'); amount.type = 'number'; amount.min = 1; amount.max = 1000; amount.value = 10;
-    amount.setAttribute('aria-label', '单笔上限（USDT）'); amount.disabled = true;
     const preview = el('textarea', '', 'k-prompt'); preview.readOnly = true; preview.setAttribute('aria-label', 'AI 提示词');
-    const prompt = mode => generatePrompt(current, { mode, secret, policy, limit: amount.value });
+    const prompt = mode => generatePrompt(current, { mode, secret });
     const update = () => { preview.value = prompt('environment'); };
-    if (current.scopes.includes('trade')) {
-      const policies = el('fieldset', '', 'k-options'); policies.append(el('legend', '代理确认方式'));
-      for (const [value, label] of [['A', '每次下单、撤单、划转前，先征求我同意'],
-        ['B', '允许在我设定的单笔上限内自主交易']]) {
-        const l = el('label', label), radio = el('input'); radio.type = 'radio'; radio.name = 'policy';
-        radio.value = value; radio.checked = value === 'A'; l.prepend(radio); policies.append(l);
-        radio.addEventListener('change', () => { policy = value; amount.disabled = value !== 'B'; update(); });
-      }
-      const l = el('label', '单笔上限（USDT）', 'k-field'); l.append(amount); policies.append(l); resultBox.append(policies);
-      amount.addEventListener('input', update);
-      amount.addEventListener('change', () => { amount.value = Math.min(1000, Math.max(1, +amount.value || 10)); update(); });
-    }
+    if (current.scopes.includes('trade')) resultBox.append(el('p', 'AI 将按你的目标实时自主交易，不逐笔等你确认；提示词已写入以你利益为先的风控原则，你也可以在对话里给它更严格的规则。', 'k-status'));
     resultBox.append(el('h3', 'AI 提示词'), preview); update();
     const actions = el('div', '', 'k-actions');
     actions.append(btn('复制提示词（推荐：密钥放环境变量）', e => copy(prompt('environment'), e.currentTarget), 'k-primary'));
@@ -199,10 +185,12 @@ export const GameKeys = { mount(container, { project = null, compact = false, on
           editor.d.showModal(); renderResult();
         }));
         actions.append(btn('调用记录', () => showLog(key)));
-        if (active(key)) actions.append(btn('撤销', () => {
-          revokeId = key.id; revokeDetail.textContent = '撤销「' + key.name + '」后，使用此密钥的调用立即失效。';
+        if (!active(key)) actions.append(el('span', '已过期', 'k-expired'));
+        actions.append(btn('删除', () => {
+          revokeId = key.id;
+          revokeDetail.textContent = '删除「' + key.name + '」后，使用此密钥的调用立即失效，密钥和调用记录一并删除，无法恢复。';
           revoke.d.showModal();
-        })); else actions.append(el('span', key.revoked ? '已撤销' : '已到期'));
+        }));
         const scopes = el('div', key.scopes.includes('trade') ? '只读 · 交易' : '只读', 'k-scope');
         const tr = row([key.name, el('code', key.prefix), scopes, keyDate(key.expires),
           key.lastUsed ? keyDate(key.lastUsed) : '尚未使用', actions]); tr.dataset.id = key.id; rows.append(tr);

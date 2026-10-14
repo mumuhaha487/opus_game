@@ -16,7 +16,7 @@ import { FEE_RATE } from './trade/spot.js';
 const ROUTES = { account: 'GET', quote: 'GET', spec: 'GET', orders: 'GET, POST', trades: 'GET', 'orders/cancel': 'POST',
   transfer: 'POST', 'futures/leverage': 'POST', 'futures/close': 'POST', 'futures/tpsl': 'POST' };
 const MARKETS = { crypto_spot: 'spot', crypto_futures: 'futures', ashare: 'ashare' };
-const denied = new Set(['checkin', 'keys', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
+const denied = new Set(['checkin', 'keys', 'keys/delete', 'keys/revoke', 'keys/log', 'register', 'login', 'logout', 'me', 'saves', 'likes']);
 const fail = (status, code, message) => { throw { status, code, message }; };
 function reply(status, data, headers) {
   return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8',

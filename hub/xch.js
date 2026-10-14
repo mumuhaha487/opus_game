@@ -93,14 +93,14 @@ function renderAccount() {
   if (check) {
     check.querySelector('i').classList.toggle('xi', logged && !state?.checkin.checkedToday);
     check.querySelector('span').textContent = state?.checkin.checkedToday ? '已签到'
-      : logged ? '签到 · 第 ' + ((state?.checkin.streak || 0) + 1) + ' 天' : '签到';
+      : logged ? '签到 · 本周第 ' + ((state?.checkin.streak || 0) + 1) + ' 次' : '签到';
   }
   const days = document.getElementById('hub-checkin-days');
   if (days) {
     days.replaceChildren(...Array.from({ length: 7 }, (_, index) => node('i', '',
       index < (state?.checkin.streak || 0) ? 'taken' : index === Math.min(6, state?.checkin.streak || 0) ? 'today' : '')));
-    document.getElementById('hub-checkin-detail').textContent = '连续 ' + (state?.checkin.streak || 0)
-      + ' 天 · 下次 +' + wallet.display(+(state?.checkin.nextReward || 20));
+    document.getElementById('hub-checkin-detail').textContent = '本周已签 ' + (state?.checkin.streak || 0)
+      + ' 次 · 下次 +' + wallet.display(+(state?.checkin.nextReward || 20)) + ' · 每周一重置';
   }
   const assets = document.getElementById('hub-assets'); if (!assets) return;
   if (!logged) {

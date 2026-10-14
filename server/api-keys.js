@@ -45,8 +45,10 @@ export async function manageKeys(request, env, session, data) {
       headers: { 'Retry-After': String(wait) } };
   }
   if (path === '/api/keys' && request.method === 'GET') {
+    // 删除语义：列表只含未删除的密钥（旧版“已撤销”记录视为已删除），最新创建的在最前。
     const { rows } = await metadata(bucket, uid);
-    return { status: 200, body: { keys: rows.map(publicKey), projects: KEY_PROJECTS } };
+    const keys = rows.filter(row => !row.revoked).sort((a, b) => b.created - a.created).map(publicKey);
+    return { status: 200, body: { keys, projects: KEY_PROJECTS } };
   }
   if (path === '/api/keys/log') {
     const id = new URL(request.url).searchParams.get('id');
@@ -55,21 +57,22 @@ export async function manageKeys(request, env, session, data) {
     const object = await bucket.get(`apikeys/log/${id}.json`);
     return { status: 200, body: { logs: object ? await object.json() : [] } };
   }
-  if (path === '/api/keys/revoke') {
+  if (path === '/api/keys/delete' || path === '/api/keys/revoke') {
+    // 删除（旧 revoke 路由同义）：先在条件写里移除元数据行——认证同时要求元数据与索引，
+    // 此后 Key 立即 401；再删除本人名下的索引与调用记录。索引删除失败也无法复活 Key。
     if (typeof data.id !== 'string' || !ID.test(data.id)) fail(400, 'bad_request', '请求格式错误');
-    // PLATFORM §6.2：先撤销元数据，认证同时检查它，因此索引更新失败也无法继续使用Key。
-    await patchMetadata(bucket, uid, data.id, row => { row.revoked = true; });
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const object = await bucket.get(indexPath(data.id));
-      if (!object) return { status: 200, body: { ok: true, id: data.id } };
-      const index = await object.json();
-      if (index.uid !== uid) fail(404, 'not_found', '密钥不存在');
-      index.revoked = true;
-      if (await bucket.put(indexPath(data.id), JSON.stringify(index), { onlyIf: condition(object.etag) })) {
-        return { status: 200, body: { ok: true, id: data.id } };
-      }
+    let removed = false;
+    for (let attempt = 0; attempt < 8 && !removed; attempt++) {
+      const { rows, etag } = await metadata(bucket, uid);
+      if (!rows.some(row => row.id === data.id)) fail(404, 'not_found', '密钥不存在');
+      removed = !!await bucket.put(metaPath(uid), JSON.stringify(rows.filter(row => row.id !== data.id)),
+        { onlyIf: condition(etag) });
     }
-    fail(503, 'storage_unavailable', '存储服务暂时不可用，请稍后再试');
+    if (!removed) fail(503, 'storage_unavailable', '存储服务暂时不可用，请稍后再试');
+    const index = await bucket.get(indexPath(data.id));
+    if (index && (await index.json()).uid === uid) await bucket.delete(indexPath(data.id));
+    await bucket.delete(`apikeys/log/${data.id}.json`);
+    return { status: 200, body: { ok: true, id: data.id, deleted: true } };
   }
   // PLATFORM §6.2：重新校验原账号PBKDF2密码，必须明确接受免责声明。
   if (data.acceptDisclaimer !== true) fail(400, 'disclaimer_required', '请确认使用须知');
