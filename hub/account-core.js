@@ -44,6 +44,8 @@ const GameAccount = (() => {
       if (code === 'bad_password') return '密码需为 8–64 位';
       if (code === 'name_taken') return '这个用户名已被注册';
       if (code === 'bad_credentials') return '用户名或密码错误';
+      if (code === 'login_limited') return '登录失败次数过多，请稍后再试。';
+      if (code === 'register_limited') return '注册次数过多，请稍后再试。';
       if (code === 'rate_limited') return `尝试次数过多，请 ${Math.ceil((e.data.retryAfter || 60) / 60)} 分钟后再试`;
       if (code === 'unauthorized') return '登录已过期，请重新登录';
       return e.status ? '服务器出了点问题，请稍后再试' : '无法连接服务器，请稍后再试';

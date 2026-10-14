@@ -1,5 +1,5 @@
 import { ITERATIONS, USERNAME, b64url, unbase64, randomBytes, hex, equal32, passwordHash, passwordValid, signSession, sessionCookie, verifySession } from './auth.js';
-import { absent, userKey, saveKey, readSave, publicSave, rateWindow } from './store.js';
+import { absent, userKey, saveKey, readSave, publicSave, rateWindow, slidingWindow, networkKey } from './store.js';
 import { GAMES } from './games/index.js';
 import { likeable, getLikes, addLike } from './likes.js';
 import { handleTrade } from './trade/index.js';
@@ -23,6 +23,14 @@ function reply(status, data, headers = {}) {
 }
 const fail = (status, error, headers) => reply(status, { error }, headers);
 const limited = seconds => reply(429, { error: 'rate_limited', retryAfter: seconds }, { 'Retry-After': String(seconds) });
+const blocked = (error, message, seconds) => reply(429, { error, message, retryAfter: seconds }, { 'Retry-After': String(seconds) });
+// 注册：同一网络（IPv4 地址 / IPv6 /64）每小时最多成功注册 2 个、24 小时最多 5 个；只计成功的注册，
+// 用户名格式错误或已被占用不消耗名额；另限每小时 20 次注册请求，防脚本反复提交。
+const REGISTER = { tries: [3600, 20], hour: [3600, 2], day: [86400, 5], message: '注册次数过多，请稍后再试。' };
+// 登录：只计失败。同一 IP 一小时内失败 30 次后才拦截（滑动窗口），之前只提示“用户名或密码错误”；
+// 同一账号一小时失败 100 次也拦截（防多 IP 轮换猜密码）；高于 IP 阈值，正常用户只会遇到 IP 的 30 次，
+// 别人也难以靠故意输错把某个账号锁住。
+const LOGIN = { ip: [3600, 30], name: [3600, 100], message: '登录失败次数过多，请稍后再试。' };
 async function body(request) {
   if (Number(request.headers.get('Content-Length')) > MAX) throw { status: 413, code: 'too_large' };
   const reader = request.body?.getReader();
@@ -93,28 +101,40 @@ export async function handle(request, env) {
       return reply(result.status, result.body);
     }
     if (path === '/api/register' || path === '/api/login') {
-      const registering = path === '/api/register';
-      if (registering) { const wait = await rateWindow(bucket, 'register-ip', ip, 3600, 5, true); if (wait) return limited(wait); }
+      const registering = path === '/api/register', network = networkKey(ip);
+      if (registering) {
+        const wait = await slidingWindow(bucket, 'register-try', network, ...REGISTER.tries, true);
+        if (wait) return blocked('register_limited', REGISTER.message, wait);
+      }
       const { username, password } = data;
       if (typeof username !== 'string' || typeof password !== 'string') return fail(400, 'bad_request');
       if (registering && !USERNAME.test(username)) return fail(400, 'bad_username');
       if (registering && !passwordValid(password)) return fail(400, 'bad_password');
       const name = username.toLowerCase();
       if (!registering) {
-        const waits = await Promise.all([rateWindow(bucket, 'login-name', name, 900, 10), rateWindow(bucket, 'login-ip', ip, 900, 30)]);
-        if (Math.max(...waits)) return limited(Math.max(...waits));
+        const waits = await Promise.all([slidingWindow(bucket, 'login-fail-ip', network, ...LOGIN.ip),
+          slidingWindow(bucket, 'login-fail-name', name, ...LOGIN.name)]);
+        if (Math.max(...waits)) return blocked('login_limited', LOGIN.message, Math.max(...waits));
       }
       const object = USERNAME.test(username) ? await bucket.get(userKey(name)) : null;
       let user = object ? await object.json() : null;
       if (registering) {
         if (user) return fail(409, 'name_taken');
+        const quota = await Promise.all([slidingWindow(bucket, 'register-ip', network, ...REGISTER.hour),
+          slidingWindow(bucket, 'register-ip-day', network, ...REGISTER.day)]);
+        if (Math.max(...quota)) return blocked('register_limited', REGISTER.message, Math.max(...quota));
+        // 先占用名额再写用户（条件写计数），并发注册也不能超出上限。
+        const reserved = await Promise.all([slidingWindow(bucket, 'register-ip', network, ...REGISTER.hour, true),
+          slidingWindow(bucket, 'register-ip-day', network, ...REGISTER.day, true)]);
+        if (Math.max(...reserved)) return blocked('register_limited', REGISTER.message, Math.max(...reserved));
         const salt = randomBytes(16);
         user = { v: 1, uid: hex(randomBytes(16)), name: username, salt: b64url(salt), hash: b64url(await passwordHash(password, env.PW_PEPPER, salt)), iter: ITERATIONS, sv: 1, created: Date.now() };
         if (!await bucket.put(userKey(name), JSON.stringify(user), { onlyIf: absent() })) return fail(409, 'name_taken');
       } else {
         const hash = await passwordHash(password, env.PW_PEPPER, user ? unbase64(user.salt) : undefined, user ? user.iter : ITERATIONS);
         if (!user || !equal32(hash, unbase64(user.hash))) {
-          await Promise.all([rateWindow(bucket, 'login-name', name, 900, 10, true), rateWindow(bucket, 'login-ip', ip, 900, 30, true)]);
+          await Promise.all([slidingWindow(bucket, 'login-fail-ip', network, ...LOGIN.ip, true),
+            slidingWindow(bucket, 'login-fail-name', name, ...LOGIN.name, true)]);
           return fail(401, 'bad_credentials');
         }
         if (user.iter < ITERATIONS) {

@@ -89,7 +89,8 @@ for (const id of Object.keys(saveGames)) check(seen.has(id), `server/games: "${i
   const ctx = { window: {} };
   vm.runInNewContext(readFileSync(path.join(root, 'tbmh/js/font.js'), 'utf8'), ctx);
   const js = path.join(root, 'tbmh/js');
-  const text = collectCharacters([path.join(root, 'tbmh/index.html'), ...readdirSync(js).filter(f => f.endsWith('.js') && f !== 'font.js').map(f => path.join(js, f))]);
+  const text = collectCharacters([path.join(root, 'tbmh/index.html'), ...readdirSync(js).filter(f => f.endsWith('.js') && f !== 'font.js').map(f => path.join(js, f)),
+    path.join(root, 'hub/account-core.js')]);
   const tbMissing = missingGlyphs(Buffer.from(ctx.window.TBMH_FONT.fp12, 'base64'), text);
   check(!tbMissing.length, `tbmh font lacks "${tbMissing.join('')}" — run node tools/game-font.mjs tbmh`);
 }

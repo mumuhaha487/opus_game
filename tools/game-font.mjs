@@ -11,7 +11,9 @@ import subsetFont from './.deps/node_modules/subset-font/index.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const game = process.argv[2] || 'tbmh';
 const js = path.join(root, game, 'js');
-const files = [path.join(root, game, 'index.html'), ...readdirSync(js).filter(f => f.endsWith('.js') && f !== 'font.js').sort().map(f => path.join(js, f))];
+// 游戏也会显示共享账号模块（hub/account-core.js）的提示文案，例如登录失败与注册限制。
+const files = [path.join(root, game, 'index.html'), ...readdirSync(js).filter(f => f.endsWith('.js') && f !== 'font.js').sort().map(f => path.join(js, f)),
+  path.join(root, 'hub/account-core.js')];
 const text = collectCharacters(files);
 const ascii = Array.from({ length: 95 }, (_, i) => String.fromCodePoint(0x20 + i)).join('');
 const fp12 = embeddedFont(root, 'fp12'), fp8 = embeddedFont(root, 'fp8');
