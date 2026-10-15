@@ -3,7 +3,7 @@ import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } 
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { collectCharacters, collectHubCharacters, missingGlyphs } from './tools/font-data.mjs';
+import { collectCharacters, collectHubCharacters, embeddedFont, missingGlyphs } from './tools/font-data.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { derive } from './tools/derive-save-data.mjs';
 import { SAVE_DATA } from './server/games/plausibility-data.js';
@@ -12,7 +12,7 @@ import { QUOTE_FIELDS as clientQuoteFields } from './trade/js/ashare/feed.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'trade', 'developer'];
+const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'whiteline', 'trade', 'developer'];
 
 // ---------- release checks (no dependencies) ----------
 const problems = [];
@@ -93,6 +93,14 @@ for (const id of Object.keys(saveGames)) check(seen.has(id), `server/games: "${i
     path.join(root, 'hub/account-core.js')]);
   const tbMissing = missingGlyphs(Buffer.from(ctx.window.TBMH_FONT.fp12, 'base64'), text);
   check(!tbMissing.length, `tbmh font lacks "${tbMissing.join('')}" — run node tools/game-font.mjs tbmh`);
+  // 白线以内：css/font.css 是像素字体子集，页面、脚本和共享账号文案里的字都要在子集里（全字体本来就没有的字除外）
+  const wl = path.join(root, 'whiteline');
+  const wlFont = Buffer.from(/base64,([^)]+)\)/.exec(readFileSync(path.join(wl, 'css/font.css'), 'utf8'))[1], 'base64');
+  const wlText = collectCharacters([path.join(wl, 'index.html'), path.join(wl, 'design.html'), path.join(root, 'hub/account-core.js'),
+    ...readdirSync(path.join(wl, 'js')).filter(f => f.endsWith('.js') && !['assets.js', 'bitfont.js'].includes(f)).map(f => path.join(wl, 'js', f))]);
+  const fullFont = embeddedFont(root, 'fp12');
+  const wlMissing = missingGlyphs(wlFont, wlText).filter(char => !missingGlyphs(fullFont, char).length);
+  check(!wlMissing.length, `whiteline font lacks "${wlMissing.join('')}" — rebuild css/font.css and js/bitfont.js with the game's font tools`);
 }
 if (problems.length) {
   console.error('Build checks failed:\n- ' + problems.join('\n- '));

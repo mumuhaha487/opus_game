@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>白线以内 · 策划书</title>
+<meta name="description" content="《白线以内》策划书：世界观、四幕剧本、分秒级时间循环、场景互动物体清单、全量词条库、跨词条组合效果矩阵、一题多解矩阵。">
+<link rel="icon" type="image/png" href="icon-64.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="css/font.css">
+<link rel="stylesheet" href="css/design.css">
+</head>
+<body>
+<div class="wrap">
+
+<div class="sheet cover">
+  <img id="cover-img" alt="深夜的地铁站台，末班车与站在白线后面的少女">
+  <div class="t"><span>策划书 · 剧本 · 系统 · 规则拼图</span><b>白线以内</b><span>末班车 · 04号车厢 —— 「白線の内側まで、お下がりください。」</span></div>
+</div>
+
+<div class="sheet">
+  <h2><span class="no">00</span>目录 <small>本页的表格全部由游戏本体的数据文件实时生成，与游戏内容永远一致</small></h2>
+  <div class="toc">
+    <a href="#pitch">一句话与核心体验</a><a href="#rules">策划铁律的落地</a><a href="#changes">增·删·改·完善</a><a href="#world">世界观与角色</a>
+    <a href="#acts">四幕结构</a><a href="#timeline">分秒级时间循环剧本</a><a href="#scan">巡检（沙盒攻防）规则</a><a href="#objects">场景互动物体清单</a>
+    <a href="#tags">全量属性词条库</a><a href="#matrix">跨词条组合效果矩阵</a><a href="#solutions">一题多解矩阵</a><a href="#npc">NPC 状态机</a>
+    <a href="#ux">交互与多端</a><a href="#art">美术与声音</a>
+  </div>
+  <p style="margin-top:14px"><a class="btn" href="index.html">▶ 开始游戏</a></p>
+</div>
+
+<div class="sheet" id="pitch">
+  <h2><span class="no">01</span>一句话与核心体验</h2>
+  <p class="lead">你是末班车 04 号车厢里一个本该“睡着”的测试假人。这节车厢每五分钟爆炸一次、重来一次，是用来训练“拆弹侦探 AI”的沙盒。你能把世间万物身上的<b>词条</b>剪下来、贴到别处——用这把剪刀改写物理、时间、AI 判定与界面本身，在每 60 秒一次的“白线巡检”前伪造现场，唤醒同伴，最后剪掉画面的【边界】，跨过那条“请退到白线以内”的白线。</p>
+  <div class="flow"><span class="box">疯狂做实验 · 搞破坏</span><span class="arr">→</span><span class="box">发车旋律响起（巡检预告）</span><span class="arr">→</span><span class="box">极限 10 秒伪造现场</span><span class="arr">→</span><span class="box">黄色导盲砖扫描线扫过</span><span class="arr">→</span><span class="box">「異常なし、ヨシ！」</span><span class="arr">↺</span></div>
+  <div class="grid2">
+    <div class="card"><b>玩法类型</b><br>系统驱动的规则拼图（Systemic Gameplay）＋ 时间循环推理 ＋ 沙盒潜行博弈。参照系：《Baba Is You》的“规则即物体”、《Outer Wilds》的“知识跨轮保留”、《Inscryption》的元叙事破壁。</div>
+    <div class="card"><b>平台</b><br>纯静态 HTML（双击 index.html 即可游玩，file:// 下同样可用），电脑与手机（竖屏/横屏）都能完整游玩。</div>
+    <div class="card"><b>时长</b><br>主线约 40–70 分钟；“一题多解”与“化学反应图鉴”提供大量重玩价值；通关后解锁“自由实验”沙盒。</div>
+    <div class="card"><b>美术方向</b><br>日系车厢与车站：纸、墨、印章、LED 案内表示器、导盲砖。<b>没有霓虹，没有赛博朋克，没有褪色特效。</b></div>
+  </div>
+</div>
+
+<div class="sheet" id="gallery">
+  <h2><span class="no">01½</span>实机画面 <small>384×256 逻辑分辨率，按设备像素比整数放大</small></h2>
+  <div class="two">
+    <figure style="margin:0"><img class="shot" src="assets/shots/act2_tags.png" alt="第二幕：透视模式下所有对象头顶的词条图标；车掌被贴上【礼让】后去扶门"><figcaption class="muted">第二幕 · 「透视」：每个东西头顶都是它的词条。车掌被贴上【礼让】，正去替你扶住乘务员室的门。</figcaption></figure>
+    <figure style="margin:0"><img class="shot" src="assets/shots/act2_scan.png" alt="白线巡检：黄色导盲砖扫描线扫过车厢，离开座位的玩家被盖上差戻章"><figcaption class="muted">白线巡检：黄色导盲砖扫描线从左往右扫过。离开座位的你被圈红、盖上「差戻」。</figcaption></figure>
+    <figure style="margin:0"><img class="shot" src="assets/shots/act3_chaos.png" alt="第三幕：检札员巡逻，醉汉在高威胁加快速下醉拳暴走"><figcaption class="muted">第三幕 · 保安模式：没有脸的检札员在巡逻；醉汉被贴上【高威胁】+【快速】，醉拳暴走。</figcaption></figure>
+    <figure style="margin:0"><img class="shot" src="assets/shots/car03.png" alt="被冻结的3号车厢：灰色的未生成乘客与悬在半空的杂物"><figcaption class="muted">3 号车厢：一切都停在某一瞬间——灰色的“未生成乘客”、悬在半空的罐子与报纸。</figcaption></figure>
+    <figure style="margin:0"><img class="shot" src="assets/shots/act4_boss.png" alt="第四幕：白线——巨大的白手套与走向破棄的站钟"><figcaption class="muted">第四幕 · 白线：做着“指差确认”的巨大白手套，和走向「破棄」的站钟。</figcaption></figure>
+    <figure style="margin:0"><img class="shot" src="assets/shots/dawn.png" alt="结局：黎明的出口站月台"><figcaption class="muted">「出口」站。始发车的时间。</figcaption></figure>
+  </div>
+</div>
+
+<div class="sheet" id="rules">
+  <h2><span class="no">02</span>四条策划铁律 → 落地方式</h2>
+  <div class="tbl"><table>
+    <tr><th>铁律</th><th>在游戏里怎样实现</th></tr>
+    <tr><td>① 拒绝唯一解，拥抱系统级涌现</td><td>每个物体都携带可剥离的词条（含一滴冷凝水、一张广告、一行站名、一个暂停按钮）。词条不是“钥匙”，而是会叠加生效的<b>系统属性</b>：零重力会漂浮、流体会从门缝下流走、磁力会吸金属、复制品不继承锁……任意两个词条贴在一起，属性自然叠加；其中 <span id="rx-count">?</span> 种组合另有手写的“化学反应”。每个关键节点 4–12 种解法（见第 11 节）。</td></tr>
+    <tr><td>② 维持“破坏与伪装”的猫鼠压迫感</td><td>每 60 秒一次“白线巡检”：发车旋律式预告 → 10 秒倒数 → 扫描线从左到右只扫一遍。与台本不符的东西会被盖「差戻」章、恢复原状，剪走的词条会被<b>从剪贴板没收</b>；警戒满 3 次强制重来。伪装手段同样是系统性的：归位、【回送】跳过、【乘务员】受信任、【最高仇恨】诱饵、【复制增殖】刷爆内存……</td></tr>
+    <tr><td>③ NPC 是鲜活的状态机</td><td>每个 NPC 都按“词条覆盖 → 职责 → 台本时间轴”的优先级行动：车掌会处理非常、制伏威胁、捡失物、替人扶门；侦探会调查一切带【最高仇恨】的东西；醉汉贴上【高威胁】+【快速】会变成满车厢乱窜的“醉拳暴走”，彻底打乱时间轴。每个角色对每个词条都有专属台词（见第 12 节）。</td></tr>
+    <tr><td>④ 层层递进的破壁</td><td>第一幕以为在玩推理拆弹 → 被“剪切”进剪贴板 → 第二幕在监视器上看到“試験環境 04 / 失敗 ×4096”的寒意 → 第三幕与觉醒的少女一起让系统的检札员互相盖章的狂欢 → 第四幕 HUD、暂停键、对话框的×、画面外框全都成了可剪的词条，最后剪掉【边界】，画面真的“框不住”了。</td></tr>
+  </table></div>
+</div>
+
+<div class="sheet" id="changes">
+  <h2><span class="no">03</span>增 · 删 · 改 · 完善 <small>作为项目负责人对原始提案做的调整</small></h2>
+  <div class="two">
+    <div>
+      <h3>增加了什么</h3>
+      <ul>
+        <li><b>「白线」</b>：把监管系统命名为日本站台广播“请退到白线以内”里的白线。巡检＝白线扫过；结局＝跨过白线。主题、机制、意象三合一。</li>
+        <li><b>台本（剧本册）</b>：第一幕的核心线索就是一本写好了未来的台本；之后它变成可查阅的时间轴，页边有少女的铅笔字与“红笔改稿”。</li>
+        <li><b>剪贴板跨轮保留</b>：时间重置，剪贴板里的词条还在（《Outer Wilds》式的知识/工具传承）。</li>
+        <li><b>【台本角色】归位仪式</b>：玩家从自己身上剪下的“锁链”，贴回去就会被瞬间扯回座位——让“60 秒心跳”有了一个可操作的动作。</li>
+        <li><b>栞的书签</b>：被【书签】夹住的东西跨轮保持原样；她本人就是“存档点”。</li>
+        <li><b>日式规则来源</b>：優先席→【礼让】、回送→【回送】、遅延→【延迟】、忘れ物→【遗失物】、非常通報→【非常】、指差確認的白手套→最终 Boss。</li>
+        <li><b>界面词条（第四幕）</b>：真实网页上的 HUD、暂停键、×、目标栏、画面外框都能被剪贴。</li>
+        <li><b>化学反应图鉴 + 一题多解统计 + 自由实验</b>：鼓励实验，把“多样性”变成可见的收集目标。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>删减 / 修改了什么</h3>
+      <ul>
+        <li><b>删</b>：一切霓虹、赛博朋克元素与“色彩丢失”类特效。系统的“恐怖”改用日本办公文化表达：红色橡皮章「差戻」、黑塗り（涂黑）、LED 案内表示器、发车旋律。</li>
+        <li><b>改</b>“系统清除触手” → <b>墨塗り</b>（涂黑）与橡皮擦除；“广播室” → 列车尾部的<b>乘务员室</b>（有广播麦克风、方向幕、失物箱）。</li>
+        <li><b>改</b>第一幕“被抹杀” → 被<b>剪切（Ctrl+X）</b>进剪贴板：能力的来源因此自洽。</li>
+        <li><b>改</b>第三幕“诱导防卫机制内讧” → 具体化为<b>检札员互相盖「差戻」章</b>、刷爆内存、让它们变成乘客坐下……</li>
+        <li><b>改</b>剧情动机：系统只认“侦探拆弹”。第一幕你拆弹＝越权被删；第三幕让“侦探”拆弹＝训练完成、环境回收——回收的几秒钟里边界松动，那是唯一的出口。</li>
+        <li><b>减</b>“垃圾桶”在主线中的分量（保留为【垃圾】的来源），换成更日式的“失物文化”。</li>
+      </ul>
+      <h3>完善了什么</h3>
+      <ul>
+        <li>巡检的完整判定规则（跳过、信任、必查、诱饵、卡死、没收、警戒、强制重置）。</li>
+        <li>带锁词条、带【锁定】的对象（词条剪不下、但能贴上）、延迟生效、词条过载（7 个）、掉落词条可捡起、剪贴板“退回原处”。</li>
+        <li>印刷类来源（广告、贴纸、显示屏）上的原生词条只是“印着的字”，不会让广告自己复制自己。</li>
+        <li>三级提示（越来越直接）与卡关自动提示，保证不会卡死。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="world">
+  <h2><span class="no">04</span>世界观与角色</h2>
+  <p>夜见线（よみせん）是一条环状地铁：白紙（白）→ 仮置（黄）→ 検収（蓝）→ 出口（红）。末班车 0:24 从「白紙」发车，每五分钟——就在即将到达「出口」时——炸弹爆炸，一切重置为下一“稿”。这里是运行管理 AI「白线」的<b>试验环境 04</b>：只有 4 号车厢被完整生成，3 号车厢被冻结，1、2 号车厢根本没有渲染，隧道在车尾一百米外断成一片空白的稿纸。</p>
+  <div class="grid2" id="chars"></div>
+</div>
+
+<div class="sheet" id="acts">
+  <h2><span class="no">05</span>四幕结构与情绪曲线</h2>
+  <div class="tbl"><table>
+    <tr><th>幕</th><th>玩家以为</th><th>新能力 / 新规则</th><th>核心节点</th><th>情绪</th></tr>
+    <tr><td><b>第一幕</b><br>剧本的囚徒<br><span class="muted">台本の囚人</span></td><td>一场末班车上的推理拆弹</td><td>移动、调查、交谈；读“台本”预知未来</td><td>读懂字条“剪断顺序＝接下来经过的车站的颜色”，在黑川剪错线前拆弹 → 系统盖章「削除」→ Ctrl+X → 剪贴板空间里剪下自己的【台本角色】→ Ctrl+V</td><td>悬疑 → 冷不防的寒意</td></tr>
+    <tr><td><b>第二幕</b><br>戴着镣铐的篡改者<br><span class="muted">枷つきの改竄者</span></td><td>我能改写这节车厢</td><td>剪切/粘贴（容量 3）、60 秒巡检、警戒度、跨轮保留</td><td>熬过第一次巡检；用十几种方法之一进入乘务员室；监视器揭示“试验环境”；临时巡检中伪造现场</td><td>好奇 → 发现真相的寒意</td></tr>
+    <tr><td><b>第三幕</b><br>唤醒同类与化学反应<br><span class="muted">同類の目覚め</span></td><td>我不是一个人</td><td>双人切换、容量 5、书签、保安模式（检札员＋45 秒巡检）</td><td>解冻 3 号车厢的栞（时间/复制/借系统之手）；让检札员内讧；让“侦探”拆弹成功（标签欺骗、诱导、剧本冲突、身份窃取……）</td><td>温暖 → 和同伴戏耍系统的狂欢</td></tr>
+    <tr><td><b>第四幕</b><br>死锁宇宙与跨越维度<br><span class="muted">デッドロック</span></td><td>连画面本身都是词条</td><td>界面词条、容量 7；白线没收词条、指差盖章</td><td>剪下 HUD 的【倒计时】止住崩塌；用自指/身份/时间/叙事/界面/荒诞死锁击败白线；剪下画面【边界】；在“出口”站跨过白线</td><td>高潮 → 黎明的释然</td></tr>
+  </table></div>
+  <p class="note">两种结局：解救原本的栞＝「始发」；以复制品的形式解救她＝「书签」（原来的她会继续夹在 3 号车厢，为下一个醒来的人留字）。解放黑川会让他也一起走上月台。</p>
+</div>
+
+<div class="sheet" id="timeline">
+  <h2><span class="no">06</span>分秒级时间循环剧本 <small>一“稿”＝300 秒；第一到三幕通用</small></h2>
+  <div class="tbl"><table id="tl"></table></div>
+  <h3>可利用的时间窗口</h3>
+  <ul>
+    <li><b>00:00–00:15、01:40–02:15、03:10 以后</b>：车掌在乘务员室里——此时闯入会被请出去；其它时间乘务员室是空的。</li>
+    <li><b>02:30–03:30</b>：显示屏插播「遅延」，可以剪下【延迟】；贴在炸弹上整整推迟一分钟（遅延証明書）。</li>
+    <li><b>02:40</b>：黑川取下纸袋，炸弹从网棚移到地上——巡检对炸弹位置的要求随之改变。</li>
+    <li><b>04:30</b>：黑川按台本剪线。在此之前改写标签/让他研究路线图/让他脱离台本，都会改变结局。</li>
+  </ul>
+</div>
+
+<div class="sheet" id="scan">
+  <h2><span class="no">07</span>巡检（沙盒攻防）规则</h2>
+  <div class="two">
+    <div>
+      <h3>判定</h3>
+      <ul>
+        <li>对象的词条（类型与数量）必须与台本一致；角色必须在台本规定的位置与姿势；物品必须在原位。</li>
+        <li>复制品、掉落的词条、被搬走的东西＝异常；被删除的原生对象会被重新生成。</li>
+        <li><b>跳过</b>：带【回送】的对象；挂着【回送】的整节车厢里的一切；车窗里的【倒影】。</li>
+        <li><b>信任</b>：带【乘务员】的对象（「乗務員、ヨシ！」），除非同时带【异常】。</li>
+        <li><b>必查</b>：带外来【异常】的对象。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>处理与特例</h3>
+      <ul>
+        <li>异常对象被盖「差戻」章并恢复原状：外来词条送回原主，被剪走的词条<b>从剪贴板没收</b>。</li>
+        <li>发现异常＝警戒 +1；满 3＝本轮强制重置（剪贴板保留）。</li>
+        <li><b>诱饵</b>：带外来【最高仇恨】的异常物会把扫描线“吸”过去，处理完它就提前收工。</li>
+        <li><b>卡死</b>：【最高仇恨】+【回送】→“最需要关注的东西正在回送中”→ 整次巡检中止。</li>
+        <li><b>内存溢出</b>：复制品过多→系统回收全部复制品与检札员，下一次巡检取消。</li>
+        <li><b>时间差</b>：扫描线每次只扫一遍——它经过之后再动手，它不会回头。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="objects">
+  <h2><span class="no">08</span>场景互动物体清单 <small>带“锁”的词条无法被剪下</small></h2>
+  <div id="objs"></div>
+</div>
+
+<div class="sheet" id="tags">
+  <h2><span class="no">09</span>全量属性词条库 <small id="tag-count"></small></h2>
+  <div id="taglib"></div>
+</div>
+
+<div class="sheet" id="matrix">
+  <h2><span class="no">10</span>跨词条组合效果矩阵 <small id="mx-count"></small></h2>
+  <p>红格＝手写的“化学反应”（点击查看）；深蓝格＝同一词条叠加；其余格子＝<b>系统层叠加</b>：两个词条的属性同时生效（例如【零重力】×【流体化】在没有手写反应时也会是一颗漂浮的水洼）。三词条反应列在下方清单里。</p>
+  <div class="mx-legend"><span><i style="background:var(--red)"></i>化学反应</span><span><i style="background:var(--navy)"></i>同词条叠加</span><span><i style="background:var(--paper3);box-shadow:inset 0 0 0 1px #cbbd9c"></i>系统叠加</span></div>
+  <div class="card" id="mx-detail">点任意一格查看组合效果。</div>
+  <div class="matrix-wrap"><table class="matrix" id="mx"></table></div>
+  <h3>全部化学反应清单</h3>
+  <div class="rx-tools"><input id="rx-q" placeholder="搜索：词条名、反应名……"><select id="rx-cat"><option value="">全部</option><option value="2">双词条</option><option value="3">三词条</option><option value="self">同词条叠加</option></select></div>
+  <div class="rx-list" id="rx-list"></div>
+</div>
+
+<div class="sheet" id="solutions">
+  <h2><span class="no">11</span>一题多解矩阵 <small>每个核心节点 4–12 种不同流派的解法</small></h2>
+  <div id="sols"></div>
+</div>
+
+<div class="sheet" id="npc">
+  <h2><span class="no">12</span>NPC 状态机 <small>同一个词条，在不同人身上是不同的人生</small></h2>
+  <p>行为优先级：<span class="pill">物理/时间覆盖</span>（静止、漂浮、液化、被搬运）→ <span class="pill">心智覆盖</span>（睡眠、威胁、礼让、唠叨、遗失物……）→ <span class="pill">职责</span>（车掌：非常 → 威胁 → 失物 → 最高仇恨 → 扶门 → 驱赶闯入者；侦探：调查最高仇恨）→ <span class="pill red">台本时间轴</span>。</p>
+  <div id="npcs"></div>
+</div>
+
+<div class="sheet" id="ux">
+  <h2><span class="no">13</span>交互与多端</h2>
+  <div class="two">
+    <div>
+      <h3>易用性</h3>
+      <ul>
+        <li>两种等价的操作：<b>先选对象</b>（点它的词条＝剪下；点剪贴板＝贴上）或<b>先拿词条</b>（点剪贴板拿起，再点场景目标）；也可以直接拖拽。</li>
+        <li>选中对象时时间放慢一半（可关闭）；随时暂停；快进 ×4。</li>
+        <li>小东西点不中？「对象」列表列出当前车厢的一切；点击判定区自动扩大到 16 像素。</li>
+        <li>「透视」显示所有对象的词条图标；外来词条带红角标；带锁词条带斜纹。</li>
+        <li>三级提示（越来越直接）；卡关 150 秒后提示按钮闪烁；随时“重来本轮”。</li>
+        <li>任何会造成永久损失的操作都可以被时间重置/巡检撤销；剪贴板永远保留；自动存档。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>多端</h3>
+      <ul>
+        <li>宽屏：画面在左、面板在右；竖屏手机：画面在上、面板在下；横屏手机：窄面板。</li>
+        <li>画面按设备像素比做整数（或 1/8 精度近整数）缩放；UI 的“像素单位”同样按 DPR 计算，像素字体永远锐利。</li>
+        <li>场景文字使用离线光栅化的<b>位图字体图集</b>（Fusion Pixel Font），不受各浏览器抗锯齿差异影响。</li>
+        <li>触屏：阻止双击缩放、长按菜单；音频在第一次轻触时解锁；安全区（刘海屏）留白。</li>
+        <li>键盘：<span class="kbd">←→</span>移动 <span class="kbd">空格</span>暂停 <span class="kbd">F</span>快进 <span class="kbd">Tab</span>切换对象 <span class="kbd">Ctrl+X</span>剪下 <span class="kbd">Ctrl+V</span>粘贴 <span class="kbd">1–7</span>剪贴板 <span class="kbd">T</span>台本 <span class="kbd">H</span>提示 <span class="kbd">Q</span>切换角色。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="art">
+  <h2><span class="no">14</span>美术与声音</h2>
+  <div class="two">
+    <div>
+      <p>背景、角色、头像、道具先由图像模型按“日系末班车·16-bit 像素·无霓虹”的统一提示词生成，再经自制管线<b>按真实像素网格做面积平均缩小 → 品红抠图 → 去孤岛 → 调色板量化</b>，得到 384×256 逻辑分辨率下的真像素素材。车厢之外的“未渲染空间”用稀疏网格表示；剪贴板空间是原稿用纸。</p>
+      <p><b>动态</b>：每个角色都有 12 帧走路循环，全身联动——身体按“接触→下沉→经过→上升”起伏 2px，后脚蹬地时脚跟抬起、脚尖钉地，前脚以脚跟着地；双腿按两段式 IK 摆动，并把原画里每条腿的裤子、袜子纹理沿骨骼贴回去（褶皱和明暗都是原画的）；手臂与同侧腿反向摆动（白鷺的白手套、栞的手、田中的公文包），头部略微前倾，醉汉田中左右晃，衣摆与裙摆反向飘；起步从“双脚并拢、一脚离地”的经过帧开始。动画按“走过的距离”推进，并把身体画在本帧的起点：支撑脚在整个支撑期都钉在同一个地板像素上（自动化实测滑步 0px），着地帧同步脚步声与扬尘。另有呼吸起伏、坐下/起身过渡、坐着的人偶尔张望、随轨缝“咣当”声的轻微车厢颠簸。</p>
+      <p>调色：暖白荧光灯、米色车壁、鼠尾草绿座椅、海军蓝制服、导盲砖黄、印章红。HUD 仿车门上方的 LED 案内表示器（琥珀色字，无辉光）。</p>
+      <div class="grid2" id="sprites"></div>
+    </div>
+    <div>
+      <h3>声音（全部由 WebAudio 实时合成）</h3>
+      <ul>
+        <li>列车环境：滤波棕噪声低鸣＋“咣当、咣当”的轨缝节奏。</li>
+        <li>巡检预告：原创的钟琴“发车旋律”；车门“叮咚”；剪切纸声、粘贴声、印章“咚”。</li>
+        <li>BGM：五首极简音序——深夜、紧张、狂欢、终局、黎明。</li>
+        <li>可选：用设备自带的日语语音朗读车内广播（「まもなく、巡検です。白線の内側まで、お下がりください。」）。</li>
+      </ul>
+      <h3>字体与版权</h3>
+      <p class="muted">像素字体：Fusion Pixel Font（© TakWolf，SIL Open Font License 1.1）。角色、场景为本项目生成的原创素材；车站、线路、广告品牌均为虚构。</p>
+    </div>
+  </div>
+</div>
+
+<div class="foot">白线以内 · 策划书 —— 本页数据与游戏本体共用 js/data_*.js</div>
+</div>
+
+<script src="js/assets.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data_tags.js"></script>
+<script src="js/data_world.js"></script>
+<script src="js/data_lines.js"></script>
+<script src="js/data_reactions.js"></script>
+<script src="js/data_story.js"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const A = window.ASSET_DATA || {};
+  const TAGS = G.TAGS, CATS = G.CATS;
+  const tagHTML = (t, lock) => { const d = TAGS[t] || { name: t, cat: 'id' }; return `<span class="tag c-${d.cat}${lock ? ' lock' : ''}" title="${esc(d.desc || '')}"><span class="cat">${CATS[d.cat].g}</span>${esc(d.name)}</span>`; };
+  if (A.bg_title) $('cover-img').src = A.bg_title;
+
+  // 角色
+  const chars = [
+    ['pt_nana', '七号（乘客07 / NPC_07）', '玩家。系统的测试假人，胸口印着撞击测试的黑黄标记。台本里的职责只有一行：「睡着。（以下无出场）」。'],
+    ['pt_kuro', '黑川（DET-01）', '风衣侦探。被训练的“拆弹 AI”。四千多次，每次都照台本先剪蓝线。'],
+    ['pt_tanaka', '田中', '烂醉的上班族，梦话里藏着线索。贴上不同词条，他会变成醉拳疯子、敬酒狂、醉探、甚至“田中车掌”。'],
+    ['pt_shira', '车掌 · 白鷺', '尽职得像教科书的车掌：检票、广播、捡失物、制伏威胁、替人扶门——也因此最容易被词条“利用”。'],
+    ['pt_shiori', '栞（NPC_02）', '第 2048 稿时觉醒的少女，按下非常按钮前被冻结在 3 号车厢。用铅笔在台本页边给你留字。她的书签能夹住时间。'],
+    ['pt_system', '白线（运行管理 AI）', '车内广播的声音；巡检的扫描线；最终是一只做着“指差确认”的巨大白手套和一面走向“破棄”的站钟。'],
+  ];
+  $('chars').innerHTML = chars.map(([pt, n, d]) => `<div class="card char"><img src="${A[pt] || ''}" alt=""><div><b>${esc(n)}</b><br>${esc(d)}</div></div>`).join('');
+
+  // 时间轴
+  const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  $('tl').innerHTML = '<tr><th>时刻</th><th>台本</th></tr>' + G.SCRIPT_LINES.map((l) => `<tr><td>${fmt(l.t)}</td><td${l.scan ? ' style="color:var(--red2)"' : ''}>${esc(l.tx)}</td></tr>`).join('');
+
+  // 物体清单
+  const S = { act: 3, flags: {} };
+  const rooms = [['car04', '4 号车厢', G.WORLD.car04(S)], ['crew', '乘务员室', G.WORLD.crew(S)], ['car03', '3 号车厢（冻结）', G.WORLD.car03(S)]];
+  const kindName = { char: '人物', item: '物品', fixture: '设施', door: '门', env: '车厢' };
+  $('objs').innerHTML = rooms.map(([id, name, list]) => `<h3>${name}</h3><div class="tbl"><table><tr><th>对象</th><th>类别</th><th>词条</th><th>描述</th></tr>${list.map((e) => `<tr><td>${esc(e.name || (G.CHARS[e.char] || {}).full || e.id)}</td><td>${kindName[e.kind] || ''}</td><td>${(e.tags || []).map((t) => (typeof t === 'string' ? tagHTML(t) : tagHTML(t.t, t.lock))).join('') || '—'}</td><td class="muted">${esc(e.desc || '')}</td></tr>`).join('')}</table></div>`).join('') + '<p class="muted">另有：导线（红/蓝/黄颜色标签，第三幕可剪贴）、检札员（第三幕）、界面元素（第四幕：HUD 时刻【倒计时·计时】、暂停键【暂停】、警戒格【异常】、目标栏【标题】、画面外框【边界·锁定】、检视器的×【关闭】）。</p>';
+
+  // 词条库
+  const allTags = Object.values(TAGS);
+  $('tag-count').textContent = `共 ${allTags.length} 个词条 · ${Object.keys(CATS).length} 类`;
+  $('taglib').innerHTML = Object.keys(CATS).map((c) => { const ts = allTags.filter((t) => t.cat === c); if (!ts.length) return ''; return `<h3>${CATS[c].g} ${CATS[c].name}（${ts.length}）</h3><div class="tbl"><table><tr><th>词条</th><th>效果</th><th>来源</th></tr>${ts.map((t) => `<tr><td>${tagHTML(t.id)}</td><td>${esc(t.desc)}</td><td class="muted">${esc(t.src)}</td></tr>`).join('')}</table></div>`; }).join('');
+
+  // 反应矩阵
+  const RX = G.REACTIONS;
+  $('rx-count').textContent = `手写化学反应 ${RX.length} 条`;
+  $('rx-count') && ($('rx-count').textContent = `${RX.length} 条`);
+  const ord = Object.keys(CATS).flatMap((c) => allTags.filter((t) => t.cat === c).map((t) => t.id));
+  const pairMap = {};
+  for (const r of RX) if (r.t.length === 2) { const k = r.t.slice().sort().join('+'); (pairMap[k] = pairMap[k] || []).push(r); }
+  const pairCount = Object.keys(pairMap).length;
+  $('mx-count').textContent = `${ord.length}×${ord.length} · 手写反应 ${RX.length} 条（覆盖 ${pairCount} 个双词条组合）`;
+  let html = '<thead><tr><th>　</th>' + ord.map((t) => `<th title="${esc(TAGS[t].desc)}">${esc(TAGS[t].name)}</th>`).join('') + '</tr></thead><tbody>';
+  for (const a of ord) {
+    html += `<tr><th>${tagHTML(a)}</th>`;
+    for (const b of ord) {
+      const k = [a, b].sort().join('+'); const rs = pairMap[k];
+      if (rs) html += `<td class="hit${a === b ? ' self' : ''}" data-k="${k}">${esc(rs[0].name.slice(0, 1))}</td>`;
+      else html += `<td class="sys" data-a="${a}" data-b="${b}">·</td>`;
+    }
+    html += '</tr>';
+  }
+  $('mx').innerHTML = html + '</tbody>';
+  $('mx').addEventListener('click', (ev) => {
+    const td = ev.target.closest('td'); if (!td) return;
+    if (td.dataset.k) { const rs = pairMap[td.dataset.k]; $('mx-detail').innerHTML = rs.map((r) => `<b>「${esc(r.name)}」</b> ${r.t.map((t) => tagHTML(t)).join('＋')}${r.on ? ' <span class="muted">（限定宿主）</span>' : ''}<br>${esc(r.desc)}`).join('<br><br>'); }
+    else { const a = TAGS[td.dataset.a], b = TAGS[td.dataset.b]; $('mx-detail').innerHTML = `${tagHTML(a.id)}＋${tagHTML(b.id)} <span class="muted">系统层叠加</span><br>宿主会处于「${esc(a.adj)}又${esc(b.adj)}」的状态：${esc(a.desc)} ${esc(b.desc)}`; }
+  });
+  const renderRx = () => {
+    const q = $('rx-q').value.trim(), c = $('rx-cat').value;
+    const list = RX.filter((r) => (!c || (c === 'self' ? new Set(r.t).size < r.t.length : r.t.length === +c && new Set(r.t).size === r.t.length)) && (!q || (r.name + r.desc + r.t.map((t) => TAGS[t] ? TAGS[t].name : t).join('')).includes(q)));
+    $('rx-list').innerHTML = list.map((r) => `<div class="rx"><b>「${esc(r.name)}」</b> ${r.t.map((t) => tagHTML(t)).join('＋')}<br>${esc(r.desc)}</div>`).join('') || '<p class="muted">没有匹配的反应。</p>';
+  };
+  $('rx-q').oninput = renderRx; $('rx-cat').onchange = renderRx; renderRx();
+  $('rx-count').textContent = RX.length;
+
+  // 一题多解
+  $('sols').innerHTML = Object.values(G.SOLUTIONS).map((s) => `<h3>${esc(s.name)}（${s.list.length} 种）</h3><div class="tbl"><table><tr><th>流派</th><th>解法</th></tr>${s.list.map((i) => `<tr><td><span class="pill">${esc(i.school)}</span></td><td>${esc(i.text)}</td></tr>`).join('')}</table></div>`).join('');
+
+  // NPC 台词
+  const who = [['kuro', '黑川'], ['tanaka', '田中'], ['shira', '车掌 · 白鷺'], ['shiori', '栞'], ['nana', '七号（内心独白）'], ['insp', '检札员']];
+  $('npcs').innerHTML = who.map(([id, n]) => { const L = G.LINES[id] || {}; const rows = Object.entries(L).filter(([k]) => k !== '_spot').slice(0, 40); return `<h3>${n}</h3><div class="tbl"><table><tr><th>词条</th><th>反应台词</th></tr>${rows.map(([k, v]) => `<tr><td>${k[0] === '-' ? '剪掉 ' + tagHTML(k.slice(1)) : '贴上 ' + tagHTML(k)}</td><td>${esc(v.join(' / '))}</td></tr>`).join('')}</table></div>`; }).join('');
+
+  // 精灵展示
+  const sp = ['nana_stand', 'kuro_stand', 'tanaka_fight', 'shira_bow', 'shiori_reach', 'insp_stand'];
+  $('sprites').innerHTML = sp.map((s) => `<div class="card" style="text-align:center"><img src="${A[s] || ''}" style="height:120px;image-rendering:pixelated" alt=""></div>`).join('');
+})();
+</script>
+</body>
+</html>

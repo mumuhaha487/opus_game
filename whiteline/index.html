@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b1e26">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="白线以内 —— 末班车 04 号车厢里的规则拼图像素游戏">
+<title>白线以内 · 末班车04号车厢</title>
+<link rel="icon" type="image/png" href="icon-64.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="css/font.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app" class="booting">
+
+  <!-- 标题画面 -->
+  <section id="title" class="screen hidden" aria-label="标题画面">
+    <canvas id="title-cv" width="384" height="256"></canvas>
+    <div class="title-sign hidden" id="title-sign"><b>白</b><b>线</b><b>以</b><b>内</b><span>04号车厢</span></div>
+    <div class="title-menu" id="title-menu"></div>
+    <div class="title-foot">点击 / 轻触 选择 · 支持手机与电脑</div>
+  </section>
+
+  <!-- 游戏主体 -->
+  <section id="game" class="screen hidden" aria-label="游戏">
+    <header id="hud">
+      <div class="hud-cell hud-draft"><span class="lbl">台本</span><b id="hud-draft">第4096稿</b></div>
+      <div class="hud-cell hud-clock"><span class="lbl">时刻</span><b id="hud-clock">0:24:00</b></div>
+      <div class="hud-cell hud-scan" id="hud-scan-cell"><span class="lbl" id="hud-scan-lbl">巡检</span><b id="hud-scan">--:--</b><i id="hud-scan-dots"></i></div>
+      <div class="hud-cell hud-alert" id="hud-alert-cell"><span class="lbl">警戒</span><i id="hud-alert"></i></div>
+      <div class="hud-btns">
+        <button class="ibtn" id="btn-ff" title="快进 (F)" aria-label="快进"></button>
+        <button class="ibtn" id="btn-pause" title="暂停 (空格)" aria-label="暂停"></button>
+        <button class="ibtn" id="btn-menu" title="菜单 (Esc)" aria-label="菜单"></button>
+      </div>
+    </header>
+
+    <main id="stage-wrap">
+      <div id="stage">
+        <canvas id="cv"></canvas>
+        <div id="stage-ui">
+          <div id="banner" class="hidden"></div>
+          <div id="toasts"></div>
+          <div id="subtitle" class="hidden"></div>
+          <div id="hold-tip" class="hidden"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside id="panel">
+      <div id="objective" class="pbox"><span class="obj-tag">目标</span><span id="obj-text">……</span><button class="mini-btn" id="btn-hint">提示</button></div>
+      <div id="inspector" class="pbox"></div>
+      <div id="clipboard" class="pbox"></div>
+      <nav id="toolbar">
+        <button class="tbtn" id="btn-script"><i class="ic" data-ic="book"></i><span>台本</span></button>
+        <button class="tbtn" id="btn-list"><i class="ic" data-ic="list"></i><span>对象</span></button>
+        <button class="tbtn" id="btn-eye"><i class="ic" data-ic="eye"></i><span>透视</span></button>
+        <button class="tbtn" id="btn-dex"><i class="ic" data-ic="dex"></i><span>图鉴</span></button>
+        <button class="tbtn" id="btn-swap"><i class="ic" data-ic="swap"></i><span>切换</span></button>
+      </nav>
+    </aside>
+
+    <div id="dialog" class="hidden" role="dialog" aria-live="polite">
+      <div class="dlg-portrait"><canvas id="dlg-pt" width="72" height="72"></canvas></div>
+      <div class="dlg-body">
+        <div class="dlg-name" id="dlg-name"></div>
+        <div class="dlg-text" id="dlg-text"></div>
+        <div class="dlg-choices" id="dlg-choices"></div>
+      </div>
+      <div class="dlg-next" id="dlg-next">▼</div>
+    </div>
+  </section>
+
+  <div id="modal-root"></div>
+  <div id="fx-root"></div>
+  <div id="curtain" class="hidden"></div>
+  <div id="boot-msg">载入中……</div>
+</div>
+
+<script src="js/assets.js"></script>
+<script src="js/bitfont.js"></script>
+<script src="../hub/account-core.js"></script>
+<script src="js/core.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/data_tags.js"></script>
+<script src="js/data_world.js"></script>
+<script src="js/data_lines.js"></script>
+<script src="js/data_reactions.js"></script>
+<script src="js/entity.js"></script>
+<script src="js/brains.js"></script>
+<script src="js/tagsys.js"></script>
+<script src="js/scan.js"></script>
+<script src="js/dialog.js"></script>
+<script src="js/data_story.js"></script>
+<script src="js/story.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/input.js"></script>
+<script src="js/game.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

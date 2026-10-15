@@ -51,6 +51,28 @@
       keys: [['1–8', '切换页签'], ['P', '推进 / 刷关'], ['M', '置顶小窗'], ['滚轮 / 拖动', '滚动列表与符文树']],
       hint: '横屏竖屏都能玩 · Chrome / Edge 可开置顶小窗',
     },
+    {
+      id: 'whiteline', no: 3, name: '白线以内', en: 'INSIDE THE WHITE LINE', href: 'whiteline/index.html',
+      category: 'puzzle', tags: ['规则拼图', '时间循环', '像素', '剧情'], released: '2026-10-15', accent: '#c0432c',
+      cover: 'hub/whiteline-cover.png', coverAlt: '白线以内：深夜站台，末班车停靠，少女站在白线后面，站牌写着“04号车厢”',
+      pitch: '末班车 04 号车厢里的像素规则拼图：剪下万物身上的词条，贴到别处，在每 60 秒一次的白线巡检之前伪造现场。',
+      desc: '凌晨的末班车上，七号醒来时手里只有一本台本。车厢里的每样东西都贴着“词条”：扬声器、广告、气球、门，还有乘客自己。'
+        + '把词条剪下来贴到别处，世界就照着新的词条运转；给铁砧同时贴上【沉重】和【零重力】，它会悬在半空慢慢浮沉——这样的化学反应写满了一整本图鉴。'
+        + '每 60 秒，白线扫过车厢，把一切改回台本的样子，赶在它到来之前伪造好现场，唤醒车厢里的同伴，同一道难题往往有好几种解法。'
+        + '四幕剧情、时间循环，随时可以存档、读档，登录 GAME.INC.RE 账号后存档在所有设备同步。',
+      facts: [['词条', '58'], ['化学反应', '240'], ['解法', '37'], ['幕', '4']],
+      cast: [
+        { name: '七号', sub: '乘客 07', color: '#c0432c', img: 'hub/whiteline-nana.png', pixel: true },
+        { name: '栞', sub: '少女', color: '#f0a83a', img: 'hub/whiteline-shiori.png', pixel: true },
+        { name: '黑川', sub: '风衣男', color: '#a9967a', img: 'hub/whiteline-kuro.png', pixel: true },
+        { name: '白鷺', sub: '车掌', color: '#6f8fb8', img: 'hub/whiteline-shira.png', pixel: true },
+        { name: '田中', sub: '醉汉', color: '#d8b24a', img: 'hub/whiteline-tanaka.png', pixel: true },
+      ],
+      platforms: ['mouse', 'keyboard', 'touch'],
+      keys: [['点地面 / ← →', '移动'], ['点对象 / Tab', '选中'], ['点词条 / Ctrl+X', '剪下词条'], ['Ctrl+V / 1–7', '贴上词条'],
+        ['空格 / F', '暂停 / 快进'], ['T / H / Q', '台本 / 提示 / 切换角色'], ['Esc', '菜单 · 存档 · 读档']],
+      hint: '电脑与手机都能玩 · 菜单里随时存档',
+    },
   ];
   root.HUB_CATALOG = { categories: CATEGORIES, games: GAMES };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -11,6 +11,15 @@ const HUB_GAMES = [{
     ? `${['普通', '噩梦', '地狱', '折磨'][data.prog?.d || 0]} ${data.prog?.a || 1}-${data.prog?.s || 1} · 最高 ${Math.max(1, ...Object.values(data.heroes || {}).map(h => h?.lv || 1))} 级 · 通关 ${(data.prog?.best || []).reduce((a, x) => a + (x || 0), 0)} 关`
     : data.v === 2 ? '第二版存档 · 进入游戏带着猎人开始 3.0 的旅程' : '早期存档 · 进入游戏开始 3.0 的旅程',
   guestHasProgress: data => (data?.prog?.best?.[0] || 0) > 0 || (data?.stats?.kills || 0) > 0,
+}, {
+  // 云端是一份存档文档；本机未登录时的进度分散在 wl_save / wl_meta / wl_slots
+  id: 'whiteline', name: '白线以内', href: '/whiteline/index.html', guestKey: 'wl_save',
+  summary: data => {
+    const latest = [data.auto, ...(data.slots || [])].filter(Boolean).sort((a, b) => (b.time || 0) - (a.time || 0))[0];
+    const act = latest ? '第' + (['', '一', '二', '三', '四'][latest.act] || latest.act) + '幕' : '还没有存档';
+    return act + ' · 存档 ' + (data.slots || []).filter(Boolean).length + ' 个 · 图鉴 ' + Object.keys(data.meta?.dex || {}).length + ' 条' + (data.meta?.cleared ? ' · 已通关' : '');
+  },
+  guestHasProgress: data => !!data?.act,
 }];
 (() => {
   const C = GameAccount, opener = document.getElementById('acct-open'), dialog = document.getElementById('acct');
