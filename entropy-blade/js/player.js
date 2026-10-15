@@ -4,10 +4,12 @@
 //  mana), charge, dash attacks, 见切 counters, wall jumps, weapon, sigil hooks
 // =====================================================================
 const JUMP_V = 400, JUMP2_V = 360, MAX_FALL = 470;
-const CHARGE_START = 0.24, CHARGE_L1 = 0.42, CHARGE_L2 = 1.05;
+// 蓄力：按住攻击 CHARGE_START 秒才进入蓄力架势（普通按键稍长也只是一次攻击）；基准难度下从按下到一段/二段的总时长与原先相同
+const CHARGE_START = 0.3, CHARGE_L1 = 0.36, CHARGE_L2 = 0.99;
 const FOLLOW_WINDOW = 0.55;
 // 闪避节奏: after a dodge the next one waits this long (a 见切 resets it, so perfect timing can chain dodges forever)
-const DODGE_CD = 0.5, DASH_BUFFER = 0.12;
+// 冷却或充能只差 DASH_QUEUE 秒时按下冲刺：排队到能冲刺的那一刻，不必重按
+const DODGE_CD = 0.5, DASH_BUFFER = 0.12, DASH_QUEUE = 0.25;
 const HOOK_NAMES = ['onHit', 'onCrit', 'onKill', 'onDash', 'onDashEnd', 'onSkill', 'onUlt', 'onHurt', 'onRoomStart', 'onRoomClear', 'tick', 'modDmg', 'modHit', 'onPlunge', 'onPerfect', 'onCounter', 'onJump', 'onFinisher', 'onMove', 'onCharge', 'draw'];
 
 class Player extends Ent {
@@ -222,7 +224,10 @@ class Player extends Ent {
     const ix = this.wallLock > 0 ? 0 : Input.axisX();
     if (Input.hit('jump')) this.jumpBuf = 0.13; else this.jumpBuf -= dt;
     // a dodge pressed a moment before the cooldown ends still comes out
-    if (Input.hit('dash')) this.dashBuf = DASH_BUFFER; else this.dashBuf -= dt;
+    if (Input.hit('dash')) {
+      const wait = Math.max(this.dodgeCD, this.dashes > 0 ? 0 : this.stats.dashCD - this.dashRegen);
+      this.dashBuf = DASH_BUFFER + (wait <= DASH_QUEUE ? wait : 0);
+    } else this.dashBuf -= dt;
     // hold-to-charge tracking
     if (Input.hit('attack')) { this.holding = true; this.holdT = 0; }
     if (this.holding) { if (Input.down('attack')) this.holdT += dt; else this.holding = false; }
@@ -303,7 +308,7 @@ class Player extends Ent {
     if (ix) this.face = ix;
     if (this.wallT > 0) this.face = -this.wallDir;
     if (this.tryActions()) return;
-    if (this.holding && this.holdT >= CHARGE_START * this.stats.chargeTimeMul && this.onGround) { this.enterCharge(); return; }
+    if (this.holding && this.holdT >= CHARGE_START && this.onGround) { this.enterCharge(); return; }
     if (this.wallT > 0 && this.jumpBuf > 0) { this.wallJump(); return; }
     this.tryJump();
     if (this.jumpHeld && !Input.down('jump')) { if (this.vy < -120) this.vy *= 0.5; this.jumpHeld = false; }
@@ -448,10 +453,13 @@ class Player extends Ent {
       else if (Input.hit('jump')) mv.buf = 'jump';
     }
     if (m.ult) { if (mv.t >= dur) this.endMove(); return; }
-    // roll a held light attack into a charge
-    if (m.light && this.holding && this.holdT >= CHARGE_START * this.stats.chargeTimeMul && this.onGround && mv.t >= m.cancel * 0.6) { this.enterCharge(); return; }
+    // roll a held light attack into a charge — only once the swing has reached its cancel point, so a long press never cuts it short
+    // (the difficulty's faster charging speeds up the stance itself, not this press-vs-hold threshold)
+    if (m.light && this.holding && this.holdT >= CHARGE_START && this.onGround && mv.t >= m.cancel) { this.enterCharge(); return; }
+    // 冲刺取消：普通攻击随时可以闪开（见切的时机从按键那一刻算）；技能、武技、秘技先打出第一下
     const firstHit = m.hits && m.hits.length ? m.hits[0].t : 0.04;
-    if (this.dashBuf > 0 && mv.t >= Math.min(m.cancel, firstHit + 0.03) && this.doDash()) return;
+    const basic = !m.skill && !m.uskill && !m.art;
+    if (this.dashBuf > 0 && (basic || mv.t >= Math.min(m.cancel, firstHit + 0.03)) && this.doDash()) return;
     if (mv.t >= m.cancel) {
       if (mv.buf === 'attack') {
         const nm = this.pickAttack(mv.name, false);
@@ -465,7 +473,8 @@ class Player extends Ent {
       }
       if (mv.buf === 'ult') { mv.buf = null; if (this.trySecret(mv.bufSlot)) return; }
       if (mv.buf === 'skill') { mv.buf = null; if (this.trySkill(mv.bufSlot)) return; }
-      if (ix && this.onGround && mv.t >= m.cancel + 0.05 && !m.loop && !m.steer) { this.endMove(); return; }
+      // 方向键提前收招：地面招式，以及空中攻击（拿回完整的空中移动）
+      if (ix && (this.onGround || m.air) && mv.t >= m.cancel + 0.05 && !m.loop && !m.steer) { this.endMove(); return; }
     }
     if (mv.t >= dur && !m.loop) this.endMove();
   }
@@ -487,6 +496,8 @@ class Player extends Ent {
   }
   // ---------- charge ----------
   enterCharge() {
+    // the combo link the stance came from: an early release keeps the combo going on the next press
+    this.chargeFrom = this.move ? this.move.name : this.chainT > 0 ? this.lastMove : null;
     if (this.move && this.move.m.onEnd) this.move.m.onEnd(this, this.move);
     this.state = 'charge'; this.move = null; this.chargeT = 0; this.chargeLv = 0;
     this.anim = 'hold'; this.animT = 0;
@@ -517,7 +528,7 @@ class Player extends Ent {
     if (!Input.down('attack')) {
       this.holding = false;
       if (this.chargeLv >= 1) { const lv = this.chargeLv; this.startMove(lv === 2 ? 'charge2' : 'charge1'); this.fire('onCharge', lv); }
-      else this.state = 'normal';
+      else { this.state = 'normal'; if (this.chargeFrom) { this.lastMove = this.chargeFrom; this.chainT = 0.5; } }
     }
   }
   // ---------- dash & 见切 ----------

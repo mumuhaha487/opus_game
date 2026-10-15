@@ -137,7 +137,9 @@ const TouchUI = (() => {
   }
   function setJoy(dx, dy) {
     const R = T.joyR, dead = 0.3, nx = dx / R, ny = dy / R;
-    const want = { ArrowLeft: nx < -dead, ArrowRight: nx > dead, ArrowUp: ny < -0.5, ArrowDown: ny > 0.5 };
+    // up / down need a clearly vertical push (~40°+): a thumb drifting upward while running keeps plain attacks
+    const vert = Math.abs(ny) > Math.abs(nx) * 0.8;
+    const want = { ArrowLeft: nx < -dead, ArrowRight: nx > dead, ArrowUp: ny < -0.5 && vert, ArrowDown: ny > 0.5 && vert };
     for (const k in want) if (want[k] !== !!T.joyKeys[k]) { T.joyKeys[k] = want[k]; Input.virt(k, want[k]); }
   }
   function releaseJoy() { for (const k in T.joyKeys) if (T.joyKeys[k]) { T.joyKeys[k] = false; Input.virt(k, false); } T.joy = null; }

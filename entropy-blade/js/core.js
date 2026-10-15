@@ -190,18 +190,20 @@ const Input = (() => {
     }
     for (const b of padNow) if (!padPrev.has(b)) anyPressed = true;
   }
+  // up / down only when the stick leans clearly vertical (~40°+), so running on a slight diagonal keeps plain attacks
+  const vertical = (a, sgn) => sgn * a[1] > 0.5 && Math.abs(a[1]) > Math.abs(a[0]) * 0.8;
   function axisHeld(name) {
     if (name === 'left' || name === 'mleft') return axes[0] < -0.4;
     if (name === 'right' || name === 'mright') return axes[0] > 0.4;
-    if (name === 'up' || name === 'mup') return axes[1] < -0.5;
-    if (name === 'down' || name === 'mdown') return axes[1] > 0.5;
+    if (name === 'up' || name === 'mup') return vertical(axes, -1);
+    if (name === 'down' || name === 'mdown') return vertical(axes, 1);
     return false;
   }
   function axisPressed(name) {
     if (name === 'left' || name === 'mleft') return axes[0] < -0.5 && !(axesPrev[0] < -0.5);
     if (name === 'right' || name === 'mright') return axes[0] > 0.5 && !(axesPrev[0] > 0.5);
-    if (name === 'up' || name === 'mup') return axes[1] < -0.5 && !(axesPrev[1] < -0.5);
-    if (name === 'down' || name === 'mdown') return axes[1] > 0.5 && !(axesPrev[1] > 0.5);
+    if (name === 'up' || name === 'mup') return vertical(axes, -1) && !vertical(axesPrev, -1);
+    if (name === 'down' || name === 'mdown') return vertical(axes, 1) && !vertical(axesPrev, 1);
     return false;
   }
   function down(name) {
