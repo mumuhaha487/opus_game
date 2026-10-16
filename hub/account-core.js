@@ -30,6 +30,11 @@ const GameAccount = (() => {
   let current = profileValue(read(PROFILE));
   let regionPending;
   const listeners = new Set();
+  const changed = () => { for (const fn of listeners) { try { fn(C.profile()); } catch { /* independent listeners */ } } };
+  // canonical JSON (sorted keys) signature, the same one game-cloud.js keeps in cache.sent: an upload whose reply
+  // was lost is recognised on the next sync instead of being merged twice
+  const canon = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(n => [n, x[n]])) : x);
+  const sig = v => { const s = canon(v); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + '.' + s.length; };
   const C = {
     file: location.protocol === 'file:', validName,
     validPassword: password => typeof password === 'string' && [...password].length >= 8 && [...password].length <= 64,
@@ -87,7 +92,15 @@ const GameAccount = (() => {
       const result = await C.request('/api/register', 'POST', { username, password });
       C.setProfile(result.user.name); return { name: result.user.name };
     },
-    me: () => C.request('/api/me'),
+    // The session cookie decides whose account this browser is signed in to. When it is not the stored profile
+    // (another account signed in meanwhile and its profile write failed), the profile follows the session and every
+    // listener re-activates with that account's own cache; the caller's sync for the old account then stops.
+    async me() {
+      const asked = current?.name, result = await C.request('/api/me'), name = result?.user?.name;
+      // a profile changed while the request was in flight makes this answer stale
+      if (asked && current?.name === asked && validName(name) && name.toLowerCase() !== asked.toLowerCase()) { C.setProfile(name); changed(); }
+      return result;
+    },
     async logout({ flush } = {}) {
       const name = current?.name;
       if (flush) { try { await flush(); } catch { /* remaining dirty caches are retried below */ } }
@@ -95,16 +108,23 @@ const GameAccount = (() => {
         const match = /^gameinc_save_([a-z0-9-]{1,32})_([a-z0-9_]{3,16})_v1$/.exec(key);
         return match && match[2] === name.toLowerCase() ? [{ key, game: match[1] }] : [];
       }) : [];
-      for (const { key, game } of accountCaches()) {
+      const dirty = accountCaches().filter(({ key }) => read(key)?.dirty);
+      // these caches belong to `name`: they only go up while the session is that account (otherwise they stay on the device)
+      let owner = null;
+      if (dirty.length) { try { owner = (await C.request('/api/me'))?.user?.name; } catch { /* offline: kept below */ } }
+      for (const { key, game } of owner && owner.toLowerCase() === name.toLowerCase() ? dirty : []) {
         const cache = read(key);
         if (!cache?.dirty) continue;
+        const mark = { base: cache.rev, sig: sig(cache.data) };
+        cache.sent = [...(Array.isArray(cache.sent) ? cache.sent : []).filter(s => s.base === mark.base && s.sig !== mark.sig).slice(-2), mark];
+        write(key, cache);
         try {
           const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data: cache.data });
           const latest = read(key);
           // A game in another tab may write while this request is in flight.
           if (latest && latest.rev === cache.rev) {
             latest.dirty = JSON.stringify(latest.data) !== JSON.stringify(cache.data);
-            latest.base = cache.data; latest.rev = next.rev; write(key, latest);
+            latest.base = cache.data; latest.rev = next.rev; delete latest.sent; write(key, latest);
           }
         } catch { /* conflicts and offline progress stay dirty */ }
       }
@@ -124,7 +144,7 @@ const GameAccount = (() => {
     let value = null;
     try { value = event.key === null ? read(PROFILE) : JSON.parse(event.newValue); } catch { /* invalid profile */ }
     current = profileValue(value);
-    for (const fn of listeners) { try { fn(C.profile()); } catch { /* independent listeners */ } }
+    changed();
   });
   return C;
 })();

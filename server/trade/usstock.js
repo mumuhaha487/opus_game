@@ -2,7 +2,7 @@
 // 市价单只在常规时段按实时成交价（新浪；腾讯备用须同样新鲜）成交；限价单当日有效，盘外委托排入下一交易时段。
 // 金额 BigInt 定点：USD 入账 floor2，出账与费用 ceil2。
 import { parse, toStr, mul, div, roundTo, min } from './decimal.js';
-import { ledger } from './state.js';
+import { ledger, rememberOrder, replayOrder } from './state.js';
 import { usStock } from './us-data.js';
 import { usMarketStatus, nyParts, nyTime } from './us-calendar.js';
 const fail = (code, status = 400) => { throw { status, code }; };
@@ -110,8 +110,8 @@ export function finishUsOrder(state, order, status, now) {
   state.history.orders.unshift(structuredClone(order));
 }
 export async function placeUsOrder(state, data, client, now) {
-  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
-  if (previous) return structuredClone(previous.result);
+  const previous = replayOrder(state, data.clientId);
+  if (previous) return previous;
   usStock(data.ticker);
   if (state.orders.length >= 50) fail('too_many_orders');
   const market = usMarketStatus(now), open = market.status === 'open';
@@ -138,7 +138,7 @@ export async function placeUsOrder(state, data, client, now) {
     fillUs(state, order, values.qty, last, now);
     finishUsOrder(state, order, 'filled', now);
   }
-  const result = structuredClone(order); state.clientIds.unshift({ clientId: data.clientId, result }); return result;
+  const result = structuredClone(order); rememberOrder(state, data.clientId, result, now); return result;
 }
 export function cancelUsOrder(state, id, now) {
   const order = state.orders.find(entry => entry.id === id && entry.market === 'usstock');

@@ -49,17 +49,17 @@ codeBlock(auth, '鉴权头', 'Authorization: Bearer <API_KEY>');
 section('limits', '额度与轮询', [
   '每个 Key 每分钟 GET 10 次、POST 10 次，分别计数；每个 Key 每天 1500 次，每个账号每天 3000 次。',
   '每日额度按北京时间重置。建议每 30–60 秒轮询一次；收到 429 时按 Retry-After 等待后再试。',
-  '响应包含 X-RateLimit-Limit、X-RateLimit-Remaining、X-Request-Id，以及每日 Key 和账号剩余额度头。',
+  '响应包含 X-RateLimit-Limit、X-RateLimit-Remaining、X-Request-Id，以及每日 Key 和账号剩余额度头；被分钟额度拒绝的 429 不带每日额度头。',
   '分钟额度采用近似计数；每日额度按批次合并，分布式调用会有少量计数误差。',
   '网页和 API 合计每日最多 500 笔委托；账号交易类 POST 共用每分钟 40 次上限。',
-  '成功 GET 调用记录每 Key 每分钟采样一次；POST 和错误调用逐次记录，保留最近 100 条。',
+  '成功 GET 调用每 Key 每分钟采样记录一次，429 每 Key 每分钟最多记录一次；POST 和其他错误调用逐次记录，保留最近 100 条。',
 ]);
 const errors = section('errors', '错误与重试', [
   '错误统一返回 { error, message }。记录 X-Request-Id 可帮助定位调用；限流返回 Retry-After。',
   '401：Key 无效、已过期或已删除；403：权限不足（例如只读 Key 调用写接口）；404：接口或资源不存在。',
-  '409：今天已签到、密钥数量上限；422：参数或交易规则不满足；429：分钟、每日调用或委托额度用尽。',
+  '409：今天已签到、密钥数量上限、clientId 已用于较早的委托；422：参数或交易规则不满足；429：分钟、每日调用或委托额度用尽。',
   '503：行情、汇率或服务暂时不可用，稍后重试；413：请求体过大；415：媒体类型错误；405：方法不支持。',
-  '下单 clientId 必填。重试同一次意图时沿用 clientId；新的交易意图使用新的 clientId。',
+  '下单 clientId 必填。重试同一次意图时沿用 clientId：24 小时内（最近 500 笔委托以内）同一 clientId 返回原委托；较早的委托已不在委托历史里时返回 409 duplicate_order。新的交易意图使用新的 clientId。',
 ]);
 sample(errors, documentationExamples.examples[3]); sample(errors, documentationExamples.examples[8]);
 sample(errors, documentationExamples.examples[26]);

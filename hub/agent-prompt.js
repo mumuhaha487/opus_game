@@ -82,7 +82,7 @@ export const PROMPT_ERRORS = {
   ],
   "max_position": [
     "超出合约最大仓位",
-    "减小仓位或先减仓；检查 Gate risk_limit_base，包含同向已有持仓，不靠提高杠杆绕过名义价值上限。"
+    "减小仓位或撤掉同向挂单；检查 Gate risk_limit_base：同向持仓、同向未成交开仓委托与本单合计，按其中最高价估值；不靠提高杠杆绕过名义价值上限。"
   ],
   "fx_unavailable": [
     "汇率暂时不可用，请稍后再试",
@@ -2301,7 +2301,7 @@ export const PROMPT_FIELDS = [
   'GET orders 返回 {orders:[…]}，GET trades 返回 {trades:[…]}。请求 market 使用 crypto_spot/crypto_futures/ashare/usstock，响应 market 为 spot/futures/ashare/usstock。',
   '| 字段 | 类型与含义 |',
   '| --- | --- |',
-  '| id / clientId | string；服务端委托 ID / 客户端幂等 ID；撤单用 id，下单重试沿用 clientId；服务端最近只保留 50 个 clientId，不作无限期重放 |',
+  '| id / clientId | string；服务端委托 ID / 客户端幂等 ID；撤单用 id，下单重试沿用 clientId；24 小时内（最近 500 笔以内）同一 clientId 返回原委托，较早的委托已不在委托历史里时返回 409 duplicate_order（message 含原委托 ID）；新委托用新的 clientId |',
   '| market / symbol / code / name | 市场、交易对；A 股另有 code/name，美股另有 ticker/name（symbol 同 ticker）；不要把显示名称用于请求路径 |',
   '| side / type | buy/sell；现货 market/limit/stop_limit，合约 market/limit/stop_market，A 股与美股 market/limit |',
   '| qty / quoteQty | string 或 null；基础币数量（A 股、美股为股数）/仅现货市价买入的 USDT 委托金额；按金额单 qty 可为 null |',

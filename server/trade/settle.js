@@ -107,20 +107,23 @@ async function settleSpot(state, gate, now, notices) {
   }
   return false;
 }
-export async function settle(state, gate, now, force = false, ashare = new AshareClient(gate, now), us = new UsClient(gate, now)) {
+export async function settle(state, gate, now, force = false, ashare = new AshareClient(gate, now), us = new UsClient(gate, now),
+  markets = null) {
   const notices = [];
   // 规格 6.5、7.8：无当前委托、无仓位时完全保留 state，避免轮询重写 R2。
-  const hasAshare = hasAshareWork(state, now);
-  if (!state.orders.length && !Object.keys(state.futures.positions).length && !hasAshare) return { partial: false, notices };
+  const ashareWork = hasAshareWork(state, now);
+  if (!state.orders.length && !Object.keys(state.futures.positions).length && !ashareWork) return { partial: false, notices };
   if (!force && now - (state.lastSettlement || 0) < 2000) return { partial: false, notices };
-  const hasSpot = state.orders.some(order => order.market === 'spot');
-  const hasFutures = state.orders.some(order => order.market === 'futures') || Object.keys(state.futures.positions).length;
+  // 划转只结算涉及的子账户（markets）；跳过的市场仍有待结算内容时 partial 为 true。
+  const work = { spot: state.orders.some(order => order.market === 'spot'), ashare: ashareWork, usstock: hasUsWork(state),
+    futures: state.orders.some(order => order.market === 'futures') || Object.keys(state.futures.positions).length };
+  let partial = !!markets && Object.keys(work).some(market => work[market] && !markets.has(market));
+  if (markets) for (const market of Object.keys(work)) work[market] &&= markets.has(market);
+  const { spot: hasSpot, futures: hasFutures, ashare: hasAshare, usstock: hasUs } = work;
   // ASHARE §3.3 + 美股：各市场共享 30 次预算。美股先按市场数平分剩余额度，再给 A 股分配份额，随后恢复加密预算。
-  const hasUs = hasUsWork(state);
-  let partial = false;
   if (hasUs) {
     if (hasAshare || hasSpot || hasFutures) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / (1 + hasAshare + hasSpot + !!hasFutures));
-    partial = await settleUs(state, us, now, notices);
+    partial = await settleUs(state, us, now, notices) || partial;
     gate.budgetLimit = 30;
   }
   if (hasAshare && (hasSpot || hasFutures)) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / (1 + hasSpot + hasFutures));
@@ -128,15 +131,15 @@ export async function settle(state, gate, now, force = false, ashare = new Ashar
   gate.budgetLimit = 30;
   // 规格 5.3、7.8：两类市场共用 30 次预算，混合积压时给合约保留一半剩余额度。
   if (hasSpot && hasFutures) gate.budgetLimit = gate.used + Math.ceil((30 - gate.used) / 2);
-  partial = await settleSpot(state, gate, now, notices) || partial;
+  if (hasSpot) partial = await settleSpot(state, gate, now, notices) || partial;
   gate.budgetLimit = 30;
   if (hasFutures) partial = await settleFutures(state, gate, now, notices, settlementPlan) || partial;
-  const symbols = new Set(state.orders.filter(order => order.market === 'spot').map(order => order.symbol));
+  const symbols = new Set(hasSpot ? state.orders.filter(order => order.market === 'spot').map(order => order.symbol) : []);
   for (const symbol of symbols) {
     const pending = state.orders.filter(order => order.symbol === symbol && order.market === 'spot');
     // 规格 6.5.6、5.3：完整结算记 now，部分结算只记录确实处理到的游标。
     state.settledAt['spot:' + symbol] = pending.length ? Math.min(...pending.map(order => order.checkFrom)) : now;
   }
-  state.lastSettlement = partial ? 0 : now;
+  if (!markets) state.lastSettlement = partial ? 0 : now;
   return { partial, notices };
 }

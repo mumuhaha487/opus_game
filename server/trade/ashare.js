@@ -2,7 +2,7 @@
 // 买入形成按交易日标记的 T+1 批次，卖出只冻结可卖数量。
 // 手续费按整笔委托累计计算，部分成交不会重复收最低佣金。
 import { parse, toStr, mul, div, min } from './decimal.js';
-import { ledger } from './state.js';
+import { ledger, rememberOrder, replayOrder } from './state.js';
 import { dayKey } from '../likes.js';
 import { marketStatus, validateAshare, feesFor, feeView, cnyCredit, cnyDebit, dayTime, unlockHoldings } from './ashare-rules.js';
 const fail = code => { throw { status: 400, code }; };
@@ -100,8 +100,8 @@ function remainingLock(order) {
   return cnyDebit(quote) + feesFor(parse(order.executedQuote) + quote, 'buy').total - parse(order.fee);
 }
 export async function placeAshareOrder(state, data, client, now) {
-  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
-  if (previous) return structuredClone(previous.result);
+  const previous = replayOrder(state, data.clientId);
+  if (previous) return previous;
   const quotes = await client.quotes([data.code, 'sh000001'], true), quote = quotes[data.code], index = quotes.sh000001;
   unlockHoldings(state, index, now);
   const values = validateAshare(data, quote, state.ashare.holdings[data.code]), market = marketStatus(now, index);
@@ -129,7 +129,7 @@ export async function placeAshareOrder(state, data, client, now) {
   else if (match.filled === values.qty) finishAshareOrder(state, order, 'filled', now);
   else resizeLock(state, order, remainingLock(order));
   state.ashare.marketTime = index.time;
-  const result = structuredClone(order); state.clientIds.unshift({ clientId: data.clientId, result }); return result;
+  const result = structuredClone(order); rememberOrder(state, data.clientId, result, now); return result;
 }
 export function cancelAshareOrder(state, id, now) {
   const order = state.orders.find(entry => entry.id === id && entry.market === 'ashare');

@@ -3,8 +3,8 @@
 // 合约钱包、订单冻结和逐仓保证金分开，金额以 BigInt18 运算、八位记账。
 import { parse, toStr, mul, div, min, max, credit, debit } from './decimal.js';
 import { marketFor } from './markets.js';
-import { ledger } from './state.js';
-import { assertBookFresh } from './gate.js';
+import { ledger, rememberOrder, replayOrder } from './state.js';
+import { assertBookFresh, bookFresh } from './gate.js';
 export const MAKER = parse('0.0002'), TAKER = parse('0.0005');
 const fail = (code, extra = {}) => { throw { status: 400, code, ...extra }; };
 export const signed = value => value.startsWith('-') ? -parse(value.slice(1)) : parse(value);
@@ -104,8 +104,6 @@ function positionAfterFill(state, order, filled, price, closeFee, now, spec) {
   }
   if (remaining) {
     const totalQty = (position ? parse(position.qty) : 0n) + remaining;
-    // 规格 7.2：单仓持仓价值不得超过运行时 risk_limit_base。
-    if (mul(price, totalQty, 'ceil') > parse(spec.risk_limit_base)) fail('max_position', { maximum: spec.risk_limit_base });
     const addedMargin = debit(div(mul(price, remaining, 'ceil'), parse(String(order.leverage)), 'ceil'));
     walletChange(state, -addedMargin);
     if (position) {
@@ -121,6 +119,10 @@ function positionAfterFill(state, order, filled, price, closeFee, now, spec) {
   if (position) { position.checkFrom = now; position.updatedAt = now; position.liq = toStr(liquidation(position)); }
   return { realizedPnl, closeFee };
 }
+function limitCheck(spec, price, qty) {
+  // 规格 7.2：持仓价值 = 成交价 × 成交后同向总数量（ceil），不得超过运行时 risk_limit_base。
+  if (mul(price, qty, 'ceil') > parse(spec.risk_limit_base)) fail('max_position', { maximum: spec.risk_limit_base });
+}
 export function fillFutures(state, order, quantity, quote, role, now, spec) {
   const position = state.futures.positions[order.symbol];
   // 规格 7.5、7.6：只减仓成交截断到实际仓位，方向不符则取消，绝不反手开仓。
@@ -130,6 +132,11 @@ export function fillFutures(state, order, quantity, quote, role, now, spec) {
     }
     const reduced = min(quantity, parse(position.qty));
     quote = mul(div(quote, quantity, 'half'), reduced, 'floor'); quantity = reduced;
+  } else {
+    // 超限在改动任何余额之前抛出，结算可以安全撤掉这一笔。反向先平旧仓，只有平完后的余量算新仓。
+    const held = position ? parse(position.qty) : 0n, same = !position || (position.side === 'long') === (order.side === 'buy');
+    const opened = same ? held + quantity : quantity > held ? quantity - held : 0n;
+    if (opened) limitCheck(spec, div(quote, quantity, 'half'), opened);
   }
   const oldRemaining = parse(order.qty) - parse(order.filled), oldLock = parse(order.lock.amount);
   const release = quantity === oldRemaining ? oldLock : credit(div(mul(oldLock, quantity, 'floor'), oldRemaining, 'floor'));
@@ -174,20 +181,39 @@ async function orderValues(state, data, gate) {
   validateTPSL(data.side, data.tp, data.sl, data.type === 'market' ? parse(ticker[0]?.mark_price) : price, spec);
   return { spec, qty, price, ticker: ticker[0] };
 }
+async function matchingBook(gate, symbol) {
+  // PLATFORM §5.2.2：结算可能耗时，撮合前按当前时间复查盘口；超过 10 秒在共享预算内重取一次，仍过期返回 market_stale。
+  let book = await gate.futuresBook(symbol, true);
+  if (!bookFresh(book, Date.now())) book = await gate.futuresBook(symbol, true, true).catch(() => null);
+  assertBookFresh(book, Date.now());
+  return book;
+}
+function exposureCheck(state, data, qty, price, spec) {
+  // 规格 7.2：同向仓位 + 同向未成交开仓委托余量 + 本单，按其中最高的成交价估值（与成交时同一口径），
+  // 已接受的委托各自按委托价成交时都不会超限。
+  const position = state.futures.positions[data.symbol];
+  let total = qty + (position && (position.side === 'long') === (data.side === 'buy') ? parse(position.qty) : 0n);
+  for (const order of state.orders) {
+    if (order.market !== 'futures' || order.symbol !== data.symbol || order.side !== data.side || order.reduceOnly) continue;
+    total += parse(order.qty) - parse(order.filled);
+    price = max(price, parse(order.type === 'stop_market' ? order.stopPrice : order.price));
+  }
+  limitCheck(spec, price, total);
+}
 export async function placeFuturesOrder(state, data, gate, now) {
-  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
-  if (previous) return structuredClone(previous.result);
+  const previous = replayOrder(state, data.clientId);
+  if (previous) return previous;
   const { spec, qty, price, ticker } = await orderValues(state, data, gate);
   if (state.orders.length >= 50) fail('too_many_orders');
   const order = makeFuturesOrder(state, data, leverageFor(state, data.symbol, spec), now);
-  const book = data.type === 'stop_market' ? null : await gate.futuresBook(data.symbol, true);
-  if (book) assertBookFresh(book, now);
+  const book = data.type === 'stop_market' ? null : await matchingBook(gate, data.symbol);
   const match = data.type === 'stop_market' ? null : futuresMatch(book, data.side,
     qty, parse(spec.quanto_multiplier), price);
   if (data.type === 'market' && !match.filled) fail('no_liquidity');
   const estimate = data.type === 'market' ? match.average : price;
   const notional = mul(estimate, qty, 'ceil');
-  if (!data.reduceOnly && notional > parse(spec.risk_limit_base)) fail('max_position', { maximum: spec.risk_limit_base });
+  // 卖出限价可能以更高的盘口价立即成交，估值取委托价与即时成交均价的较高者。
+  if (!data.reduceOnly) exposureCheck(state, data, qty, max(estimate, match?.average ?? 0n), spec);
   const position = state.futures.positions[data.symbol];
   const closesNow = match?.filled && position && (position.side === 'long') !== (data.side === 'buy');
   // 规格 7.5、7.6：反向即时成交先平旧仓、再扣实际开仓成本，平仓不受预冻结余额限制。
@@ -203,7 +229,7 @@ export async function placeFuturesOrder(state, data, gate, now) {
     lockChange(state, order, debit(div(remainingNotional, parse(String(order.leverage)), 'ceil')
       + mul(remainingNotional, TAKER, 'ceil')));
   }
-  const result = structuredClone(order); state.clientIds.unshift({ clientId: data.clientId, result }); return result;
+  const result = structuredClone(order); rememberOrder(state, data.clientId, result, now); return result;
 }
 export function cancelFuturesOrder(state, id, now) {
   const order = state.orders.find(entry => entry.market === 'futures' && entry.id === id);
@@ -225,8 +251,8 @@ function positionFor(state, symbol) {
 }
 export async function closeFutures(state, data, gate, now) {
   // PLATFORM §5.2.5：已平仓后同 clientId 重放仍返回原结果，不能先要求仓位存在。
-  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
-  if (previous) return structuredClone(previous.result);
+  const previous = replayOrder(state, data.clientId);
+  if (previous) return previous;
   const position = positionFor(state, data.symbol);
   if (!['market', 'limit'].includes(data.type)) fail('bad_request');
   return placeFuturesOrder(state, { symbol: data.symbol, clientId: data.clientId || crypto.randomUUID(),

@@ -1,5 +1,5 @@
 import { ITERATIONS, USERNAME, b64url, unbase64, randomBytes, hex, equal32, passwordHash, passwordValid, signSession, sessionCookie, verifySession } from './auth.js';
-import { absent, userKey, saveKey, readSave, publicSave, rateWindow, slidingWindow, networkKey } from './store.js';
+import { absent, userKey, saveKey, readSave, publicSave, rateWindow, slidingWindow, reserveWindow, releaseWindow, networkKey } from './store.js';
 import { GAMES } from './games/index.js';
 import { likeable, getLikes, addLike } from './likes.js';
 import { handleTrade } from './trade/index.js';
@@ -32,6 +32,20 @@ const REGISTER = { tries: [3600, 20], hour: [3600, 2], day: [86400, 5], message:
 // 同一账号一小时失败 100 次也拦截（防多 IP 轮换猜密码）；高于 IP 阈值，正常用户只会遇到 IP 的 30 次，
 // 别人也难以靠故意输错把某个账号锁住。
 const LOGIN = { ip: [3600, 30], name: [3600, 100], message: '登录失败次数过多，请稍后再试。' };
+// 账号第一次上传某款游戏（云端还没有这款的存档）多半是把游客进度带进账号：合理性检查按 7 天的时间预算。
+const GUEST_IMPORT_MS = 7 * 86400000;
+// 同时在几个滑动窗口各预占一个名额；有一个已满或出错时退回已经占到的，wait 为需要等待的秒数。
+// 退回失败只会多算一次，不影响这次请求的结果。
+async function reserveAll(bucket, windows) {
+  const settled = await Promise.allSettled(windows.map(([kind, key, seconds, limit]) => reserveWindow(bucket, kind, key, seconds, limit)));
+  const slots = settled.map(result => result.value || { wait: 0 });
+  const release = () => Promise.all(windows.map(([kind, key], i) => releaseWindow(bucket, kind, key, slots[i].stamp))).catch(() => {});
+  const failed = settled.find(result => result.status === 'rejected');
+  if (failed) { await release(); throw failed.reason; }
+  const wait = Math.max(...slots.map(slot => slot.wait));
+  if (wait) await release();
+  return { wait, release, keep: false };
+}
 async function body(request) {
   if (Number(request.headers.get('Content-Length')) > MAX) throw { status: 413, code: 'too_large' };
   const reader = request.body?.getReader();
@@ -48,9 +62,9 @@ async function body(request) {
   try { const v = JSON.parse(new TextDecoder().decode(bytes)); if (isObject(v)) return v; } catch { /* invalid JSON */ }
   throw { status: 400, code: 'bad_request' };
 }
-export async function handle(request, env) {
+export async function handle(request, env, ctx) {
   try {
-    if (new URL(request.url).pathname.startsWith('/api/v1/')) return handleAgent(request, env, body);
+    if (new URL(request.url).pathname.startsWith('/api/v1/')) return handleAgent(request, env, body, ctx);
     // PLATFORM §6.3–6.4：Bearer只用于Agent接口；带Cookie也不能回退到网页权限。
     if (request.headers.has('Authorization')) {
       return reply(403, { error: 'scope_denied', message: 'API 密钥不能调用此接口' });
@@ -116,38 +130,40 @@ export async function handle(request, env) {
       if (registering && !USERNAME.test(username)) return fail(400, 'bad_username');
       if (registering && !passwordValid(password)) return fail(400, 'bad_password');
       const name = username.toLowerCase();
-      if (!registering) {
-        const waits = await Promise.all([slidingWindow(bucket, 'login-fail-ip', network, ...LOGIN.ip),
-          slidingWindow(bucket, 'login-fail-name', name, ...LOGIN.name)]);
-        if (Math.max(...waits)) return blocked('login_limited', LOGIN.message, Math.max(...waits));
-      }
-      const object = USERNAME.test(username) ? await bucket.get(userKey(name)) : null;
-      let user = object ? await object.json() : null;
-      if (registering) {
-        if (user) return fail(409, 'name_taken');
-        const quota = await Promise.all([slidingWindow(bucket, 'register-ip', network, ...REGISTER.hour),
-          slidingWindow(bucket, 'register-ip-day', network, ...REGISTER.day)]);
-        if (Math.max(...quota)) return blocked('register_limited', REGISTER.message, Math.max(...quota));
-        // 先占用名额再写用户（条件写计数），并发注册也不能超出上限。
-        const reserved = await Promise.all([slidingWindow(bucket, 'register-ip', network, ...REGISTER.hour, true),
-          slidingWindow(bucket, 'register-ip-day', network, ...REGISTER.day, true)]);
-        if (Math.max(...reserved)) return blocked('register_limited', REGISTER.message, Math.max(...reserved));
-        const salt = randomBytes(16);
-        user = { v: 1, uid: hex(randomBytes(16)), name: username, salt: b64url(salt), hash: b64url(await passwordHash(password, env.PW_PEPPER, salt)), iter: ITERATIONS, sv: 1, created: Date.now() };
-        if (!await bucket.put(userKey(name), JSON.stringify(user), { onlyIf: absent() })) return fail(409, 'name_taken');
-      } else {
-        const hash = await passwordHash(password, env.PW_PEPPER, user ? unbase64(user.salt) : undefined, user ? user.iter : ITERATIONS);
-        if (!user || !equal32(hash, unbase64(user.hash))) {
-          await Promise.all([slidingWindow(bucket, 'login-fail-ip', network, ...LOGIN.ip, true),
-            slidingWindow(bucket, 'login-fail-name', name, ...LOGIN.name, true)]);
-          return fail(401, 'bad_credentials');
+      // 先用条件写预占名额，再算密码或创建账号，并发请求也越不过上限；没用掉的名额在 finally 里精确退回。
+      // 登录在 IP 与账号两个失败窗口各占一个，密码错误才保留（仍然只计失败）；注册占小时与 24 小时额度，创建成功才保留。
+      let held = null;
+      try {
+        if (!registering) {
+          held = await reserveAll(bucket, [['login-fail-ip', network, ...LOGIN.ip], ['login-fail-name', name, ...LOGIN.name]]);
+          if (held.wait) return blocked('login_limited', LOGIN.message, held.wait);
         }
-        if (user.iter < ITERATIONS) {
-          user.iter = ITERATIONS; user.hash = b64url(await passwordHash(password, env.PW_PEPPER, unbase64(user.salt)));
-          await bucket.put(userKey(name), JSON.stringify(user), { onlyIf: { etagMatches: object.etag } });
+        const object = USERNAME.test(username) ? await bucket.get(userKey(name)) : null;
+        let user = object ? await object.json() : null;
+        if (registering) {
+          if (user) return fail(409, 'name_taken');
+          const quota = await Promise.all([slidingWindow(bucket, 'register-ip', network, ...REGISTER.hour),
+            slidingWindow(bucket, 'register-ip-day', network, ...REGISTER.day)]);
+          if (Math.max(...quota)) return blocked('register_limited', REGISTER.message, Math.max(...quota));
+          held = await reserveAll(bucket, [['register-ip', network, ...REGISTER.hour], ['register-ip-day', network, ...REGISTER.day]]);
+          if (held.wait) return blocked('register_limited', REGISTER.message, held.wait);
+          const salt = randomBytes(16);
+          user = { v: 1, uid: hex(randomBytes(16)), name: username, salt: b64url(salt), hash: b64url(await passwordHash(password, env.PW_PEPPER, salt)), iter: ITERATIONS, sv: 1, created: Date.now() };
+          if (!await bucket.put(userKey(name), JSON.stringify(user), { onlyIf: absent() })) return fail(409, 'name_taken');
+          held.keep = true;
+        } else {
+          const hash = await passwordHash(password, env.PW_PEPPER, user ? unbase64(user.salt) : undefined, user ? user.iter : ITERATIONS);
+          if (!user || !equal32(hash, unbase64(user.hash))) {
+            held.keep = true;
+            return fail(401, 'bad_credentials');
+          }
+          if (user.iter < ITERATIONS) {
+            user.iter = ITERATIONS; user.hash = b64url(await passwordHash(password, env.PW_PEPPER, unbase64(user.salt)));
+            await bucket.put(userKey(name), JSON.stringify(user), { onlyIf: { etagMatches: object.etag } });
+          }
         }
-      }
-      return reply(registering ? 201 : 200, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(await signSession(user, env.AUTH_SECRET)) });
+        return reply(registering ? 201 : 200, { user: { name: user.name } }, { 'Set-Cookie': sessionCookie(await signSession(user, env.AUTH_SECRET)) });
+      } finally { if (held && !held.wait && !held.keep) await held.release(); }
     }
     const session = await verifySession(request, env);
     if (!session) return fail(401, 'unauthorized', { 'Set-Cookie': sessionCookie('', true) });
@@ -180,9 +196,9 @@ export async function handle(request, env) {
     if (wait) return limited(wait);
     const current = await readSave(bucket, user.uid, game);
     if (current.rev !== data.baseRev) return reply(409, { error: 'conflict', ...publicSave(current) });
-    // PLATFORM §5.3：先检查版本冲突，再检查清洗后的进度；首次保存 elapsedMs 为零。
+    // PLATFORM §5.3：先检查版本冲突，再检查清洗后的进度；时间按距上次云存档的服务端时间，首次保存按游客导入的 7 天。
     const now = Date.now();
-    const verdict = GAMES[game].plausible(current.data, clean, current.rev ? Math.max(0, now - current.updated) : 0);
+    const verdict = GAMES[game].plausible(current.data, clean, current.rev ? Math.max(0, now - current.updated) : GUEST_IMPORT_MS);
     if (!verdict.ok) {
       // 并发写已更新云端时走原冲突流程，不记录对旧版本的误拒绝。
       const latest = await readSave(bucket, user.uid, game);

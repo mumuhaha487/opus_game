@@ -3,7 +3,7 @@
 // 关键规则对应规格第 5.2、6.1–6.7 节。
 import { parse, toStr, mul, div, min, roundTo, credit, debit } from './decimal.js';
 import { marketFor } from './markets.js';
-import { balance, adjustBalance, moveLock, ledger } from './state.js';
+import { balance, adjustBalance, moveLock, ledger, rememberOrder, replayOrder } from './state.js';
 import { assertBookFresh } from './gate.js';
 export const FEE_RATE = parse('0.001');
 const failure = code => { throw { status: 400, code }; };
@@ -100,8 +100,8 @@ function freezeOrder(state, order, values) {
   order.lock.amount = toStr(amount);
 }
 export async function placeOrder(state, data, gate, now) {
-  const previous = state.clientIds.find(entry => entry.clientId === data.clientId);
-  if (previous) return structuredClone(previous.result);
+  const previous = replayOrder(state, data.clientId);
+  if (previous) return previous;
   marketFor(data.symbol);
   const specification = await gate.spec(data.symbol), values = validateOrder(data, specification);
   if (state.orders.length >= 50) failure('too_many_orders');
@@ -117,7 +117,7 @@ export async function placeOrder(state, data, gate, now) {
   const result = structuredClone(order);
   // 第五轮 WS 修复：来源只随下单结果返回，订单本体和历史记录不保存调试字段。
   if (bookSource) result.bookSource = bookSource;
-  state.clientIds.unshift({ clientId: data.clientId, result });
+  rememberOrder(state, data.clientId, result, now);
   return result;
 }
 async function placeBookOrder(state, order, values, specification, gate, now) {

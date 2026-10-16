@@ -29,9 +29,10 @@ async function settleOrder(state, order, client, now, notices) {
     events = (await client.daily(order.ticker, 60)).filter(bar => bar.date === date)
       .map(bar => ({ ...bar, end: session.close }));
   }
+  // 开盘价改善只给起始时间等于本交易时段开盘时刻的那一根（09:30 分钟或日 K）；缺少这一根时按限价保守成交。
   const gap = order.createdAt < session.open && order.checkFrom <= session.open;
-  for (const [index, event] of events.sort((a, b) => a.end - b.end).entries()) {
-    processEvent(state, order, event, notices, gap && index === 0);
+  for (const event of events.sort((a, b) => a.end - b.end)) {
+    processEvent(state, order, event, notices, gap && event.t === session.open);
     if (order.status === 'filled') return;
   }
   order.checkFrom = Math.max(order.checkFrom, Math.floor(end / 60000) * 60000);

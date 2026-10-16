@@ -3,7 +3,7 @@
 // 每个完整区间处理成功才推进游标，首个不完整分钟只检查最新成交价。
 import { parse, toStr, mul, credit, debit } from './decimal.js';
 import { ledger } from './state.js';
-import { signed, liquidation, fillFutures, makeFuturesOrder } from './futures.js';
+import { signed, liquidation, fillFutures, makeFuturesOrder, finishFuturesOrder } from './futures.js';
 const STEP = { '1m': 60000, '1h': 3600000, '1d': 86400000 };
 export function applyFunding(state, symbol, rate, mark, time, notices = []) {
   const position = state.futures.positions[symbol];
@@ -75,7 +75,14 @@ export function processFuturesEvent(state, symbol, event, spec, notices) {
     if (!hit) continue;
     if (order.type === 'stop_market') { order.triggeredAt = latest.t; order.status = 'triggered'; }
     const remaining = parse(order.qty) - parse(order.filled), role = order.type === 'stop_market' ? 'taker' : 'maker';
-    fillFutures(state, order, remaining, mul(trigger, remaining, 'floor'), role, latest.t, spec);
+    try { fillFutures(state, order, remaining, mul(trigger, remaining, 'floor'), role, latest.t, spec); }
+    catch (error) {
+      if (error?.code !== 'max_position') throw error;
+      // 规格 7.2：旧委托、上限下调或成交价不同导致超限时，只撤这一笔并解冻，其余委托照常结算。
+      finishFuturesOrder(state, order, 'canceled', latest.t);
+      notices.push({ t: latest.t, kind: 'canceled', text: '合约委托 ' + order.id + ' 成交后会超过持仓上限，已自动撤销' });
+      continue;
+    }
     const position = state.futures.positions[symbol];
     // 规格 7.8：仓位变化后的标记价检查从下一根开始，首分钟的旧高低点不能强平新仓。
     if (position) position.nextCheck = latest.end;

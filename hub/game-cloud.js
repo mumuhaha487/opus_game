@@ -57,6 +57,8 @@ const GameCloud = (() => {
   const canon = v => JSON.stringify(v, (k, x) => x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(n => [n, x[n]])) : x);
   const sig = v => { const s = canon(v); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + '.' + s.length; };
   const same = (a, b) => a === b || (!!a && !!b && canon(a) === canon(b));
+  // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
+  const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
 
   function create(opts) {
     const id = opts.id, theme = opts.theme || {};
@@ -123,7 +125,14 @@ const GameCloud = (() => {
       const cache = A.cache;
       A.job = (async () => {
         try {
-          if (!A.verified) { await C.me(); A.verified = true; }
+          if (!A.verified) {
+            const me = await C.me();
+            // GameAccount.me() moves the profile to the session's account, which re-activates this helper with that
+            // account's cache; this cache never goes up under another account's session
+            if (A.cache !== cache) return false;
+            if (!sameUser(me, A.name)) { A.status = 'expired'; return false; }
+            A.verified = true;
+          }
           for (let tries = 0; tries < 3; tries++) {
             // the game's current local save is the device's progress; anything it saved without persist() still counts.
             // a flush while the page is being hidden sends the last persisted copy right away
@@ -149,7 +158,7 @@ const GameCloud = (() => {
               // nothing worth keeping on this device (never played, or the game says the save is still at its starting point)
               else if (!cache.data || (opts.trivial && opts.trivial(cache.data))) return take(cache, remote);
               else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return done(); }
-              else if (await choose(remote, cache.data) === 'cloud') return take(cache, remote);
+              else if (await choose(remote, cache.data) === 'cloud') return A.cache === cache && take(cache, remote);
               else push = true;
             } else if (remote.rev !== cache.rev) {
               if (ours(cache, remote)) {
@@ -160,24 +169,30 @@ const GameCloud = (() => {
               // 别的设备更新过：本机没改就直接用云端，两边都改了让玩家选
               else if (!cache.dirty || !cache.data) return take(cache, remote);
               else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return done(); }
-              else if (await choose(remote, cache.data) === 'cloud') return take(cache, remote);
+              else if (await choose(remote, cache.data) === 'cloud') return A.cache === cache && take(cache, remote);
               else push = true;
             } else push = cache.dirty;
+            // the account changed while the player was choosing
+            if (A.cache !== cache) return false;
             if (!push || !cache.data) { persistCache(); return done(); }
             try { return await upload(cache, remote.rev, keepalive); }
             catch (e) { if (e.status !== 409) throw e; }
           }
           A.status = 'error'; schedule(60000); return false;
         } catch (e) {
+          // a sync left over from the previous account leaves the new one's status alone
+          if (A.cache !== cache) return false;
           A.status = e && e.status === 401 ? 'expired' : e && (e.status === 413 || e.status === 422 || e.status === 400) ? 'rejected' : 'error';
           if (A.status === 'error') schedule(60000);
           return false;
-        } finally { A.job = null; notify(); }
+        } finally { if (A.cache === cache) A.job = null; notify(); }
       })();
       return A.job;
     }
     function done() { A.last = Date.now(); A.status = 'synced'; return true; }
     function activate(name) {
+      // a sync still running for the previous account stops at its next step; this account starts its own
+      clearTimeout(A.timer); A.timer = null; A.job = null;
       A.name = name; A.verified = false; A.checked = false;
       const cached = read(key(name));
       A.cache = cached && Number.isSafeInteger(cached.rev) && cached.data ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };

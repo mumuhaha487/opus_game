@@ -217,7 +217,7 @@ async function dispatch(request, env, key, route, data, now) {
   return reply(response.status === 400 ? 422 : response.status, result,
     response.headers.has('Retry-After') ? { 'Retry-After': response.headers.get('Retry-After') } : {});
 }
-export async function handleAgent(request, env, readBody) {
+export async function handleAgent(request, env, readBody, ctx) {
   const now = Date.now(), limit = 10;
   let key, response;
   const headers = { 'X-Request-Id': crypto.randomUUID(), 'X-RateLimit-Limit': String(limit),
@@ -229,18 +229,19 @@ export async function handleAgent(request, env, readBody) {
     key = await authenticateKey(request, env);
     // ACCOUNT §2.1：注册表可扩展项目；交易所路由只接受交易所项目，不能跨项目使用权限。
     if (key.meta.project !== 'exchange') fail(403, 'scope_denied', '此密钥不属于模拟交易所项目');
-    const usage = await dailyUsage(env.ACCOUNTS, key, now);
+    // 先过不读写R2的分钟限流：被拒绝的调用不读每日用量，也不计入每日额度。
+    const rate = await requestKeyRate(env, key.id, request.method, now);
+    headers['X-RateLimit-Remaining'] = String(rate.remaining);
+    if (rate.retryAfter) {
+      headers['Retry-After'] = String(rate.retryAfter); fail(429, 'rate_limited', '操作太频繁，请稍后再试');
+    }
+    const usage = await dailyUsage(env.ACCOUNTS, key, now, ctx);
     headers['X-Daily-Quota-Limit'] = '1500'; headers['X-Daily-Quota-Remaining'] = String(usage.keyRemaining);
     headers['X-Account-Quota-Remaining'] = String(usage.accountRemaining);
     if (usage.denied) {
       headers['X-RateLimit-Limit'] = usage.accountRemaining ? '1500' : '3000';
       headers['X-RateLimit-Remaining'] = '0'; headers['Retry-After'] = String(usage.retryAfter);
       fail(429, 'daily_quota', '今日 API 调用次数已用完');
-    }
-    const rate = await requestKeyRate(env, key.id, request.method, now);
-    headers['X-RateLimit-Remaining'] = String(rate.remaining);
-    if (rate.retryAfter) {
-      headers['Retry-After'] = String(rate.retryAfter); fail(429, 'rate_limited', '操作太频繁，请稍后再试');
     }
     const route = new URL(request.url).pathname.slice('/api/v1/'.length);
     if (denied.has(route) || route.startsWith('save/') || route.startsWith('like/')) {

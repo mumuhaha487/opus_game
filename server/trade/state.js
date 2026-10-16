@@ -8,6 +8,21 @@ import { marketStatus } from './ashare-rules.js';
 import { usMarketStatus } from './us-calendar.js';
 import { dayKey } from '../likes.js';
 export const tradeKey = uid => `trade/${uid}.json`;
+// PLATFORM §5.2.5：clientId 幂等记录按时间保留 24 小时、最多 500 条（新的在前，超出先删最旧）；
+// 最近 50 条保存完整下单结果，更早的只记委托 ID，控制文档大小。
+export const CLIENT_ID_WINDOW = 86400000, CLIENT_ID_LIMIT = 500, CLIENT_ID_FULL = 50;
+export function rememberOrder(state, clientId, result, now) {
+  state.clientIds.unshift({ clientId, t: now, result });
+}
+// 同一 clientId 重放：完整记录返回原结果；精简记录返回该委托的当前状态，委托已不在近期记录里时 409，不再下单。
+export function replayOrder(state, clientId) {
+  const record = typeof clientId === 'string' && state.clientIds.find(entry => entry.clientId === clientId);
+  if (!record) return null;
+  if (record.result) return structuredClone(record.result);
+  const order = state.orders.find(entry => entry.id === record.id) || state.history.orders.find(entry => entry.id === record.id);
+  if (!order) throw { status: 409, code: 'duplicate_order', id: record.id };
+  return structuredClone(order);
+}
 export function defaultState(now = Date.now()) {
   return {
     v: 2, created: now, updated: now, seq: 0,
@@ -32,7 +47,14 @@ export function normalize(state, now) {
   for (const [kind, limit] of Object.entries({ orders: 100, trades: 200, ledger: 200 })) {
     state.history[kind] = (state.history[kind] || []).slice(0, limit);
   }
-  state.clientIds = state.clientIds.slice(0, 50);
+  // 旧文档的记录没有 t：只沿用旧规则下最近 50 条，按委托创建时间补记，再按时间窗口与条数裁剪；
+  // 排到第 50 条之后的记录精简为 { clientId, t, id }。
+  let legacy = 0;
+  state.clientIds = state.clientIds.filter(entry => entry?.t != null || legacy++ < 50)
+    .map(entry => entry?.t != null ? entry : { ...entry, t: entry?.result?.createdAt ?? now })
+    .filter(entry => now - entry.t < CLIENT_ID_WINDOW).slice(0, CLIENT_ID_LIMIT)
+    .map((entry, index) => index < CLIENT_ID_FULL || !entry.result ? entry
+      : { clientId: entry.clientId, t: entry.t, id: entry.result.id });
   return state;
 }
 export async function readState(bucket, uid, now = Date.now()) {

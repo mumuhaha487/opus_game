@@ -158,11 +158,13 @@ export function ipPrefix(value) {
   return groups.slice(0, 3).map(group => parseInt(group, 16).toString(16)).join(':') + '::/48';
 }
 export async function recordKeyUse(bucket, key, request, status, now = Date.now()) {
-  // PLATFORM §6.5 / 第2b轮：成功GET每Key每分钟采样一次；POST与非2xx逐次记，仍仅保留100条。
+  // PLATFORM §6.5 / 第2b轮：成功GET每Key每分钟采样一次；429（限流、额度用尽）每Key每分钟最多记一条，
+  // 被拒绝的调用不能逐次写R2；POST与其他非2xx逐次记，仍仅保留100条。
   if (!sampledGets.has(bucket)) sampledGets.set(bucket, new Map());
   const samples = sampledGets.get(bucket), sampled = request.method === 'GET' && status >= 200 && status < 300;
-  const shouldLog = !sampled || !samples.has(key.id) || now - samples.get(key.id) >= 60000;
-  if (sampled && shouldLog) samples.set(key.id, now);
+  const throttle = sampled ? key.id : status === 429 ? key.id + ':429' : null;
+  const shouldLog = !throttle || !samples.has(throttle) || now - samples.get(throttle) >= 60000;
+  if (throttle && shouldLog) samples.set(throttle, now);
   try {
     if (shouldLog) {
     const path = `apikeys/log/${key.id}.json`, object = await bucket.get(path);

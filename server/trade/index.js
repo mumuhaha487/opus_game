@@ -3,7 +3,7 @@
 // 结算和操作在同一 R2 条件写内提交，history 只读一次交易文档。
 import { dayKey } from '../likes.js';
 import { GateClient } from './gate.js';
-import { readState, updateState, stateView, transfer } from './state.js';
+import { readState, updateState, stateView, transfer, replayOrder } from './state.js';
 import { checkin } from './checkin.js';
 import { placeOrder, cancelOrder } from './spot.js';
 import { settle } from './settle.js';
@@ -25,6 +25,7 @@ const ROUTES = {
 };
 // 一键撤单：可按市场（spot/futures/ashare/usstock）和代码筛选，同一次写入完成，返回被撤委托 ID。
 const CANCELERS = { spot: cancelOrder, futures: cancelFuturesOrder, ashare: cancelAshareOrder, usstock: cancelUsOrder };
+const MARKET_ACCOUNTS = Object.keys(CANCELERS);   // 有委托需要结算的子账户；wallet 不需要行情
 function cancelEverything(state, data, now) {
   const market = data.market ?? null, symbol = data.symbol ?? null;
   if ((market !== null && !Object.hasOwn(CANCELERS, market))
@@ -140,9 +141,9 @@ export async function handleTrade(request, env, session, data, services) {
       }
       if (method === 'POST' && !state.disclaimerAt && !session.apiKey) throw { status: 403, code: 'disclaimer_required' };
       const ordering = ['spot/order', 'futures/order', 'futures/close', 'ashare/order', 'usstock/order'].includes(route);
-      const previous = ordering && state.clientIds.find(entry => entry.clientId === data.clientId);
+      const previous = ordering ? replayOrder(state, data.clientId) : null;
       // PLATFORM §5.2.4–5：重放不新增委托；每日上限在同一个 etag 事务内检查与增加。
-      if (previous) return { order: structuredClone(previous.result), notices: [] };
+      if (previous) return { order: previous, notices: [] };
       const day = dayKey(now), ordersToday = state.agent.day === day ? state.agent.ordersToday : 0;
       if (ordering && ordersToday >= 500) throw { status: 429, code: 'daily_order_limit' };
       const fx = route === 'transfer' && [data.from, data.to].includes('ashare') ? await getFx(now, gate) : null;
@@ -165,7 +166,10 @@ export async function handleTrade(request, env, session, data, services) {
         await Promise.all(reads);
       }
       // 规格 5.5：GET 在副本结算；只有真实上游失败才返回原状态并且零账户写入。
-      const candidate = method === 'GET' ? structuredClone(state) : state;
+      // 签到只改钱包，同样在副本结算，行情失败时照常签到；划转只结算涉及的子账户。
+      const isolated = method === 'GET' || route === 'checkin';
+      const markets = route === 'transfer' ? new Set([data.from, data.to].filter(account => MARKET_ACCOUNTS.includes(account))) : null;
+      const candidate = isolated ? structuredClone(state) : state;
       let settlement;
       try {
         // ASHARE §4：有 A 股资金、持仓或历史参与的账户，state 也刷新指数日期，避免隔日误报休市。
@@ -173,12 +177,13 @@ export async function handleTrade(request, env, session, data, services) {
           || candidate.ashare.cash.locked !== '0' || Object.keys(candidate.ashare.holdings).length)) {
           candidate.ashare.marketTime = (await ashare.quote('sh000001')).time;
         }
-        settlement = await settle(candidate, gate, now, method === 'POST', ashare, us);
+        settlement = await settle(candidate, gate, now, method === 'POST', ashare, us, markets);
       } catch (error) {
-        if (method !== 'GET' || error?.code !== 'market_unavailable') throw error;
-        return { partial: true, stale: true, notices: [] };
+        if (!isolated || error?.code !== 'market_unavailable') throw error;
+        settlement = { partial: true, stale: true, notices: [] };
+        if (method === 'GET') return settlement;
       }
-      if (method === 'GET') Object.assign(state, candidate);
+      if (isolated && !settlement.stale) Object.assign(state, candidate);
       let order, reward, transferred, canceled;
       if (route === 'checkin') reward = checkin(state, now);
       if (route === 'ashare/order') order = await placeAshareOrder(state, data, ashare, now);
@@ -210,7 +215,8 @@ export async function handleTrade(request, env, session, data, services) {
     const code = error?.code === 'upstream_budget' ? 'market_unavailable' : error?.code || 'market_unavailable';
     const message = code === 'min_notional' ? `下单金额低于最小值 ${error.minimum} USDT`
       : code === 'bad_qty' && error.quoteOrder ? '金额太小，按数量精度无法成交'
-        : code === 'max_position' ? `超出该合约的最大持仓价值 ${error.maximum} USDT` : MESSAGES[code];
+        : code === 'max_position' ? `超出该合约的最大持仓价值 ${error.maximum} USDT`
+          : code === 'duplicate_order' ? `这个 clientId 已用于委托 ${error.id}，未重复下单` : MESSAGES[code];
     return reply(error?.status || 503, { error: code, message: message || MESSAGES.market_unavailable });
   }
 }

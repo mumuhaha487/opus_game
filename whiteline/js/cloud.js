@@ -22,14 +22,26 @@
   const listeners = new Set();
   const notify = () => { for (const fn of listeners) { try { fn(); } catch (e) { /* 各自独立 */ } } };
   const cacheKey = (name) => C.cacheKey(GAME, name);
+  // /api/me 回答的是不是这个账号（回答里没有用户名时无法判断，不拦）
+  const sameUser = (me, name) => !(me && me.user && me.user.name) || me.user.name.toLowerCase() === String(name).toLowerCase();
 
   // ---------- 存档文档 ----------
+  // deleted { auto, slots[3] }：自动存档与各存档位被删除的时间（毫秒）。合并时与存档的 time 比较，较新的一方为准，
+  // 删掉的存档不会被别的设备上的旧存档带回来；删除之后别的设备新存的档照样保留。
   const emptyDoc = () => ({ v: 1, meta: {}, auto: null, slots: Array(SLOTS).fill(null), updated: 0 });
+  const stamp = (t) => (Number.isSafeInteger(t) && t > 0 ? t : 0);
+  function tombs(d) {
+    const g = d && d.deleted && typeof d.deleted === 'object' ? d.deleted : {}, slots = Array.isArray(g.slots) ? g.slots : [];
+    return { auto: stamp(g.auto), slots: Array.from({ length: SLOTS }, (_, i) => stamp(slots[i])) };
+  }
   function normalize(doc) {
     const d = doc && typeof doc === 'object' ? doc : {};
     const slots = Array.isArray(d.slots) ? d.slots : [];
-    return { v: 1, meta: d.meta && typeof d.meta === 'object' ? d.meta : {}, auto: d.auto || null,
+    const out = { v: 1, meta: d.meta && typeof d.meta === 'object' ? d.meta : {}, auto: d.auto || null,
       slots: Array.from({ length: SLOTS }, (_, i) => slots[i] || null), updated: +d.updated || 0 };
+    const g = tombs(d);
+    if (g.auto || g.slots.some(Boolean)) out.deleted = g;
+    return out;
   }
   // 本机（未登录）的进度组成一份文档：首次登录且云端为空时作为账号的起点
   function guestDoc() {
@@ -38,6 +50,8 @@
   }
   const hasProgress = (d) => !!(d && (d.auto || d.slots.some(Boolean) || Object.keys(d.meta.dex || {}).length || d.meta.cleared));
   const newer = (x, y) => (!x ? y || null : !y ? x : (+y.time || 0) > (+x.time || 0) ? y : x);
+  // 较新的一份留下，除非这个位置在它之后被删过
+  const keep = (x, y, cut) => { const s = newer(x, y); return s && (!cut || (+s.time || 0) > cut) ? s : null; };
   function mergeMeta(x = {}, y = {}) {
     const out = Object.assign({}, y, x);
     for (const k of ['combos', 'tagsSeen', 'endings', 'secrets']) out[k] = Object.assign({}, y[k] || {}, x[k] || {});
@@ -52,9 +66,12 @@
   }
   function merge(local, remote) {
     if (!local) return normalize(remote); if (!remote) return normalize(local);
-    const a = normalize(local), b = normalize(remote);
-    return { v: 1, meta: mergeMeta(a.meta, b.meta), auto: newer(a.auto, b.auto), slots: a.slots.map((s, i) => newer(s, b.slots[i])),
+    const a = normalize(local), b = normalize(remote), ga = tombs(a), gb = tombs(b);
+    const cut = { auto: Math.max(ga.auto, gb.auto), slots: ga.slots.map((t, i) => Math.max(t, gb.slots[i])) };
+    const out = { v: 1, meta: mergeMeta(a.meta, b.meta), auto: keep(a.auto, b.auto, cut.auto), slots: a.slots.map((s, i) => keep(s, b.slots[i], cut.slots[i])),
       updated: Math.max(a.updated, b.updated) };
+    if (cut.auto || cut.slots.some(Boolean)) out.deleted = cut;
+    return out;
   }
 
   // ---------- 进度键：登录时读写账号缓存，未登录时读写本机 ----------
@@ -64,15 +81,24 @@
       return base.get(k, d);
     },
     set(k, v) {
-      if (A.cache && FIELD[k]) { doc()[FIELD[k]] = clone(v); touch(); return true; }
+      if (A.cache && FIELD[k]) { const d = doc(); erase(d, FIELD[k], v); d[FIELD[k]] = clone(v); touch(); return true; }
       return base.set(k, v);
     },
     del(k) {
-      if (A.cache && FIELD[k]) { doc()[FIELD[k]] = null; touch(); return; }
+      if (A.cache && FIELD[k]) { const d = doc(); erase(d, FIELD[k], null); d[FIELD[k]] = null; touch(); return; }
       base.del(k);
     },
   };
   function doc() { if (!A.cache.data) A.cache.data = emptyDoc(); return A.cache.data; }
+  // 存档被删掉（或被空位替换）时记下删除时间，至少比被删的那份新，别的设备上的旧存档不会在合并时复活
+  function erase(d, field, next) {
+    const mark = (i, old) => {
+      const g = d.deleted = tombs(d), t = Math.max(Date.now(), (+old.time || 0) + 1);
+      if (i < 0) g.auto = t; else g.slots[i] = t;
+    };
+    if (field === 'auto' && d.auto && !next) mark(-1, d.auto);
+    if (field === 'slots') (Array.isArray(d.slots) ? d.slots : []).forEach((s, i) => { if (s && i < SLOTS && !(Array.isArray(next) && next[i])) mark(i, s); });
+  }
   function persistCache() { if (A.name && A.cache) { A.cache.name = A.name; raw.set(cacheKey(A.name), A.cache); } }
   function touch() { A.cache.data.updated = Date.now(); A.cache.dirty = true; persistCache(); schedule(); }
   function schedule(delay = 20000) {
@@ -95,7 +121,13 @@
     const cache = A.cache;
     A.job = (async () => {
       try {
-        if (!A.verified) { await C.me(); A.verified = true; }
+        if (!A.verified) {
+          const me = await C.me();
+          // 会话属于另一个账号时，GameAccount.me() 会把资料切过去，这里随之换成那个账号的缓存；这份缓存不会传到别的账号
+          if (A.cache !== cache) return false;
+          if (!sameUser(me, A.name)) { A.status = 'expired'; return false; }
+          A.verified = true;
+        }
         for (let tries = 0; tries < 3; tries++) {
           const remote = await C.request('/api/save/' + GAME);
           if (A.cache !== cache) return false;
@@ -112,19 +144,25 @@
             apply(merge(cache.data, remote.data), remote.rev);
             cache.dirty = true; persistCache();
           } else if (!cache.dirty) return done();
+          const sent = JSON.stringify(cache.data);
           try {
             const next = await C.request('/api/save/' + GAME, 'PUT', { baseRev: remote.rev, data: cache.data }, keepalive);
-            cache.rev = next.rev; cache.dirty = false; persistCache();
+            if (A.cache !== cache) return false;
+            // 上传途中游戏又存了档：这份新存档还要再传一次
+            cache.rev = next.rev; cache.dirty = JSON.stringify(cache.data) !== sent; persistCache();
+            if (cache.dirty) schedule();
             return done();
           } catch (e) { if (e.status !== 409) throw e; }
         }
         A.status = 'error'; schedule(60000);
         return false;
       } catch (e) {
+        // 上一个账号留下的同步不改动新账号的状态
+        if (A.cache !== cache) return false;
         A.status = e && e.status === 401 ? 'expired' : e && e.status === 422 ? 'rejected' : 'error';
         if (A.status !== 'expired') schedule(60000);
         return false;
-      } finally { A.job = null; notify(); }
+      } finally { if (A.cache === cache) A.job = null; notify(); }
     })();
     return A.job;
   }
@@ -132,6 +170,8 @@
 
   // ---------- 账号切换 ----------
   function activate(name) {
+    // 上一个账号还在进行的同步会在下一步停下；这个账号开始自己的同步
+    clearTimeout(A.timer); A.timer = null; A.job = null;
     A.name = name; A.verified = false;
     const cached = raw.get(cacheKey(name));
     A.cache = cached && Number.isSafeInteger(cached.rev) && cached.data ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };

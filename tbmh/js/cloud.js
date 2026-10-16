@@ -10,7 +10,7 @@ const Cloud = (() => {
   const C = typeof GameAccount !== 'undefined' ? GameAccount : null;
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
-  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, pulled: false, file: !C || C.file };
+  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, pulled: false, saves: 0, file: !C || C.file };
   // deeper progress wins a conflict: stages cleared across difficulties, then the best hero level, then play time;
   // a second-edition save counts by its own scale (90 stages per difficulty) so it is never preferred over a third-edition one
   const score = d => {
@@ -22,6 +22,8 @@ const Cloud = (() => {
     return best * 1e6 + lv * 1e3 + play;
   };
   const cacheKey = name => C.cacheKey('tbmh', name);
+  // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
+  const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
 
   // the save to start with: account cache when signed in, else the guest slot;
   // older editions become the starting point of the new world once
@@ -42,8 +44,10 @@ const Cloud = (() => {
     const g = guest();
     return g ? normalizeSave(g) : null;
   }
+  // the cache holds the live game state, which the battle advances every frame; it counts as saved data only
+  // when the game calls persist(), so A.saves tells whether a save happened while an upload was in flight
   function persist(s) {
-    if (A.name && A.cache) { A.cache.data = s; A.cache.dirty = true; A.cache.name = A.name; write(cacheKey(A.name), A.cache); schedule(); }
+    if (A.name && A.cache) { A.cache.data = s; A.cache.dirty = true; A.cache.name = A.name; A.saves++; write(cacheKey(A.name), A.cache); schedule(); }
     else write(GUEST_KEY, s);
   }
   function schedule(delay = 45000) {
@@ -57,26 +61,42 @@ const Cloud = (() => {
     const cache = A.cache;
     A.job = (async () => {
       try {
-        if (!A.verified) { await C.me(); A.verified = true; }
+        if (!A.verified) {
+          const me = await C.me();
+          // GameAccount.me() moves the profile to the session's account, which re-activates this module with that
+          // account's cache; this cache never goes up under another account's session
+          if (A.cache !== cache) return false;
+          if (!sameUser(me, A.name)) { A.status = 'expired'; return false; }
+          A.verified = true;
+        }
         for (let tries = 0; tries < 3; tries++) {
           const remote = await C.request('/api/save/tbmh');
           if (A.cache !== cache) return false;
           const local = Game.ready ? Game.save() : cache.data;
           const takeRemote = () => { cache.rev = remote.rev; Game.adopt(normalizeSave(remote.data), 'cloud'); cache.dirty = false; persistCache(); A.last = Date.now(); A.status = 'synced'; return true; };
-          if (!A.pulled) {
+          if (cache.fresh) {
+            // first time this account plays on this device
+            A.pulled = true; delete cache.fresh;
+            if (remote.data) return takeRemote();
+            await Game.firstAccountSave();
+            if (A.cache !== cache) return false;
+            cache.rev = remote.rev;
+          } else if (!A.pulled || remote.rev !== cache.rev) {
+            // first pull, or another device saved since this one last synced: the deeper progress wins
             A.pulled = true;
-            if (cache.fresh) {
-              // first time this account plays on this device
-              delete cache.fresh;
-              if (remote.data) return takeRemote();
-              await Game.firstAccountSave();
-            } else if (remote.data && score(remote.data) > score(local)) return takeRemote();
+            if (remote.data && score(remote.data) > score(local)) return takeRemote();
+            cache.rev = remote.rev;
           }
           const data = Game.ready ? Game.save() : cache.data;
           if (!data) return false;
+          // the PUT builds on the version this device last agreed with: a device that fell behind gets a 409 and compares again
+          const saves = A.saves;
           try {
-            const next = await C.request('/api/save/tbmh', 'PUT', { baseRev: remote.rev, data }, keepalive);
-            cache.rev = next.rev; cache.dirty = false; persistCache();
+            const next = await C.request('/api/save/tbmh', 'PUT', { baseRev: cache.rev, data }, keepalive);
+            if (A.cache !== cache) return false;
+            // the game saved again while the request was in flight: that save still has to go up
+            cache.rev = next.rev; cache.dirty = A.saves !== saves; persistCache();
+            if (cache.dirty) schedule();
             A.last = Date.now(); A.status = 'synced';
             return true;
           } catch (e) { if (e.status !== 409) throw e; }
@@ -84,12 +104,14 @@ const Cloud = (() => {
         A.status = 'error';
         return false;
       } catch (e) {
+        // a sync left over from the previous account leaves the new one alone
+        if (A.cache !== cache) return false;
         // PLATFORM 5.3: 保留本地存档；下次 GET 后重新执行原有深度冲突选择。
         if (e && e.status === 422) { A.pulled = false; A.status = 'rejected'; schedule(60000); return false; }
         A.status = e && e.status === 401 ? 'expired' : 'error';
         if (A.status === 'error') schedule(60000);
         return false;
-      } finally { A.job = null; }
+      } finally { if (A.cache === cache) A.job = null; }
     })();
     return A.job;
   }
@@ -144,11 +166,16 @@ const Cloud = (() => {
   }
   // switch to an account's cache and pull
   function activate(name) {
+    // a sync still running for the previous account stops at its next step; this account starts its own
+    const switching = !!A.name && A.name.toLowerCase() !== name.toLowerCase();
+    clearTimeout(A.timer); A.timer = null; A.job = null;
     A.name = name; A.verified = true; A.pulled = false;
     const cached = read(cacheKey(name));
     A.cache = cached && cached.data && Number.isSafeInteger(cached.rev) ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };
     A.status = 'pending';
     if (A.cache.data) Game.adopt(normalizeSave(A.cache.data), 'account');
+    // the previous account's progress never becomes this one's: start from the guest save, as boot() does
+    else if (switching) { const g = guest(); Game.adopt(g ? normalizeSave(g) : null, 'guest'); }
     sync().then(ok => Game.say(ok ? '登录成功，进度已同步' : status().text, ok ? PAL.green : PAL.amber));
   }
   if (C && !A.file) {

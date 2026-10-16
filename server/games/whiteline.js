@@ -1,5 +1,7 @@
-// 白线以内：云存档白名单清洗。存档文档 { v, meta, auto, slots[3], updated }：
+// 白线以内：云存档白名单清洗。存档文档 { v, meta, auto, slots[3], updated, deleted? }：
 // meta 为图鉴与解法记录（跨存档常驻），auto / slots 为“幕 + 剧情标记 + 已完成目标 + 剪贴板”的快照。
+// deleted { auto, slots[3] } 为自动存档与各存档位的删除时间（毫秒，0 为没删过），客户端合并时与快照的 time 比较；
+// 没有删除记录的旧文档清洗结果与原来相同。
 // 单机解谜，没有经济系统：只保证结构、类型、长度与数值范围，不做进度推演。
 const ID = /^[A-Za-z0-9_.:+-]{1,48}$/;
 const SHORT = /^[A-Za-z0-9_.:+-]{0,32}$/;
@@ -52,10 +54,20 @@ function meta(value) {
     cleared: m.cleared === true, sandbox: m.sandbox === true,
   };
 }
+// 删除记录：非法的时间按 0（没删过）处理；全部为 0 时不写这个字段
+function deleted(value) {
+  if (!isObject(value)) return undefined;
+  const slots = Array.isArray(value.slots) ? value.slots : [];
+  const out = { auto: int(value.auto, 0, 9e15) ?? 0, slots: [0, 1, 2].map(i => int(slots[i], 0, 9e15) ?? 0) };
+  return out.auto || out.slots.some(Boolean) ? out : undefined;
+}
 export function clean(value) {
   if (!isObject(value)) return null;
   const slots = Array.isArray(value.slots) ? value.slots : [];
-  return { v: 1, meta: meta(value.meta), auto: snapshot(value.auto),
+  const out = { v: 1, meta: meta(value.meta), auto: snapshot(value.auto),
     slots: [0, 1, 2].map(i => snapshot(slots[i])), updated: int(value.updated, 0, 9e15) ?? 0 };
+  const gone = deleted(value.deleted);
+  if (gone) out.deleted = gone;
+  return out;
 }
 export function plausible() { return { ok: true }; }

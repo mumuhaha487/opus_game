@@ -2,13 +2,14 @@
 // 请求预算按一次 Worker 调用共享，条件写重试也不重置预算。
 // 规格 5.3：合成缓存 URL、8 秒超时、最多 30 次上游请求。
 import { cacheIsFresh } from './upstream.js';
-export function assertBookFresh(book, now) {
+export function bookFresh(book, now) {
   // PLATFORM §5.2.2：盘口 current 为毫秒；缺失、无效、超过 10 秒或远未来均不可成交。
   const time = typeof book?.current === 'number' || typeof book?.current === 'string' ? Number(book.current) : NaN;
   const maxAge = book?.bookSource === 'ws' ? 3000 : 10000;
-  if (!Number.isFinite(time) || time <= 0 || Math.abs(now - time) > maxAge) {
-    throw { status: 503, code: 'market_stale' };
-  }
+  return Number.isFinite(time) && time > 0 && Math.abs(now - time) <= maxAge;
+}
+export function assertBookFresh(book, now) {
+  if (!bookFresh(book, now)) throw { status: 503, code: 'market_stale' };
 }
 export class GateClient {
   constructor(now = Date.now()) { this.now = now; this.used = 0; this.pending = new Map(); }
@@ -149,8 +150,8 @@ export class GateClient {
     return this.get('/spot/trades', { currency_pair: symbol, from, to, limit: 1000, page }, 5);
   }
   contract(symbol) { return this.get('/futures/usdt/contracts/' + symbol, {}, 3600); }
-  async futuresBook(symbol, fresh = false) {
-    const book = await this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1, fresh);
+  async futuresBook(symbol, fresh = false, refresh = false) {
+    const book = await this.get('/futures/usdt/order_book', { contract: symbol, limit: 100 }, 1, fresh, refresh);
     // PLATFORM §5.2.2 / §6.4：真实合约current是带小数的Unix秒，读取边界统一为毫秒再查10秒新鲜度。
     const current = Number(book.current);
     return { ...book, current: current > 0 && current < 1e11 ? current * 1000 : book.current };
