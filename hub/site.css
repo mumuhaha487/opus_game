@@ -70,7 +70,7 @@
   .sec { display: flex; align-items: center; gap: 12px; margin: 0 0 24px; font-size: 12px; line-height: 12px; font-weight: normal; color: var(--gold); letter-spacing: 2px; }
   .sec::before { content: ''; width: 8px; height: 8px; background: var(--gold); box-shadow: 4px 4px 0 var(--gold-d); }
   .sec::after { content: ''; flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 10px); order: 9; }
-  .sec small { color: var(--muted); letter-spacing: 0; }
+  .sec small { font-size: 12px; color: var(--muted); letter-spacing: 0; }
   .live { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px; color: #fff; background: var(--red-d); letter-spacing: 0; }
   .live i { width: 6px; height: 6px; background: var(--heart); animation: blink 1.2s steps(1) infinite; }
 
@@ -271,7 +271,7 @@
 .bar .brand { gap: 10px; flex: none; }
 .bar .brand img { width: 32px; height: 32px; }
 .bar .brand b { font-size: 20px; line-height: 20px; }
-.bar .brand small { font-size: 11px; line-height: 11px; }
+.bar .brand small { font-size: 12px; line-height: 12px; }
 .site-nav { display: flex; gap: 28px; height: 100%; align-items: center; font-size: 12px; }
 .site-nav a { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; position: relative; }
 .site-nav a::before { content: ''; width: 6px; height: 6px; background: var(--dim); flex: none; }
@@ -301,7 +301,7 @@
 #door-chart { width: 100%; height: 96px; flex-shrink: 0; margin-bottom: 16px; shape-rendering: crispEdges; }
 .door-quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 12px; }
 .door-quotes > div { display: flex; justify-content: space-between; gap: 6px; }
-.door-note { font-size: 11px; color: var(--dim); margin-top: 10px; }
+.door-note { font-size: 12px; color: var(--dim); margin-top: 10px; }
 .hub-intro { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
 #games, #market { scroll-margin-top: 120px; }
 @media (max-width: 859px) {
@@ -319,7 +319,7 @@
   .door h1, .door h2 { font-size: 24px; line-height: 32px; }
   #door-chart { opacity: 0.7; }
   a, button, input, select, summary { min-height: 44px; min-width: 44px; }
-  .bar-actions .acct { padding: 0 8px; height: 44px; transform: translateY(-4px); font-size: 11px; }
+  .bar-actions .acct { padding: 0 8px; height: 44px; transform: translateY(-4px); font-size: 12px; }
   .bar-actions .acct i { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .door { transition: none; } }
@@ -345,11 +345,11 @@
 .gcard:hover { transform: translateY(-4px); box-shadow: 0 -4px 0 var(--line-hi), 0 4px 0 var(--line-hi),
   -4px 0 0 var(--line-hi), 4px 0 0 var(--line-hi); }
 .gcard .c-cover img { aspect-ratio: 16 / 9; height: auto; }
-.game-category { position: absolute; top: 12px; left: 12px; padding: 4px 6px; font-size: 11px; line-height: 12px; color: #fff; }
+.game-category { position: absolute; top: 12px; left: 12px; padding: 4px 6px; font-size: 12px; line-height: 12px; color: #fff; }
 .gcard .badge { position: absolute; top: 12px; right: 12px; }
 .gcard .c-body { padding: 18px; gap: 0; background: var(--card); }
 .gcard h3 { margin: 0; font-size: 20px; line-height: 24px; color: #fff; font-weight: normal; }
-.game-en { display: block; font-size: 11px; line-height: 16px; color: var(--muted); letter-spacing: 2px; margin-top: 6px; }
+.game-en { display: block; font-size: 12px; line-height: 16px; color: var(--muted); letter-spacing: 2px; margin-top: 6px; }
 .gcard .pitch { font-size: 14px; color: #cfc4e6; line-height: 22px; margin: 12px 0 0; display: -webkit-box;
   -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .gcard .tags { margin-top: 12px; }
@@ -368,7 +368,7 @@
 .tk { padding: 14px; text-decoration: none; min-width: 0; }
 .tk-heading { display: flex; justify-content: space-between; gap: 8px; }
 .tk-heading span { font-size: 12px; color: #fff; }
-.tk-heading small { font-size: 11px; color: var(--dim); }
+.tk-heading small { font-size: 12px; color: var(--dim); }
 .tk-price { display: block; font-size: 18px; line-height: 24px; font-weight: normal; margin-top: 10px; color: var(--ink); }
 .tk-change { display: block; font-size: 12px; }
 .tk-spark { display: block; width: 100%; height: 32px; margin-top: 8px; shape-rendering: crispEdges; }
@@ -448,3 +448,17 @@
 .board-rows .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; }
 .board-rows .what { color: var(--muted); font-size: 12px; text-align: right; }
 .board-note { color: var(--muted); font-size: 12px; display: block !important; border: 0 !important; }
+
+/* 横放的手机（高度 520 以内）：账号对话框紧凑排版，两个输入框并排，登录按钮不用滚动就看得到 */
+@media (max-height: 520px) and (orientation: landscape) {
+  #acct.dlg { width: min(640px, 100% - 32px); }
+  #acct .dlg-in { padding: 14px 20px 16px; max-height: calc(100dvh - 16px); }
+  #acct .dlg-hd h2 { font-size: 20px; line-height: 20px; }
+  #acct .dlg-hd small { display: none; }
+  #acct .tabs { margin-top: 10px; }
+  #acct form { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  #acct .fld { margin-top: 10px; }
+  #acct .fld input { padding: 8px 10px; margin-top: 6px; }
+  #acct form .btn { grid-column: 1 / -1; margin-top: 12px; }
+  #acct .msg { margin-top: 8px; min-height: 0; }
+}

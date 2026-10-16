@@ -35,8 +35,20 @@ const GameCloud = (() => {
   color:var(--gc-fg,#efe9dc);background:var(--gc-input,#11101a);border:2px solid var(--gc-line,#4a4560);padding:8px 10px;border-radius:0}
 .gc-field input:focus{outline:none;border-color:var(--gc-accent,#f2c66d)}
 .gc-row{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin-top:12px}
+.gc-field[hidden]{display:none}
 .gc-pick{display:block;width:100%;text-align:left;margin:8px 0;padding:10px 12px}
-.gc-pick b{display:block;font-weight:normal;color:var(--gc-accent,#f2c66d)}`;
+.gc-pick b{display:block;font-weight:normal;color:var(--gc-accent,#f2c66d)}
+@media (max-height:520px) and (orientation:landscape){
+.gc-box{width:min(100%,600px);padding:10px 16px}
+.gc-box h2{margin-bottom:4px}
+.gc-tabs{margin:2px 0 4px}
+.gc-box form{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-items:end}
+.gc-field{margin:4px 0}
+.gc-field input{padding:6px 8px}
+.gc-err,.gc-row{grid-column:1/-1}
+.gc-err{min-height:0;margin:4px 0}
+.gc-row{margin-top:4px}
+.gc-box>p.gc-dim{margin:6px 0 0}}`;
     document.head.appendChild(s);
   }
   // opens a modal box; returns { box, close }
