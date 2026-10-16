@@ -70,12 +70,14 @@ const GameAccount = (() => {
       });
       return regionPending;
     },
-    async request(path, method = 'GET', data, keepalive = false, onResponse) {
+    async request(path, method = 'GET', data, keepalive = false, onResponse, options = {}) {
       if (C.file) throw new Error('file');
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
-      // the account this page acts for: the server refuses a save request for an account other than the session's
-      const headers = { 'Content-Type': 'application/json' };
-      if (current) headers['X-Gameinc-Account'] = current.name;
+      // the account this request acts for: the server refuses a save request for an account other than the session's.
+      // Save requests pin the account that owns the data (options.account), so a profile that changed while they were
+      // queued can never carry one account's save under another's name
+      const headers = { 'Content-Type': 'application/json' }, account = options.account || current?.name;
+      if (account) headers['X-Gameinc-Account'] = account;
       try {
         const response = await fetch(path, { method, credentials: 'same-origin', headers, body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal, keepalive });
         const text = await response.text();
@@ -135,7 +137,10 @@ const GameAccount = (() => {
       // these caches belong to `name`: they only go up while the session is that account (otherwise they stay on the device)
       let owner = null;
       if (dirty.length) { try { owner = (await C.request('/api/me'))?.user?.name; } catch { /* offline: kept below */ } }
+      // the profile moved to another account (another page signed in): stop; what is left stays dirty on the device
+      const moved = () => !current || current.name.toLowerCase() !== name.toLowerCase();
       for (const { key, game } of owner && owner.toLowerCase() === name.toLowerCase() ? dirty : []) {
+        if (moved()) break;
         const cache = read(key);
         if (!cache?.dirty) continue;
         // a save that carries upload ids (entropy-blade) gets a fresh one for this PUT as well, remembered with what was sent
@@ -153,7 +158,7 @@ const GameAccount = (() => {
         cache.sent = id ? [...marks, mark] : [...marks.filter(s => s.sig !== mark.sig).slice(-2), mark];
         write(key, cache);
         try {
-          const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data });
+          const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data }, false, undefined, { account: name });
           const latest = read(key);
           // A game in another tab may write while this request is in flight.
           if (latest && latest.rev === cache.rev) {
@@ -162,6 +167,9 @@ const GameAccount = (() => {
           }
         } catch { /* conflicts and offline progress stay dirty */ }
       }
+      // another account signed in meanwhile: signing out now would sign that account out; this account's unsent
+      // caches stay on the device (they go up the next time it signs in here)
+      if (name && moved()) return { kept: accountCaches().filter(({ key }) => read(key)?.dirty).map(({ game }) => game), switched: true };
       await C.request('/api/logout', 'POST', {});
       C.clearProfile();
       const kept = [];

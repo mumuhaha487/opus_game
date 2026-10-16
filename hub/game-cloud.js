@@ -106,21 +106,34 @@ const GameCloud = (() => {
           if (A.cache.data) load(A.cache, A.cache.data);
           return;
         }
-        if (ok && A.cache === cache && A.foreign) { A.foreign = false; owned(); notify(); }
+        if (A.cache !== cache) return;
+        // loaded: the game holds this account's save; the sync is done and the device copy is this account's.
+        // a failed load keeps the guard and is tried again on the next sync
+        if (ok) { A.foreign = false; done(); } else { A.status = 'error'; schedule(60000); }
+        notify();
       });
     };
-    // after a sync that kept this account's cached copy: a game still holding another account's progress loads it
-    const mine = (cache, ok) => { if (ok && A.foreign && A.cache === cache && cache.data) load(cache, cache.data); return ok; };
+    // after a sync that kept this account's cached copy: a game that does not hold it yet loads it first, and the sync
+    // counts as done only once that load has finished
+    const mine = (cache, ok) => {
+      if (ok && A.foreign && A.cache === cache && cache.data) { A.status = 'syncing'; load(cache, cache.data); }
+      return ok;
+    };
+    // save requests name the account that owns the cache, whatever the page's profile says by the time they are sent
+    const save = (cache, method = 'GET', body, keepalive = false) => C.request('/api/save/' + id, method, body, keepalive, undefined, { account: cache.name || A.name });
 
     function schedule(delay = interval) {
       if (!A.name || A.status === 'expired' || A.timer) return;
       A.timer = setTimeout(() => { A.timer = null; sync(); }, delay);
     }
-    // keep the cloud copy on this device
+    // keep the cloud copy on this device. Until the game has finished loading it, the game's state is not this
+    // account's: it is never read, its saves are ignored and nothing of it is uploaded (the load's completion ends the sync)
     function take(cache, remote) {
       cache.rev = remote.rev; cache.data = remote.data; cache.dirty = false; delete cache.sent; persistCache();
-      if (remote.data) load(cache, remote.data);
-      return done();
+      if (!remote.data) return done();
+      A.foreign = true; A.status = 'syncing';
+      load(cache, remote.data);
+      return true;
     }
     // an upload whose reply never arrived (page closed, network dropped) may still have landed: the cloud save is then ours
     function ours(cache, remote) {
@@ -137,7 +150,7 @@ const GameCloud = (() => {
       // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
       const small = keepalive && new TextEncoder().encode(JSON.stringify(body)).length < 60000;
       let next;
-      try { next = await C.request('/api/save/' + id, 'PUT', body, small); }
+      try { next = await save(cache, 'PUT', body, small); }
       catch (e) { if (e && e.status === 409) { unmark(); persistCache(); } throw e; }
       if (A.cache !== cache) return false;
       cache.rev = next.rev; delete cache.sent;
@@ -186,7 +199,7 @@ const GameCloud = (() => {
                 if (e.status !== 409 || !e.data || !Number.isSafeInteger(e.data.rev)) throw e;
                 remote = { rev: e.data.rev, updated: e.data.updated, data: e.data.data ?? null };
               }
-            } else remote = await C.request('/api/save/' + id);
+            } else remote = await save(cache);
             if (A.cache !== cache) return false;
             A.checked = true;
             let push = false;

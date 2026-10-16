@@ -125,7 +125,7 @@
     const body = { baseRev, data: cache.data }, sent = JSON.stringify(cache.data);
     // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
     const small = keepalive && new TextEncoder().encode(JSON.stringify(body)).length < 60000;
-    const next = await C.request('/api/save/' + GAME, 'PUT', body, small);
+    const next = await C.request('/api/save/' + GAME, 'PUT', body, small, undefined, { account: cache.name || A.name });
     if (A.cache !== cache) return false;
     // 上传途中游戏又存了档：这份新存档还要再传一次
     cache.rev = next.rev; cache.dirty = JSON.stringify(cache.data) !== sent; persistCache();
@@ -162,7 +162,7 @@
           if (!remote && A.checked && !cache.fresh && cache.dirty && cache.data) {
             try { return await upload(cache, cache.rev, keepalive); } catch (e) { remote = conflict(e); }
           }
-          const got = remote || await C.request('/api/save/' + GAME);
+          const got = remote || await C.request('/api/save/' + GAME, 'GET', undefined, false, undefined, { account: cache.name || A.name });
           remote = null;
           if (A.cache !== cache) return false;
           A.checked = true;

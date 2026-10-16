@@ -75,7 +75,7 @@ const Cloud = (() => {
     const saves = A.saves, body = { baseRev: cache.rev, data };
     // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
     const small = keepalive && new TextEncoder().encode(JSON.stringify(body)).length < 60000;
-    const next = await C.request('/api/save/tbmh', 'PUT', body, small);
+    const next = await C.request('/api/save/tbmh', 'PUT', body, small, undefined, { account: cache.name || A.name });
     if (A.cache !== cache) return false;
     // the game saved again while the request was in flight: that save still has to go up
     cache.rev = next.rev; cache.dirty = A.saves !== saves; persistCache();
@@ -104,7 +104,7 @@ const Cloud = (() => {
           if (!remote && A.pulled && !cache.fresh && cache.dirty) {
             try { return await upload(cache, keepalive); } catch (e) { remote = conflict(e); }
           }
-          const got = remote || await C.request('/api/save/tbmh');
+          const got = remote || await C.request('/api/save/tbmh', 'GET', undefined, false, undefined, { account: cache.name || A.name });
           remote = null;
           if (A.cache !== cache) return false;
           const local = Game.ready ? Game.save() : cache.data;

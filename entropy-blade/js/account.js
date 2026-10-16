@@ -169,8 +169,8 @@ const Account = (() => {
     return null;
   };
   A.pull = async () => {
-    const cache = A.cache;
-    const remote = await A.request('/api/save/entropy-blade');
+    const cache = A.cache, name = A.name;
+    const remote = await A.request('/api/save/entropy-blade', 'GET', undefined, false, undefined, { account: name });
     if (A.cache !== cache) return false;
     if (A.cache.dirty) {
       // an upload of this device that the cloud copy already holds counts once: only what changed after it is added
@@ -195,11 +195,11 @@ const Account = (() => {
     A.cache.base = pickProgress(remote.data || Save.defaults()); A.cache.rev = remote.rev; delete A.cache.sent; A.persist();
   };
   A.push = async keepalive => {
-    const cache = A.cache;
+    const cache = A.cache, name = A.name;
     if (!A.cache.dirty) return true;
     // 16 uploads wait for confirmation: settle them against the cloud copy before sending another
     if (unconfirmed(A.cache).length >= MARKS) {
-      const remote = await A.request('/api/save/entropy-blade');
+      const remote = await A.request('/api/save/entropy-blade', 'GET', undefined, false, undefined, { account: name });
       if (A.cache !== cache) return false;
       A.settle(remote, A.landed(A.cache, remote));
     }
@@ -208,7 +208,7 @@ const Account = (() => {
       A.persist();
       const body = { baseRev: rev, data: snapshot };
       try {
-        const next = await A.request('/api/save/entropy-blade', 'PUT', body, keepalive && small(body));
+        const next = await A.request('/api/save/entropy-blade', 'PUT', body, keepalive && small(body), undefined, { account: name });
         if (A.cache !== cache) return false;
         A.cache.base = snapshot; A.cache.rev = next.rev; A.cache.dirty = A.version !== version; delete A.cache.sent;
         if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(A.name)); }
@@ -344,7 +344,7 @@ const Account = (() => {
     A.flushJob = flushed;
     A.persist();
     const body = { baseRev: rev, data: snapshot };
-    flushed.promise = A.request('/api/save/entropy-blade', 'PUT', body, small(body)).then(next => {
+    flushed.promise = A.request('/api/save/entropy-blade', 'PUT', body, small(body), undefined, { account: name }).then(next => {
       if (A.cache === cache && cache.rev === rev) {
         cache.base = snapshot; cache.rev = next.rev; cache.dirty = A.version !== version; delete cache.sent;
         if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(name)); }
