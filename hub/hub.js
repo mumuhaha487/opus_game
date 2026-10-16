@@ -290,7 +290,8 @@
   $('door-count').textContent = [GAMES.length + ' 款游戏', ...CATS.filter(c => GAMES.some(g => g.category === c.id)).map(c => c.name), '云存档同步'].join(' · ');
   chips(); renderAll();
   import('../trade/js/worker-poll.js').then(({ WorkerPoll }) => {
-    const poll = new WorkerPoll(refresh, 120);
+    // 点赞数每 5 分钟刷新一次（页面隐藏时暂停）：每次都是一次计费的 Worker 请求
+    const poll = new WorkerPoll(refresh, 300);
     poll.run();
     $('acct').addEventListener('close', () => poll.run());
     if (A) A.onProfileChange(() => poll.run(true));

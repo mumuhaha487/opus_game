@@ -63,16 +63,22 @@ const GameCloud = (() => {
   function create(opts) {
     const id = opts.id, theme = opts.theme || {};
     // uploads wait this long after a save, so a game that saves often still sends at most one request per interval
-    const interval = Math.max(10000, opts.interval || 30000);
-    const A = { name: null, cache: null, status: available ? 'guest' : 'file', last: 0, job: null, timer: null, verified: false, checked: false };
+    const interval = Math.max(10000, opts.interval || 120000);
+    // foreign: the page switched from one signed-in account to another, so the game still holds the previous account's
+    // progress; until this account's own save is loaded into the game, the game's state and saves are never uploaded
+    const A = { name: null, cache: null, status: available ? 'guest' : 'file', last: 0, job: null, timer: null, verified: false, checked: false, foreign: false };
     const listeners = new Set();
     const notify = () => { for (const fn of listeners) { try { fn(api.status()); } catch { /* 各自独立 */ } } };
     const key = name => C.cacheKey(id, name);
     const persistCache = () => { if (A.name && A.cache) { A.cache.name = A.name; write(key(A.name), A.cache); } };
     const summary = doc => { try { return doc ? opts.summary(doc) : '空'; } catch { return '存档'; } };
     const when = doc => (doc && opts.time ? opts.time(doc) : 0) || 0;
-    // hand a cloud save to the game; its loader may be async or throw without breaking the sync
-    const apply = doc => { try { Promise.resolve(opts.load(doc, 'cloud')).catch(() => {}); } catch { /* the game reports its own load errors */ } };
+    // hand a save to the game; its loader may be async or throw without breaking the sync (resolves true once it finished)
+    const apply = doc => { try { return Promise.resolve(opts.load(doc, 'cloud')).then(() => true, () => false); } catch { return Promise.resolve(false); } };
+    // once this account's own save is in the game, the game's state is this account's again
+    const loaded = (cache, pending) => pending.then(ok => { if (ok && A.cache === cache && A.foreign) { A.foreign = false; notify(); } });
+    // after a sync that kept this account's cached copy: a game still holding another account's progress loads it
+    const mine = (cache, ok) => { if (ok && A.foreign && A.cache === cache && cache.data) loaded(cache, apply(cache.data)); return ok; };
 
     function schedule(delay = interval) {
       if (!A.name || A.status === 'expired' || A.timer) return;
@@ -81,7 +87,7 @@ const GameCloud = (() => {
     // keep the cloud copy on this device
     function take(cache, remote) {
       cache.rev = remote.rev; cache.data = remote.data; cache.dirty = false; delete cache.sent; persistCache();
-      if (remote.data) apply(remote.data);
+      if (remote.data) loaded(cache, apply(remote.data));
       return done();
     }
     // an upload whose reply never arrived (page closed, network dropped) may still have landed: the cloud save is then ours
@@ -135,14 +141,15 @@ const GameCloud = (() => {
           }
           for (let tries = 0; tries < 3; tries++) {
             // the game's current local save is the device's progress; anything it saved without persist() still counts.
-            // a flush while the page is being hidden sends the last persisted copy right away
-            const local = keepalive || !opts.read ? cache.data : await opts.read();
+            // a flush while the page is being hidden sends the last persisted copy right away.
+            // a foreign game state is never read: only this account's own cached copy counts
+            const local = A.foreign || keepalive || !opts.read ? cache.data : await opts.read();
             if (A.cache !== cache) return false;
             if (local && !same(local, cache.data)) { cache.data = local; if (!cache.fresh) cache.dirty = true; }
             let remote;
             if (A.checked && !cache.fresh && cache.dirty && cache.data) {
               // 本次已经和云端核对过版本：直接按已知版本上传；别的设备改过云端时，服务器回 409 并附上云端存档
-              try { return await upload(cache, cache.rev, keepalive); }
+              try { return mine(cache, await upload(cache, cache.rev, keepalive)); }
               catch (e) {
                 if (e.status !== 409 || !e.data || !Number.isSafeInteger(e.data.rev)) throw e;
                 remote = { rev: e.data.rev, updated: e.data.updated, data: e.data.data ?? null };
@@ -157,7 +164,7 @@ const GameCloud = (() => {
               if (!remote.data) push = !!cache.data;
               // nothing worth keeping on this device (never played, or the game says the save is still at its starting point)
               else if (!cache.data || (opts.trivial && opts.trivial(cache.data))) return take(cache, remote);
-              else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return done(); }
+              else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return mine(cache, done()); }
               else if (await choose(remote, cache.data) === 'cloud') return A.cache === cache && take(cache, remote);
               else push = true;
             } else if (remote.rev !== cache.rev) {
@@ -168,14 +175,17 @@ const GameCloud = (() => {
               }
               // 别的设备更新过：本机没改就直接用云端，两边都改了让玩家选
               else if (!cache.dirty || !cache.data) return take(cache, remote);
-              else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return done(); }
+              else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return mine(cache, done()); }
               else if (await choose(remote, cache.data) === 'cloud') return A.cache === cache && take(cache, remote);
               else push = true;
             } else push = cache.dirty;
             // the account changed while the player was choosing
             if (A.cache !== cache) return false;
-            if (!push || !cache.data) { persistCache(); return done(); }
-            try { return await upload(cache, remote.rev, keepalive); }
+            // this account has no save anywhere while the game still holds the previous account's progress: nothing
+            // goes up; a reload starts this account like any first sign-in on this device
+            if (A.foreign && !cache.data) { A.status = 'reload'; return false; }
+            if (!push || !cache.data) { persistCache(); return mine(cache, done()); }
+            try { return mine(cache, await upload(cache, remote.rev, keepalive)); }
             catch (e) { if (e.status !== 409) throw e; }
           }
           A.status = 'error'; schedule(60000); return false;
@@ -193,13 +203,16 @@ const GameCloud = (() => {
     function activate(name) {
       // a sync still running for the previous account stops at its next step; this account starts its own
       clearTimeout(A.timer); A.timer = null; A.job = null;
+      // switching between two signed-in accounts: the game's state is the previous account's (a guest's progress
+      // is still offered to the account on its first sign-in here)
+      if (A.name && A.name.toLowerCase() !== name.toLowerCase()) A.foreign = true;
       A.name = name; A.verified = false; A.checked = false;
       const cached = read(key(name));
       A.cache = cached && Number.isSafeInteger(cached.rev) && cached.data ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };
       A.status = 'pending'; notify();
       return sync();
     }
-    function deactivate() { clearTimeout(A.timer); A.timer = null; A.name = null; A.cache = null; A.status = available ? 'guest' : 'file'; A.verified = false; A.checked = false; notify(); }
+    function deactivate() { clearTimeout(A.timer); A.timer = null; A.name = null; A.cache = null; A.status = available ? 'guest' : 'file'; A.verified = false; A.checked = false; A.foreign = false; notify(); }
 
     const api = {
       get available() { return available; },
@@ -220,7 +233,8 @@ const GameCloud = (() => {
       },
       // 游戏每次本地存档后调用：登录时记入账号缓存并安排上传
       persist(doc) {
-        if (!A.name || !A.cache || !doc) return;
+        // a game still holding another account's progress saves that progress: it is not this account's
+        if (!A.name || !A.cache || !doc || A.foreign) return;
         A.cache.data = doc; A.cache.dirty = true; persistCache(); schedule();
       },
       sync: () => sync(),
@@ -230,7 +244,7 @@ const GameCloud = (() => {
         const t = A.last ? new Date(A.last).toTimeString().slice(0, 5) : '';
         const map = { synced: `${A.name} · 已同步 ${t}`, syncing: `${A.name} · 正在同步…`, pending: `${A.name} · 等待同步`,
           error: `${A.name} · 暂时连不上服务器，稍后自动重试`, expired: `${A.name} · 登录已过期，请重新登录`,
-          rejected: `${A.name} · 云端没有接受这份存档，进度保留在这台设备上` };
+          rejected: `${A.name} · 云端没有接受这份存档，进度保留在这台设备上`, reload: `${A.name} · 请刷新页面` };
         return { logged: A.status !== 'expired', state: A.status, name: A.name, text: map[A.status] || map.pending };
       },
       onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },

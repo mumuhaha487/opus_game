@@ -4,6 +4,7 @@
 import { SAVE_DATA } from './plausibility-data.js';
 export const ID = /^[A-Za-z0-9_]{1,24}$/;
 export const TALENT_ID = /^[A-Za-z0-9_]{1,32}$/;
+export const UPLOAD_ID = /^[A-Za-z0-9]{8,24}$/;
 export const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const number = (v, max, integer = true) => typeof v === 'number' && Number.isFinite(v) && (!integer || Number.isInteger(v)) ? Math.min(max, Math.max(0, v)) : undefined;
 const forbiddenKeys = new Set(['__proto__', 'constructor', 'prototype']);
@@ -88,5 +89,7 @@ export function clean(value) {
   out.trialSel = map(value.trialSel, 32, ID, v => number(v, 9));
   if (['normal', 'hard'].includes(value.lastMode)) out.lastMode = value.lastMode;
   if (typeof value.seenTutorial === 'boolean') out.seenTutorial = value.seenTutorial;
+  // 上传编号（客户端每次 PUT 附一个，最近 16 个）：回复丢失时设备凭它认出已落地的上传；没有这一项的旧存档清洗结果不变
+  if (Array.isArray(value.ups)) out.ups = [...new Set(value.ups.filter(id => typeof id === 'string' && UPLOAD_ID.test(id)))].slice(-16);
   return out;
 }

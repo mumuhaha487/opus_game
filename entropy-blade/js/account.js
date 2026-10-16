@@ -11,6 +11,16 @@ const Account = (() => {
   const sig = v => { const s = canon(v); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + '.' + s.length; };
   // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
   const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
+  // upload ids (data.ups, the last 16): every PUT adds a fresh id and merges keep the cloud copy's ids, so an upload
+  // whose reply was lost is still recognised after other devices saved on top of it
+  const UPLOAD_ID = /^[A-Za-z0-9]{8,24}$/;
+  const uploadIds = list => (Array.isArray(list) ? [...new Set(list.filter(x => typeof x === 'string' && UPLOAD_ID.test(x)))] : []).slice(-16);
+  const uploadId = () => {
+    const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const bytes = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+    return Array.from(bytes, b => abc[b % 62]).join('');
+  };
+  const content = d => { const { ups, ...rest } = d || {}; return rest; };
   const A = { name: null, cache: null, status: 'guest', lastSuccess: 0, busy: false, busyRow: null, tab: 0, row: 0, relogin: false, message: '', messageColor: '#ffd36a', file: GameAccount.file, verified: false, pulled: false, needsImport: false, importPending: false, version: 0, resetVersion: null, retry: 0, timer: null, job: null, blurred: false };
   const form = document.createElement('form');
   form.style.cssText = 'position:fixed;opacity:0;z-index:2;border:0;padding:0;margin:0;background:transparent;color:transparent;caret-color:transparent;font-size:16px';
@@ -68,7 +78,11 @@ const Account = (() => {
   A.say = (text, color) => { A.message = text; A.messageColor = color; };
   A.request = GameAccount.request;
   A.persist = () => {
-    if (A.cache) { A.cache.data = pickProgress(Save.data); write(cacheKey(A.name), A.cache); }
+    if (A.cache) {
+      // the cached copy always carries its upload id list (the logout flush in hub/account-core.js adds to it too)
+      A.cache.data = pickProgress(Save.data); A.cache.data.ups = uploadIds(A.cache.data.ups);
+      write(cacheKey(A.name), A.cache);
+    }
   };
   A.apply = data => {
     const settings = Save.data.settings;
@@ -76,7 +90,10 @@ const Account = (() => {
     if (typeof UI !== 'undefined') UI.weaponSel = null;
   };
   A.activate = name => {
-    clearTimeout(A.timer); A.job = null; A.cancelChoice();
+    // switching between two signed-in accounts during a run: that run started under the previous account
+    const switching = !!A.name && A.name.toLowerCase() !== name.toLowerCase();
+    clearTimeout(A.timer); A.timer = null; A.job = null; A.cancelChoice();
+    A.foreignRun = switching && G.run && ['play', 'victory', 'gameover'].includes(G.state) ? G.run : null;
     A.name = name;
     const cached = read(cacheKey(name));
     A.cache = cached && validName(cached.name) && cached.name.toLowerCase() === name.toLowerCase() && cached.data && Number.isSafeInteger(cached.rev) && cached.rev >= 0 ? cached : { name, data: pickProgress(Save.defaults()), base: null, rev: 0, dirty: false };
@@ -85,22 +102,34 @@ const Account = (() => {
     A.version = 0; A.resetVersion = read(resetKey(name)) ? 0 : null;
     A.apply(A.cache.data);
     Save.backend = {
-      write() { A.version++; A.cache.dirty = true; A.persist(); },
+      write() {
+        // results of the previous account's run are not this account's: its own progress is put back instead
+        if (A.foreignRun) { if (G.run === A.foreignRun && G.state !== 'title') { A.apply(A.cache.data); return; } A.foreignRun = null; }
+        A.version++; A.cache.dirty = true; A.persist();
+      },
       reset() { A.resetVersion = A.version + 1; write(resetKey(A.name), true); },
     };
     GameAccount.setProfile(name);
     A.status = 'pending'; A.verified = false; A.pulled = false; A.retry = 0;
   };
-  A.schedule = (delay = 4000) => {
-    clearTimeout(A.timer);
-    if (A.name && A.status !== 'expired' && !A.file) A.timer = setTimeout(() => { A.timer = null; A.sync(); }, delay);
+  // every /api call is a billed request: a save waits up to 2 minutes and later saves ride along with that upload;
+  // failed syncs retry after 1, 2, then every 5 minutes
+  const INTERVAL = 120000, RETRY = [60000, 120000, 300000];
+  const hidden = () => document.visibilityState === 'hidden';
+  // one pending upload at a time (later saves ride along); a hidden tab only uploads from the hide flush
+  A.schedule = (delay = INTERVAL) => {
+    if (A.timer || !A.name || A.status === 'expired' || A.file || hidden()) return;
+    A.timer = setTimeout(() => { A.timer = null; A.sync(); }, delay);
   };
   A.failed = e => {
     // PLATFORM §5.3：422 保留本地脏缓存，下一次写入先 GET 并沿原冲突合并。
     if (e.status === 422) { A.pulled = false; A.say('同步失败', '#ff5a5a'); }
-    if (e.status === 401) { A.status = 'expired'; A.verified = false; clearTimeout(A.timer); }
-    else { A.status = 'error'; A.schedule([15000, 30000, 60000, 120000, 300000][Math.min(A.retry++, 4)]); }
+    clearTimeout(A.timer); A.timer = null;
+    if (e.status === 401) { A.status = 'expired'; A.verified = false; }
+    else { A.status = 'error'; A.schedule(RETRY[Math.min(A.retry++, RETRY.length - 1)]); }
   };
+  // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
+  const small = body => new TextEncoder().encode(JSON.stringify(body)).length < 60000;
   A.choose = (text, labels, sel) => new Promise(resolve => {
     A.hideInputs();
     const finish = answer => { A.choice = null; resolve(answer); };
@@ -112,25 +141,33 @@ const Account = (() => {
     if (UI.confirm === A.choice.confirm) UI.confirm = null;
     A.choice.resolve(false);
   };
-  // Every upload is remembered in the cache (cache.sent, same format as hub/game-cloud.js) before it leaves. When its
-  // reply is lost after the save landed, the cloud copy is rev base+1 holding exactly the sent progress: that copy
-  // becomes the merge base, so only changes made after sending are added on top and nothing is counted twice.
-  A.mark = (cache, base, data) => {
+  // Every upload is remembered in the cache (cache.sent) before it leaves: its upload id and the progress it carried.
+  // When the cloud copy holds that id (or is exactly that upload at rev base+1), the upload landed although its reply
+  // was lost; the merge then adds only what changed after sending (cloud + local − sent), so nothing counts twice.
+  A.outgoing = (cache, base) => {
+    const data = pickProgress(Save.data), marks = Array.isArray(cache.sent) ? cache.sent : [];
+    const last = marks.filter(m => m.base === base && m.id && m.data).slice(-1)[0];
+    // a retry of unchanged progress repeats the attempt it retries
+    const id = last && canon(content(last.data)) === canon(content(data)) ? last.id : uploadId();
+    data.ups = [...uploadIds(data.ups).filter(x => x !== id), id].slice(-16);
     const s = sig(data);
-    cache.sent = [...(Array.isArray(cache.sent) ? cache.sent : []).filter(m => m.base === base && m.sig !== s).slice(-2), { base, sig: s }];
+    cache.sent = [...marks.filter(m => m.base === base && m.id !== id && m.sig !== s).slice(-2), { base, id, sig: s, data }];
+    return data;
   };
   A.landed = (cache, remote) => {
-    if (!remote?.data || !Array.isArray(cache.sent)) return false;
-    const s = sig(remote.data);
-    return cache.sent.some(m => m.base + 1 === remote.rev && m.sig === s);
+    if (!remote?.data || !Array.isArray(cache.sent)) return null;
+    const ids = uploadIds(remote.data.ups), s = sig(remote.data);
+    for (const m of [...cache.sent].reverse()) if ((m.id && ids.includes(m.id)) || (m.base + 1 === remote.rev && m.sig === s)) return m;
+    return null;
   };
   A.pull = async () => {
     const cache = A.cache;
     const remote = await A.request('/api/save/entropy-blade');
     if (A.cache !== cache) return false;
     if (A.cache.dirty) {
-      // local progress already contains an upload that landed: keep it as is and build on the cloud copy
-      if (A.resetVersion === null && !A.landed(A.cache, remote)) A.apply(mergeProgress(A.cache.base, Save.data, remote.data));
+      // an upload of this device that the cloud copy already holds counts once: only what changed after it is added
+      const sent = A.landed(A.cache, remote);
+      if (A.resetVersion === null) A.apply(mergeProgress(sent ? sent.data || remote.data : A.cache.base, Save.data, remote.data));
     } else if (A.needsImport && remote.data === null && remote.rev === 0 && hasProgress(A.guestProgress())) {
       if (G.state !== 'title' || UI.confirm) { A.importPending = true; return false; }
       const imported = await A.choose('把本机存档（熵晶、天赋、战绩）带入这个账号？', ['带入', '从零开始'], 0);
@@ -147,10 +184,11 @@ const Account = (() => {
     const cache = A.cache;
     if (!A.cache.dirty) return true;
     for (let conflicts = 0; conflicts <= 3; conflicts++) {
-      const snapshot = pickProgress(Save.data), version = A.version, rev = A.cache.rev;
-      A.mark(A.cache, rev, snapshot); A.persist();
+      const version = A.version, rev = A.cache.rev, snapshot = A.outgoing(A.cache, rev);
+      A.persist();
+      const body = { baseRev: rev, data: snapshot };
       try {
-        const next = await A.request('/api/save/entropy-blade', 'PUT', { baseRev: rev, data: snapshot }, keepalive);
+        const next = await A.request('/api/save/entropy-blade', 'PUT', body, keepalive && small(body));
         if (A.cache !== cache) return false;
         A.cache.base = snapshot; A.cache.rev = next.rev; A.cache.dirty = A.version !== version; delete A.cache.sent;
         if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(A.name)); }
@@ -160,15 +198,11 @@ const Account = (() => {
         if (A.cache !== cache) return false;
         // other failures keep the mark: the next sync tells whether this upload landed
         if (e.status !== 409) throw e;
-        if (A.landed(A.cache, e.data)) {
-          // an earlier upload landed but its reply was lost: build on it and send only what changed since
-          A.cache.base = pickProgress(e.data.data); A.cache.rev = e.data.rev; delete A.cache.sent; A.persist();
-          continue;
-        }
-        const flushed = A.flushJob;
+        // an upload of this device that the cloud copy already holds counts once: only what changed after it is added
+        const sent = A.landed(A.cache, e.data), flushed = sent ? null : A.flushJob;
         const result = flushed ? await flushed.promise : null;
         if (A.cache !== cache) return false;
-        const base = result && flushed.cache === A.cache && result.rev <= e.data.rev ? flushed.snapshot : A.cache.base;
+        const base = sent ? sent.data || e.data.data : result && flushed.cache === A.cache && result.rev <= e.data.rev ? flushed.snapshot : A.cache.base;
         if (A.resetVersion === null) A.apply(mergeProgress(base, Save.data, e.data.data));
         A.cache.base = pickProgress(e.data.data || Save.defaults()); A.cache.rev = e.data.rev; delete A.cache.sent; A.persist();
         if (conflicts === 3) throw e;
@@ -256,9 +290,9 @@ const Account = (() => {
     if (A.status !== 'expired' && A.status !== 'error') { A.status = 'pending'; A.schedule(); }
   };
   A.deactivate = () => {
-    clearTimeout(A.timer); A.cancelChoice(); A.hideInputs();
+    clearTimeout(A.timer); A.timer = null; A.cancelChoice(); A.hideInputs();
     Save.backend = null; Save.load(); A.name = null; A.cache = null; A.status = 'guest'; A.relogin = false; A.row = 0;
-    A.job = null; A.needsImport = false; A.importPending = false; UI.weaponSel = null;
+    A.job = null; A.needsImport = false; A.importPending = false; A.foreignRun = null; UI.weaponSel = null;
   };
   A.checkImport = () => {
     if (A.importPending && A.status === 'pending' && G.state === 'title' && !UI.confirm && !A.job) A.sync();
@@ -286,11 +320,12 @@ const Account = (() => {
     if (A.flushJob) return;
     // A pending normal request may be cancelled during navigation; send its
     // current revision again with keepalive and let R2 serialize the writes.
-    const cache = A.cache, name = A.name, version = A.version, rev = cache.rev, snapshot = pickProgress(Save.data);
+    const cache = A.cache, name = A.name, version = A.version, rev = cache.rev, snapshot = A.outgoing(cache, rev);
     const flushed = { cache, snapshot, promise: null };
     A.flushJob = flushed;
-    A.mark(cache, rev, snapshot); A.persist();
-    flushed.promise = A.request('/api/save/entropy-blade', 'PUT', { baseRev: rev, data: snapshot }, true).then(next => {
+    A.persist();
+    const body = { baseRev: rev, data: snapshot };
+    flushed.promise = A.request('/api/save/entropy-blade', 'PUT', body, small(body)).then(next => {
       if (A.cache === cache && cache.rev === rev) {
         cache.base = snapshot; cache.rev = next.rev; cache.dirty = A.version !== version; delete cache.sent;
         if (A.resetVersion !== null && version >= A.resetVersion) { A.resetVersion = null; remove(resetKey(name)); }
@@ -302,7 +337,11 @@ const Account = (() => {
       return null;
     }).finally(() => { if (A.flushJob === flushed) A.flushJob = null; });
   };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  // hiding the tab sends the save once and stops the timer; showing it again resumes uploads
+  document.addEventListener('visibilitychange', () => {
+    if (hidden()) { flush(); clearTimeout(A.timer); A.timer = null; }
+    else if (A.cache?.dirty) A.schedule();
+  });
   window.addEventListener('pagehide', flush);
   return A;
 })();

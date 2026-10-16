@@ -11,6 +11,13 @@ import { handleAgent } from './agent-api.js';
 import { ashareList } from './market-ashare.js';
 import { ashareQuotes } from './market-quotes.js';
 
+// 云存档写入限流：Workers 限流绑定 SAVE_RATE（免费，不占 R2 读写）每账号每分钟 15 次；绑定不可用（本地、测试）时退回 R2 计数。
+async function saveRate(env, bucket, uid) {
+  if (env.SAVE_RATE?.limit) {
+    try { return (await env.SAVE_RATE.limit({ key: 'save:' + uid })).success ? 0 : 60 - Math.floor(Date.now() / 1000) % 60; } catch { /* R2 fallback */ }
+  }
+  return rateWindow(bucket, 'save-uid', uid, 600, 60, true);
+}
 // request bodies stay small; a game module may allow a larger cleaned save (export MAX)
 const MAX = 196608, SAVE_MAX = 65536;
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -32,8 +39,19 @@ const REGISTER = { tries: [3600, 20], hour: [3600, 2], day: [86400, 5], message:
 // 同一账号一小时失败 100 次也拦截（防多 IP 轮换猜密码）；高于 IP 阈值，正常用户只会遇到 IP 的 30 次，
 // 别人也难以靠故意输错把某个账号锁住。
 const LOGIN = { ip: [3600, 30], name: [3600, 100], message: '登录失败次数过多，请稍后再试。' };
-// 账号第一次上传某款游戏（云端还没有这款的存档）多半是把游客进度带进账号：合理性检查按 7 天的时间预算。
-const GUEST_IMPORT_MS = 7 * 86400000;
+// 账号第一次上传某款游戏（云端还没有这款的存档）多半是把游客进度带进账号：没有排行榜的游戏不做时间检查
+// （只查结构和绝对上限，elapsed = Infinity）；有排行榜的游戏按已经过了 30 天检查。
+const IMPORT_RANKED_MS = 30 * 86400000;
+// 有排行榜的游戏从“锚点”量增长：存档记录里另存 anchor = { t, meta }（只在服务端，publicSave 不带它），
+// 每次上传都和锚点比、时间按 now - anchor.t；锚点满 60 秒才移到新存档，连续快速上传共用一份额度。
+const ANCHOR_MS = 60000;
+function moveAnchor(anchor, meta, now) {
+  if (!anchor || now - anchor.t >= ANCHOR_MS) return { t: now, meta };
+  const keys = Object.keys(anchor.meta).filter(key => typeof anchor.meta[key] === 'number');
+  if (!keys.some(key => (meta[key] || 0) < anchor.meta[key])) return anchor;
+  // 数字变小（留下较旧的一份）：锚点从现在算起；变小的项取新值，其余项保留锚点的值，降低一项换不来其他项的新额度
+  return { t: now, meta: { ...meta, ...Object.fromEntries(keys.map(key => [key, Math.min(meta[key] || 0, anchor.meta[key])])) } };
+}
 // 同时在几个滑动窗口各预占一个名额；有一个已满或出错时退回已经占到的，wait 为需要等待的秒数。
 // 退回失败只会多算一次，不影响这次请求的结果。
 async function reserveAll(bucket, windows) {
@@ -192,13 +210,16 @@ export async function handle(request, env, ctx) {
     const clean = GAMES[game].clean(data.data);
     if (!clean) return fail(400, 'bad_save');
     if (new TextEncoder().encode(JSON.stringify(clean)).length > (GAMES[game].MAX || SAVE_MAX)) return fail(413, 'too_large');
-    const wait = await rateWindow(bucket, 'save-uid', user.uid, 600, 60, true);
+    const wait = await saveRate(env, bucket, user.uid);
     if (wait) return limited(wait);
     const current = await readSave(bucket, user.uid, game);
     if (current.rev !== data.baseRev) return reply(409, { error: 'conflict', ...publicSave(current) });
-    // PLATFORM §5.3：先检查版本冲突，再检查清洗后的进度；时间按距上次云存档的服务端时间，首次保存按游客导入的 7 天。
-    const now = Date.now();
-    const verdict = GAMES[game].plausible(current.data, clean, current.rev ? Math.max(0, now - current.updated) : GUEST_IMPORT_MS);
+    // PLATFORM §5.3：先检查版本冲突，再检查清洗后的进度；时间按服务端时间（有排行榜的游戏从锚点算），首次保存见上方。
+    const now = Date.now(), ranked = !!GAMES[game].board;
+    const anchor = ranked && current.rev ? current.anchor || { t: current.updated, meta: current.data?.meta || {} } : null;
+    const [previous, elapsed] = !current.rev ? [null, ranked ? IMPORT_RANKED_MS : Infinity]
+      : anchor ? [{ meta: anchor.meta }, Math.max(0, now - anchor.t)] : [current.data, Math.max(0, now - current.updated)];
+    const verdict = GAMES[game].plausible(previous, clean, elapsed);
     if (!verdict.ok) {
       // 并发写已更新云端时走原冲突流程，不记录对旧版本的误拒绝。
       const latest = await readSave(bucket, user.uid, game);
@@ -208,6 +229,7 @@ export async function handle(request, env, ctx) {
       return reply(422, { error: 'implausible_save', message: '云存档校验未通过，已保留云端进度' });
     }
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };
+    if (ranked) next.anchor = moveAnchor(anchor, clean.meta, next.updated);
     const written = await bucket.put(saveKey(user.uid, game), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
     if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
     // 存档里的成绩更新排行榜；排行榜写入失败不影响存档本身

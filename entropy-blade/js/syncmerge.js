@@ -1,12 +1,12 @@
 'use strict';
-const PROGRESS_FIELDS = ['crystals', 'talents', 'stats', 'heroBest', 'titles', 'history', 'lastChar', 'lastMode', 'lastWeapon', 'trialSel', 'seenTutorial'];
+const PROGRESS_FIELDS = ['crystals', 'talents', 'stats', 'heroBest', 'titles', 'history', 'lastChar', 'lastMode', 'lastWeapon', 'trialSel', 'seenTutorial', 'ups'];
 function pickProgress(data) {
   const out = {};
   for (const key of PROGRESS_FIELDS) if (data && Object.prototype.hasOwnProperty.call(data, key)) out[key] = JSON.parse(JSON.stringify(data[key]));
   return out;
 }
 function progressDefaults() {
-  return { crystals: 0, talents: {}, stats: { runs: 0, wins: 0, kills: 0, crystalsTotal: 0, bossKills: 0, deepest: 0, bestTrial: 0, bestTime: 0 }, heroBest: {}, titles: [], history: [], lastChar: 0, lastMode: 'normal', lastWeapon: {}, trialSel: {}, seenTutorial: false };
+  return { crystals: 0, talents: {}, stats: { runs: 0, wins: 0, kills: 0, crystalsTotal: 0, bossKills: 0, deepest: 0, bestTrial: 0, bestTime: 0 }, heroBest: {}, titles: [], history: [], lastChar: 0, lastMode: 'normal', lastWeapon: {}, trialSel: {}, seenTutorial: false, ups: [] };
 }
 function mergeProgress(base, local, remote) {
   const normalize = p => { const d = progressDefaults(), v = pickProgress(p); return Object.assign(d, v, { stats: Object.assign(d.stats, v.stats) }); };
@@ -24,6 +24,8 @@ function mergeProgress(base, local, remote) {
   const history = new Map();
   for (const row of [...r.history, ...l.history]) history.set(row.t + ':' + row.hero, row);
   out.history = [...history.values()].sort((a, b) => b.t - a.t).slice(0, 50);
+  // upload ids: the cloud copy's stay (each device recognises its own landed uploads by them); the next PUT adds its own
+  out.ups = (Array.isArray(r.ups) ? r.ups : []).slice(-16);
   return out;
 }
 function hasProgress(p) {

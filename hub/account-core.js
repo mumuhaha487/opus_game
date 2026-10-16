@@ -29,6 +29,9 @@ const GameAccount = (() => {
   const profileValue = value => validName(value?.name) ? { name: value.name } : null;
   let current = profileValue(read(PROFILE));
   let regionPending;
+  // this tab's last confirmed session (see me()); cleared on sign-out
+  const ME_KEY = 'gameinc_me_v1';
+  const confirmed = name => { try { sessionStorage.setItem(ME_KEY, JSON.stringify({ name: name.toLowerCase(), display: name, at: Date.now() })); } catch { /* not cached */ } };
   const listeners = new Set();
   const changed = () => { for (const fn of listeners) { try { fn(C.profile()); } catch { /* independent listeners */ } } };
   // canonical JSON (sorted keys) signature, the same one game-cloud.js keeps in cache.sent: an upload whose reply
@@ -41,7 +44,7 @@ const GameAccount = (() => {
     cacheKey, resetKey,
     profile: () => current && { ...current },
     setProfile(name) { current = profileValue({ name }); if (current) write(PROFILE, current); },
-    clearProfile() { current = null; remove(PROFILE); },
+    clearProfile() { current = null; remove(PROFILE); try { sessionStorage.removeItem(ME_KEY); } catch { /* unavailable */ } },
     onProfileChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     errorText(e) {
       const code = e.data?.error;
@@ -86,19 +89,29 @@ const GameAccount = (() => {
     },
     async login(username, password) {
       const result = await C.request('/api/login', 'POST', { username, password });
-      C.setProfile(result.user.name); return { name: result.user.name };
+      C.setProfile(result.user.name); confirmed(result.user.name); return { name: result.user.name };
     },
     async register(username, password) {
       const result = await C.request('/api/register', 'POST', { username, password });
-      C.setProfile(result.user.name); return { name: result.user.name };
+      C.setProfile(result.user.name); confirmed(result.user.name); return { name: result.user.name };
     },
     // The session cookie decides whose account this browser is signed in to. When it is not the stored profile
     // (another account signed in meanwhile and its profile write failed), the profile follows the session and every
     // listener re-activates with that account's own cache; the caller's sync for the old account then stops.
-    async me() {
-      const asked = current?.name, result = await C.request('/api/me'), name = result?.user?.name;
+    // Each /api/me is a billed Worker request: a tab that confirmed this account in the last 10 minutes reuses the answer
+    // (an expired session still shows up as 401 on the next save). fresh: true always asks the server.
+    async me({ fresh = false } = {}) {
+      const asked = current?.name;
+      if (!fresh && asked) {
+        try {
+          const seen = JSON.parse(sessionStorage.getItem(ME_KEY));
+          if (seen && seen.name === asked.toLowerCase() && Date.now() - seen.at < 600000) return { user: { name: seen.display } };
+        } catch { /* storage unavailable: ask the server */ }
+      }
+      const result = await C.request('/api/me'), name = result?.user?.name;
       // a profile changed while the request was in flight makes this answer stale
       if (asked && current?.name === asked && validName(name) && name.toLowerCase() !== asked.toLowerCase()) { C.setProfile(name); changed(); }
+      if (validName(name)) confirmed(name);
       return result;
     },
     async logout({ flush } = {}) {
@@ -115,16 +128,23 @@ const GameAccount = (() => {
       for (const { key, game } of owner && owner.toLowerCase() === name.toLowerCase() ? dirty : []) {
         const cache = read(key);
         if (!cache?.dirty) continue;
-        const mark = { base: cache.rev, sig: sig(cache.data) };
+        // a save that carries upload ids (entropy-blade) gets a fresh one for this PUT as well, remembered with what was sent
+        let data = cache.data, id = null;
+        if (Array.isArray(data?.ups)) {
+          const bytes = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+          id = Array.from(bytes, b => 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[b % 62]).join('');
+          data = { ...data, ups: [...data.ups.filter(x => typeof x === 'string' && /^[A-Za-z0-9]{8,24}$/.test(x)), id].slice(-16) };
+        }
+        const mark = id ? { base: cache.rev, id, sig: sig(data), data } : { base: cache.rev, sig: sig(data) };
         cache.sent = [...(Array.isArray(cache.sent) ? cache.sent : []).filter(s => s.base === mark.base && s.sig !== mark.sig).slice(-2), mark];
         write(key, cache);
         try {
-          const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data: cache.data });
+          const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data });
           const latest = read(key);
           // A game in another tab may write while this request is in flight.
           if (latest && latest.rev === cache.rev) {
             latest.dirty = JSON.stringify(latest.data) !== JSON.stringify(cache.data);
-            latest.base = cache.data; latest.rev = next.rev; delete latest.sent; write(key, latest);
+            latest.base = data; latest.rev = next.rev; delete latest.sent; write(key, latest);
           }
         } catch { /* conflicts and offline progress stay dirty */ }
       }

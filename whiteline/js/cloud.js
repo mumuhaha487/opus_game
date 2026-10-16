@@ -18,7 +18,12 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
   };
   const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
-  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, file: !C || C.file };
+  // foreign: the page switched from one signed-in account to another during a run, which belongs to the previous
+  // account; its saves never reach this account's cache (see G.store) until the page is reloaded
+  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, checked: false, retry: 0, foreign: false, file: !C || C.file };
+  // every /api call is a billed request: a save waits up to 2 minutes and later saves ride along with that upload;
+  // failed syncs retry after 1, 2, then every 5 minutes
+  const INTERVAL = 120000, RETRY = [60000, 120000, 300000];
   const listeners = new Set();
   const notify = () => { for (const fn of listeners) { try { fn(); } catch (e) { /* 各自独立 */ } } };
   const cacheKey = (name) => C.cacheKey(GAME, name);
@@ -81,11 +86,11 @@
       return base.get(k, d);
     },
     set(k, v) {
-      if (A.cache && FIELD[k]) { const d = doc(); erase(d, FIELD[k], v); d[FIELD[k]] = clone(v); touch(); return true; }
+      if (A.cache && FIELD[k]) { if (A.foreign) return false; const d = doc(); erase(d, FIELD[k], v); d[FIELD[k]] = clone(v); touch(); return true; }
       return base.set(k, v);
     },
     del(k) {
-      if (A.cache && FIELD[k]) { const d = doc(); erase(d, FIELD[k], null); d[FIELD[k]] = null; touch(); return; }
+      if (A.cache && FIELD[k]) { if (A.foreign) return; const d = doc(); erase(d, FIELD[k], null); d[FIELD[k]] = null; touch(); return; }
       base.del(k);
     },
   };
@@ -101,9 +106,29 @@
   }
   function persistCache() { if (A.name && A.cache) { A.cache.name = A.name; raw.set(cacheKey(A.name), A.cache); } }
   function touch() { A.cache.data.updated = Date.now(); A.cache.dirty = true; persistCache(); schedule(); }
-  function schedule(delay = 20000) {
-    if (!A.name || A.file || A.status === 'expired' || A.timer) return;
+  const hidden = () => document.visibilityState === 'hidden';
+  // one pending upload at a time (later saves ride along); a hidden tab only uploads from the hide flush
+  function schedule(delay = INTERVAL) {
+    if (!A.name || A.file || A.status === 'expired' || A.timer || hidden()) return;
     A.timer = setTimeout(() => { A.timer = null; sync(); }, delay);
+  }
+  function retry() { clearTimeout(A.timer); A.timer = null; schedule(RETRY[Math.min(A.retry++, RETRY.length - 1)]); }
+  // a 409 answers with the cloud save: merge with it, no extra GET
+  function conflict(e) {
+    if (!e || e.status !== 409 || !e.data || !Number.isSafeInteger(e.data.rev)) throw e;
+    return { rev: e.data.rev, data: e.data.data == null ? null : e.data.data };
+  }
+  // one PUT on a version this device has merged with
+  async function upload(cache, baseRev, keepalive) {
+    const body = { baseRev, data: cache.data }, sent = JSON.stringify(cache.data);
+    // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
+    const small = keepalive && new TextEncoder().encode(JSON.stringify(body)).length < 60000;
+    const next = await C.request('/api/save/' + GAME, 'PUT', body, small);
+    if (A.cache !== cache) return false;
+    // 上传途中游戏又存了档：这份新存档还要再传一次
+    cache.rev = next.rev; cache.dirty = JSON.stringify(cache.data) !== sent; persistCache();
+    if (cache.dirty) schedule();
+    return done();
   }
   // 云端的数据写进账号缓存，并刷新图鉴等常驻数据
   function apply(data, rev) {
@@ -117,6 +142,7 @@
   async function sync(keepalive = false) {
     if (!A.name || A.file || A.status === 'expired') return false;
     if (A.job) return A.job;
+    clearTimeout(A.timer); A.timer = null;
     A.status = 'syncing'; notify();
     const cache = A.cache;
     A.job = (async () => {
@@ -128,60 +154,73 @@
           if (!sameUser(me, A.name)) { A.status = 'expired'; return false; }
           A.verified = true;
         }
+        let remote = null;
         for (let tries = 0; tries < 3; tries++) {
-          const remote = await C.request('/api/save/' + GAME);
+          // this page already compared with the cloud: a save goes up as one PUT on the known version
+          if (!remote && A.checked && !cache.fresh && cache.dirty && cache.data) {
+            try { return await upload(cache, cache.rev, keepalive); } catch (e) { remote = conflict(e); }
+          }
+          const got = remote || await C.request('/api/save/' + GAME);
+          remote = null;
           if (A.cache !== cache) return false;
+          A.checked = true;
           if (cache.fresh) {
+            // this account has no save anywhere while another account's run is on screen: nothing goes up; after the
+            // reload it starts like any first sign-in on this device
+            if (!got.data && A.foreign) { A.status = 'pending'; return false; }
             // 这个账号第一次在这台设备上玩：云端有存档就用云端的；云端为空时，本机进度成为账号的起点
             delete cache.fresh;
-            if (remote.data) { apply(remote.data, remote.rev); cache.dirty = false; persistCache(); return done(); }
+            if (got.data) { apply(got.data, got.rev); cache.dirty = false; persistCache(); return done(); }
             const start = guestDoc();
-            apply(hasProgress(start) ? start : emptyDoc(), remote.rev);
+            apply(hasProgress(start) ? start : emptyDoc(), got.rev);
             cache.dirty = true; persistCache();
-          } else if (remote.rev !== cache.rev) {
+          } else if (got.rev !== cache.rev) {
             // 别的设备更新过：本机没有新改动就直接采用云端，否则合并后再上传
-            if (!cache.dirty) { apply(remote.data, remote.rev); return done(); }
-            apply(merge(cache.data, remote.data), remote.rev);
+            if (!cache.dirty) { apply(got.data, got.rev); return done(); }
+            apply(merge(cache.data, got.data), got.rev);
             cache.dirty = true; persistCache();
           } else if (!cache.dirty) return done();
-          const sent = JSON.stringify(cache.data);
-          try {
-            const next = await C.request('/api/save/' + GAME, 'PUT', { baseRev: remote.rev, data: cache.data }, keepalive);
-            if (A.cache !== cache) return false;
-            // 上传途中游戏又存了档：这份新存档还要再传一次
-            cache.rev = next.rev; cache.dirty = JSON.stringify(cache.data) !== sent; persistCache();
-            if (cache.dirty) schedule();
-            return done();
-          } catch (e) { if (e.status !== 409) throw e; }
+          try { return await upload(cache, got.rev, keepalive); } catch (e) { remote = conflict(e); }
         }
-        A.status = 'error'; schedule(60000);
+        A.status = 'error'; retry();
         return false;
       } catch (e) {
         // 上一个账号留下的同步不改动新账号的状态
         if (A.cache !== cache) return false;
         A.status = e && e.status === 401 ? 'expired' : e && e.status === 422 ? 'rejected' : 'error';
-        if (A.status !== 'expired') schedule(60000);
+        if (A.status !== 'expired') retry();
         return false;
       } finally { if (A.cache === cache) A.job = null; notify(); }
     })();
     return A.job;
   }
-  function done() { A.last = Date.now(); A.status = 'synced'; return true; }
+  function done() { A.retry = 0; A.last = Date.now(); A.status = 'synced'; return true; }
 
   // ---------- 账号切换 ----------
   function activate(name) {
     // 上一个账号还在进行的同步会在下一步停下；这个账号开始自己的同步
     clearTimeout(A.timer); A.timer = null; A.job = null;
-    A.name = name; A.verified = false;
+    // switching between two signed-in accounts: a run on screen started under the previous account
+    const switching = !!A.name && A.name.toLowerCase() !== name.toLowerCase();
+    if (switching && G.game && G.game.running) A.foreign = true;
+    A.name = name; A.verified = false; A.checked = false; A.retry = 0;
     const cached = raw.get(cacheKey(name));
     A.cache = cached && Number.isSafeInteger(cached.rev) && cached.data ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };
     A.status = 'pending';
     G.loadMeta(); notify();
+    if (switching && !A.foreign) redrawTitle();
     return sync();
+  }
+  // the title menu offers the signed-in account's autosave: draw it again for the new account
+  function redrawTitle() {
+    try {
+      const app = document.getElementById('app'), title = document.getElementById('title');
+      if (app && title && !app.classList.contains('booting') && !title.classList.contains('hidden') && G.ui && G.ui.showTitle) G.ui.showTitle();
+    } catch (e) { /* drawn again the next time the title opens */ }
   }
   function deactivate() {
     clearTimeout(A.timer); A.timer = null;
-    A.name = null; A.cache = null; A.status = 'guest'; A.verified = false;
+    A.name = null; A.cache = null; A.status = 'guest'; A.verified = false; A.checked = false; A.foreign = false;
     G.loadMeta(); notify();
   }
   async function login(username, password, register) {
@@ -199,6 +238,7 @@
   function status() {
     if (A.file) return { logged: false, text: '本地文件模式：存档保存在这台设备上。' };
     if (!A.name) return { logged: false, text: '未登录：存档保存在这台设备上。登录 GAME.INC.RE 账号后，存档会在你的所有设备间同步。' };
+    if (A.foreign && A.status !== 'expired') return { logged: true, text: `${A.name} · 请刷新页面`, state: 'reload' };
     const when = A.last ? new Date(A.last).toTimeString().slice(0, 5) : '';
     const map = { synced: `${A.name} · 已同步 ${when}`, syncing: `${A.name} · 正在同步…`, pending: `${A.name} · 等待同步`,
       error: `${A.name} · 暂时连不上服务器，稍后自动重试`, expired: `${A.name} · 登录已过期，请重新登录`, rejected: `${A.name} · 同步失败，存档保留在这台设备上` };
@@ -215,7 +255,11 @@
     });
     window.addEventListener('online', () => sync());
     const flush = () => { if (A.name && A.cache && A.cache.dirty) sync(true); };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    // hiding the tab sends the save once and stops the timer; showing it again resumes uploads
+    document.addEventListener('visibilitychange', () => {
+      if (hidden()) { flush(); clearTimeout(A.timer); A.timer = null; }
+      else if (A.cache && A.cache.dirty) schedule();
+    });
     window.addEventListener('pagehide', flush);
   }
 

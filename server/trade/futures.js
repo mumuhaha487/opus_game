@@ -189,16 +189,16 @@ async function matchingBook(gate, symbol) {
   return book;
 }
 function exposureCheck(state, data, qty, price, spec) {
-  // 规格 7.2：同向仓位 + 同向未成交开仓委托余量 + 本单，按其中最高的成交价估值（与成交时同一口径），
-  // 已接受的委托各自按委托价成交时都不会超限。
-  const position = state.futures.positions[data.symbol];
-  let total = qty + (position && (position.side === 'long') === (data.side === 'buy') ? parse(position.qty) : 0n);
+  // 规格 7.2：这些委托全部成交后可能达到的最大净仓位 = 同向仓位 + 同向未成交开仓委托余量 + 本单，再减去它们先平掉的反向仓位；
+  // 按其中最高的成交价估值（与成交时同一口径），只减仓委托不计入。净额不为正时只是减仓，不受上限限制。
+  const position = state.futures.positions[data.symbol], held = position ? parse(position.qty) : 0n;
+  let total = qty + (!position ? 0n : (position.side === 'long') === (data.side === 'buy') ? held : -held);
   for (const order of state.orders) {
     if (order.market !== 'futures' || order.symbol !== data.symbol || order.side !== data.side || order.reduceOnly) continue;
     total += parse(order.qty) - parse(order.filled);
     price = max(price, parse(order.type === 'stop_market' ? order.stopPrice : order.price));
   }
-  limitCheck(spec, price, total);
+  if (total > 0n) limitCheck(spec, price, total);
 }
 export async function placeFuturesOrder(state, data, gate, now) {
   const previous = replayOrder(state, data.clientId);

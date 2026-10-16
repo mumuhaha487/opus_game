@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,7 +12,9 @@ import { QUOTE_FIELDS as clientQuoteFields } from './trade/js/ashare/feed.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'whiteline', 'edge-acres', 'stack-realm', 'iron-line-1917', 'trade', 'developer'];
+// root files browsers and crawlers request on their own: served as static files they never invoke (or bill) the Worker
+const rootFiles = ['favicon.ico', 'apple-touch-icon.png', 'apple-touch-icon-precomposed.png', 'robots.txt'];
+const siteFiles = ['index.html', '_headers', ...rootFiles, 'hub', 'entropy-blade', 'tbmh', 'whiteline', 'edge-acres', 'stack-realm', 'iron-line-1917', 'trade', 'developer'];
 
 // ---------- release checks (no dependencies) ----------
 const problems = [];
@@ -61,6 +63,13 @@ for (const id of ['edge-acres', 'stack-realm', 'iron-line-1917']) {
   check(core >= 0 && cloud > core, id + ': index.html must load ../hub/account-core.js, then ../hub/game-cloud.js');
   const stray = filesIn(dir).map(f => path.relative(dir, f)).filter(f => /(^|[\/])(_headers|config(\..*)?\.json|\.dev\.vars.*|\.env.*|.*\.map)$/i.test(f));
   check(!stray.length, id + ': files that must not ship: ' + stray.join(', '));
+}
+// Cloudflare free plan: static assets are free only while they are served without running the Worker.
+// Workers Caching (`cache`) bills every request including assets, and `run_worker_first` sends assets through the Worker.
+{
+  const config = readFileSync(path.join(root, 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
+  check(!/"cache"\s*:/.test(config), 'wrangler.jsonc: Workers Caching ("cache") would bill every static asset request — keep it off');
+  check(!/"run_worker_first"\s*:\s*(true|\[)/.test(config), 'wrangler.jsonc: run_worker_first would bill static asset requests — keep it off');
 }
 // cloud saves only for games that are on the hub
 const { GAMES: saveGames } = await import(pathToFileURL(path.join(root, 'server/games/index.js')));
@@ -164,24 +173,86 @@ for (const file of stagedFiles) {
   hash.update('\0');
 }
 const version = hash.digest('hex').slice(0, 16);
-const asset = /\.(?:js|css|png|webp|jpe?g|svg|ico|woff2?)(?:[?#]|$)/i;
-
-function versionUrl(url) {
-  if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(url) || !asset.test(url)) return url;
-  const fragment = url.indexOf('#');
-  const base = fragment < 0 ? url : url.slice(0, fragment);
-  const suffix = fragment < 0 ? '' : url.slice(fragment);
-  return base + (base.includes('?') ? '&' : '?') + 'v=' + version + suffix;
+// Every asset URL the browser sees carries ?v=<version>, so _headers can let browsers keep assets for a year and later
+// visits load them from the local cache. Leaf files (images, fonts, CSS, scripts without imports) use a hash of their own
+// final content: a release that does not touch them keeps their URL, and players keep their cached copy. ES modules that
+// import other modules use the build version, so a module graph always changes together.
+const ASSET = /\.(?:js|mjs|css|png|webp|jpe?g|gif|svg|ico|woff2?|mp3|ogg|wav)$/i;
+const IMPORT = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?\.m?js)\2/g;
+const CSS_URL = /url\((['"]?)([^)'"\s]+)\1\)/gi;
+// a string literal naming an existing asset, e.g. catalog covers ('hub/x.webp', relative to the site root)
+const LITERAL = /(['"])((?:\.{1,2}\/)?[\w-]+(?:\/[\w.-]+)*\.(?:png|webp|jpe?g|gif|svg|ico|woff2?|mp3|ogg|wav))\1/g;
+const isFile = file => existsSync(file) && statSync(file).isFile();
+const local = url => !/^(?:[a-z][a-z\d+.-]*:|\/\/|#|%23)/i.test(url);
+const versions = new Map();
+const hasImports = text => [...text.matchAll(IMPORT)].length > 0;
+function versionOf(file) {
+  if (versions.has(file)) return versions.get(file);
+  versions.set(file, version); // a reference cycle falls back to the build version
+  let value = version;
+  if (/\.m?js$/i.test(file)) {
+    const text = readFileSync(file, 'utf8');
+    if (!hasImports(text)) { const next = rewriteLiterals(file, text); if (next !== text) writeFileSync(file, next, 'utf8'); value = contentHash(next); }
+  } else if (/\.css$/i.test(file)) {
+    const text = readFileSync(file, 'utf8');
+    if (!/@import/i.test(text)) { const next = rewriteCss(file, text); if (next !== text) writeFileSync(file, next, 'utf8'); value = contentHash(next); }
+  } else value = contentHash(readFileSync(file));
+  versions.set(file, value);
+  return value;
 }
-
+function contentHash(data) { return createHash('sha256').update(data).digest('hex').slice(0, 12); }
+// url resolved against baseDir (or the site root for a leading '/'); unknown files get the build version
+function versioned(url, baseDir) {
+  if (!local(url)) return url;
+  const hash = url.indexOf('#'), body = hash < 0 ? url : url.slice(0, hash), fragment = hash < 0 ? '' : url.slice(hash);
+  const clean = body.split('?')[0];
+  if (!ASSET.test(clean) || /[?&]v=/.test(body)) return url;
+  const target = clean.startsWith('/') ? path.join(out, clean) : path.join(baseDir, clean);
+  const v = isFile(target) ? versionOf(target) : version;
+  return body + (body.includes('?') ? '&' : '?') + 'v=' + v + fragment;
+}
+function rewriteLiterals(file, text) {
+  return text.replace(LITERAL, (match, quote, url) => {
+    const base = isFile(path.join(out, url)) ? out : isFile(path.join(path.dirname(file), url)) ? path.dirname(file) : null;
+    return base ? quote + versioned(url, base) + quote : match;
+  });
+}
+function rewriteCss(file, text) {
+  return text.replace(CSS_URL, (match, quote, url) => local(url) ? `url(${quote}${versioned(url, path.dirname(file))}${quote})` : match);
+}
+for (const file of stagedFiles.filter(file => /\.m?js$/i.test(file))) {
+  const text = readFileSync(file, 'utf8');
+  if (!hasImports(text)) { versionOf(file); continue; }
+  const next = rewriteLiterals(file, text.replace(IMPORT, (match, lead, quote, url) => lead + quote + versioned(url, path.dirname(file)) + quote));
+  if (next !== text) writeFileSync(file, next, 'utf8');
+}
+for (const file of stagedFiles.filter(file => file.endsWith('.css'))) {
+  if (!versions.has(file)) { const text = readFileSync(file, 'utf8'), next = rewriteCss(file, text); if (next !== text) writeFileSync(file, next, 'utf8'); }
+}
 for (const file of stagedFiles.filter(file => file.endsWith('.html'))) {
   let html = readFileSync(file, 'utf8');
+  const dir = path.dirname(file);
   html = html.replace(/\b(src|href)=(['"])([^'"\n]+)\2/gi,
-    (_, attr, quote, url) => `${attr}=${quote}${versionUrl(url)}${quote}`);
-  html = html.replace(/url\((['"]?)([^)'"\s]+)\1\)/gi,
-    (_, quote, url) => `url(${quote}${versionUrl(url)}${quote})`);
+    (_, attr, quote, url) => `${attr}=${quote}${versioned(url, dir)}${quote}`);
+  html = html.replace(CSS_URL, (match, quote, url) => local(url) ? `url(${quote}${versioned(url, dir)}${quote})` : match);
   html = html.replace('</head>', `<script>window.BUILD='${version}';</script>\n</head>`);
   writeFileSync(file, html, 'utf8');
+}
+// every local asset reference in the shipped HTML, CSS and JS imports must now carry a version
+{
+  const bare = [];
+  const unversioned = (url, where) => { if (local(url) && ASSET.test(url.split(/[?#]/)[0]) && !/[?&]v=/.test(url)) bare.push(where + ' → ' + url); };
+  for (const file of stagedFiles) {
+    const rel = path.relative(out, file).split(path.sep).join('/');
+    if (file.endsWith('.html')) {
+      const html = readFileSync(file, 'utf8');
+      for (const m of html.matchAll(/<(?:script|link|img|source|audio|video)\b[^>]*?\b(?:src|href)=(['"])([^'"\n$]+)\1/gi)) unversioned(m[2], rel);
+      for (const m of html.matchAll(CSS_URL)) unversioned(m[2], rel);
+    } else if (/\.m?js$/i.test(file)) for (const m of readFileSync(file, 'utf8').matchAll(IMPORT)) unversioned(m[3], rel);
+    else if (file.endsWith('.css')) for (const m of readFileSync(file, 'utf8').matchAll(CSS_URL)) unversioned(m[2], rel);
+  }
+  check(!bare.length, 'unversioned asset references (a year-long browser cache would keep them stale): ' + bare.slice(0, 12).join('; '));
+  if (problems.length) { console.error('Build checks failed:\n- ' + problems.join('\n- ')); process.exit(1); }
 }
 
 console.log(`Checked ${games.length} catalog games in ${categoryIds.size} categories; built ${stagedFiles.length} files in dist (assets ${version}).`);

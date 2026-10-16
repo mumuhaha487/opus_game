@@ -3,8 +3,25 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: SAMEORIGIN
-  Cache-Control: public, max-age=0, must-revalidate
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Pages (HTML) keep Cloudflare's default "public, max-age=0, must-revalidate": every visit gets the newest asset URLs.
+# Every asset URL in the pages, CSS and JS imports carries ?v=<content hash or build> (build.mjs rewrites and checks it), so
+# browsers may keep assets for a year and later visits load them from the local cache instead of the network.
+/*.js
+  Cache-Control: public, max-age=31536000, immutable
+/*.css
+  Cache-Control: public, max-age=31536000, immutable
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+/*.webp
+  Cache-Control: public, max-age=31536000, immutable
+/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+/*.ico
+  Cache-Control: public, max-age=31536000, immutable
 
 # PLATFORM §5.4：交易和开发者页面的 CSP，Cloudflare 要求每个响应头值位于单行。
 /trade/*

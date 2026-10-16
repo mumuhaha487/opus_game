@@ -10,7 +10,10 @@ const Cloud = (() => {
   const C = typeof GameAccount !== 'undefined' ? GameAccount : null;
   const read = k => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
   const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
-  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, pulled: false, saves: 0, file: !C || C.file };
+  const A = { name: null, cache: null, status: 'guest', last: 0, job: null, timer: null, verified: false, pulled: false, saves: 0, retry: 0, file: !C || C.file };
+  // every /api call is a billed request: an idle game saves every few seconds, so a save waits up to 3 minutes and
+  // rides along with the next upload; failed syncs retry after 1, 2, then every 5 minutes
+  const INTERVAL = 180000, RETRY = [60000, 120000, 300000];
   // deeper progress wins a conflict: stages cleared across difficulties, then the best hero level, then play time;
   // a second-edition save counts by its own scale (90 stages per difficulty) so it is never preferred over a third-edition one
   const score = d => {
@@ -50,13 +53,37 @@ const Cloud = (() => {
     if (A.name && A.cache) { A.cache.data = s; A.cache.dirty = true; A.cache.name = A.name; A.saves++; write(cacheKey(A.name), A.cache); schedule(); }
     else write(GUEST_KEY, s);
   }
-  function schedule(delay = 45000) {
-    if (!A.name || A.file || A.status === 'expired' || A.timer) return;
+  const hidden = () => document.visibilityState === 'hidden';
+  // one pending upload at a time (later saves ride along); a hidden tab only uploads from the hide flush
+  function schedule(delay = INTERVAL) {
+    if (!A.name || A.file || A.status === 'expired' || A.timer || hidden()) return;
     A.timer = setTimeout(() => { A.timer = null; sync(); }, delay);
+  }
+  function retry() { clearTimeout(A.timer); A.timer = null; schedule(RETRY[Math.min(A.retry++, RETRY.length - 1)]); }
+  function done() { A.retry = 0; A.last = Date.now(); A.status = 'synced'; return true; }
+  // a 409 answers with the cloud save: that is the version to compare with, no extra GET
+  const conflict = e => {
+    if (!e || e.status !== 409 || !e.data || !Number.isSafeInteger(e.data.rev)) throw e;
+    return { rev: e.data.rev, data: e.data.data ?? null };
+  };
+  // one PUT on the version this device last agreed with: a device that fell behind gets a 409 and compares again
+  async function upload(cache, keepalive) {
+    const data = Game.ready ? Game.save() : cache.data;
+    if (!data) return false;
+    const saves = A.saves, body = { baseRev: cache.rev, data };
+    // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
+    const small = keepalive && new TextEncoder().encode(JSON.stringify(body)).length < 60000;
+    const next = await C.request('/api/save/tbmh', 'PUT', body, small);
+    if (A.cache !== cache) return false;
+    // the game saved again while the request was in flight: that save still has to go up
+    cache.rev = next.rev; cache.dirty = A.saves !== saves; persistCache();
+    if (cache.dirty) schedule();
+    return done();
   }
   async function sync(keepalive = false) {
     if (!A.name || A.file || A.status === 'expired') return false;
     if (A.job) return A.job;
+    clearTimeout(A.timer); A.timer = null;
     A.status = 'syncing';
     const cache = A.cache;
     A.job = (async () => {
@@ -69,47 +96,48 @@ const Cloud = (() => {
           if (!sameUser(me, A.name)) { A.status = 'expired'; return false; }
           A.verified = true;
         }
+        let remote = null;
         for (let tries = 0; tries < 3; tries++) {
-          const remote = await C.request('/api/save/tbmh');
+          // this page already compared with the cloud: a save goes up as one PUT
+          if (!remote && A.pulled && !cache.fresh && cache.dirty) {
+            try { return await upload(cache, keepalive); } catch (e) { remote = conflict(e); }
+          }
+          const got = remote || await C.request('/api/save/tbmh');
+          remote = null;
           if (A.cache !== cache) return false;
           const local = Game.ready ? Game.save() : cache.data;
-          const takeRemote = () => { cache.rev = remote.rev; Game.adopt(normalizeSave(remote.data), 'cloud'); cache.dirty = false; persistCache(); A.last = Date.now(); A.status = 'synced'; return true; };
+          const takeRemote = () => {
+            cache.rev = got.rev; Game.adopt(normalizeSave(got.data), 'cloud'); cache.dirty = false; persistCache();
+            // the adopted save is the cloud copy: nothing waits to go up
+            clearTimeout(A.timer); A.timer = null;
+            return done();
+          };
           if (cache.fresh) {
             // first time this account plays on this device
             A.pulled = true; delete cache.fresh;
-            if (remote.data) return takeRemote();
+            if (got.data) return takeRemote();
             await Game.firstAccountSave();
             if (A.cache !== cache) return false;
-            cache.rev = remote.rev;
-          } else if (!A.pulled || remote.rev !== cache.rev) {
+            cache.rev = got.rev; cache.dirty = true;
+          } else if (!A.pulled || got.rev !== cache.rev) {
             // first pull, or another device saved since this one last synced: the deeper progress wins
             A.pulled = true;
-            if (remote.data && score(remote.data) > score(local)) return takeRemote();
-            cache.rev = remote.rev;
+            if (got.data && score(got.data) > score(local)) return takeRemote();
+            // this device's progress goes up over that version
+            if (got.rev !== cache.rev) { cache.rev = got.rev; cache.dirty = true; }
           }
-          const data = Game.ready ? Game.save() : cache.data;
-          if (!data) return false;
-          // the PUT builds on the version this device last agreed with: a device that fell behind gets a 409 and compares again
-          const saves = A.saves;
-          try {
-            const next = await C.request('/api/save/tbmh', 'PUT', { baseRev: cache.rev, data }, keepalive);
-            if (A.cache !== cache) return false;
-            // the game saved again while the request was in flight: that save still has to go up
-            cache.rev = next.rev; cache.dirty = A.saves !== saves; persistCache();
-            if (cache.dirty) schedule();
-            A.last = Date.now(); A.status = 'synced';
-            return true;
-          } catch (e) { if (e.status !== 409) throw e; }
+          if (!cache.dirty) { persistCache(); return done(); }
+          try { return await upload(cache, keepalive); } catch (e) { remote = conflict(e); }
         }
-        A.status = 'error';
+        A.status = 'error'; retry();
         return false;
       } catch (e) {
         // a sync left over from the previous account leaves the new one alone
         if (A.cache !== cache) return false;
         // PLATFORM 5.3: 保留本地存档；下次 GET 后重新执行原有深度冲突选择。
-        if (e && e.status === 422) { A.pulled = false; A.status = 'rejected'; schedule(60000); return false; }
+        if (e && e.status === 422) { A.pulled = false; A.status = 'rejected'; retry(); return false; }
         A.status = e && e.status === 401 ? 'expired' : 'error';
-        if (A.status === 'error') schedule(60000);
+        if (A.status === 'error') retry();
         return false;
       } finally { if (A.cache === cache) A.job = null; }
     })();
@@ -169,7 +197,7 @@ const Cloud = (() => {
     // a sync still running for the previous account stops at its next step; this account starts its own
     const switching = !!A.name && A.name.toLowerCase() !== name.toLowerCase();
     clearTimeout(A.timer); A.timer = null; A.job = null;
-    A.name = name; A.verified = true; A.pulled = false;
+    A.name = name; A.verified = true; A.pulled = false; A.retry = 0;
     const cached = read(cacheKey(name));
     A.cache = cached && cached.data && Number.isSafeInteger(cached.rev) ? cached : { name, rev: 0, dirty: false, data: null, fresh: true };
     A.status = 'pending';
@@ -186,7 +214,11 @@ const Cloud = (() => {
     window.addEventListener('online', () => sync());
   }
   const flush = () => { if (A.name && A.cache && A.cache.dirty && Game.ready) { Game.persist(); sync(true); } };
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+  // hiding the tab sends the save once and stops the timer; showing it again resumes uploads
+  document.addEventListener('visibilitychange', () => {
+    if (hidden()) { flush(); clearTimeout(A.timer); A.timer = null; }
+    else if (A.cache && A.cache.dirty) schedule();
+  });
   window.addEventListener('pagehide', flush);
   return { boot, persist, sync, syncNow, status, logout, openLogin, get file() { return A.file; }, get name() { return A.name; }, readGuest: () => read(GUEST_KEY) || read(GUEST_KEY_V2) };
 })();

@@ -81,7 +81,13 @@ async function loadMini(code, cn) {
   }
   mini.set(code, { at: Date.now(), values });
 }
+// the account panel announces a change on load and again after verifying the session: one state request per account
+// every 30 s is enough (each request is a billed Worker call)
+let loadedFor = null, loadedAt = 0;
 async function accountChanged() {
+  const name = GameAccount.profile()?.name || null;
+  if (name && name === loadedFor && Date.now() - loadedAt < 30000) return;
+  loadedFor = name; loadedAt = Date.now();
   const token = ++revision; state = null; renderAccount();
   if (!GameAccount.profile()) return;
   try {
