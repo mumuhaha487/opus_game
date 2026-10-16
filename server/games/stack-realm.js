@@ -11,9 +11,9 @@ const QUESTS = 75, RECIPES = 247;
 // 真实时间任意 60 秒最多完成 9 个任务；按 3 倍放宽、另加 3 个余量。
 // 想法不设增速：篇章自由开局一下子送 35–70 个想法（worlds.ts:58-65、95-97），只限总数。
 const QUESTS_PER_MIN = 9 * 3;
-// 月亮最短 40 秒（设置项 client/src/ui/menus.ts:483），最快 ×2 速（client/src/game.ts:75、324），
-// 只在页面运行时推进、每帧最多 0.1 秒（game.ts:190-198），所以真实时间每 20 秒最多一个月亮。
-const MOON_MIN_S = 40 / 2;
+// 月亮最短 40 秒（设置项 client/src/ui/menus.ts:520），挑战难度再乘 0.85（shared/engine/difficulty.ts），最快 ×2 速
+// （client/src/game.ts:75、324），只在页面运行时推进、每帧最多 0.1 秒（game.ts:190-198），所以真实时间每 17 秒最多一个月亮。
+const MOON_MIN_S = 40 * 0.85 / 2;
 // 通关（sim.ts:437-438）只能靠发射飞船（recipes.ts:308）；飞船要外星核心（:307），核心只掉自外星母舰（data/cards-worlds.ts:111），
 // 母舰只能用星际信标召唤（recipes.ts:304-305）：通关前一定完成了「建造星际信标」「击落外星母舰」两个任务（moon.ts:182-183）。
 const ENDING_QUESTS = 2;
