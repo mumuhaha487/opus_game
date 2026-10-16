@@ -27,6 +27,8 @@ const Cloud = (() => {
   const cacheKey = name => C.cacheKey('tbmh', name);
   // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
   const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
+  // a save request named another account than the session's (GameAccount has moved the profile to the session's)
+  const wrongAccount = e => !!e && e.status === 409 && e.data?.error === 'wrong_account';
 
   // the save to start with: account cache when signed in, else the guest slot;
   // older editions become the starting point of the new world once
@@ -134,6 +136,8 @@ const Cloud = (() => {
       } catch (e) {
         // a sync left over from the previous account leaves the new one alone
         if (A.cache !== cache) return false;
+        // the session belongs to another account: stop here, the profile change re-activates this module
+        if (wrongAccount(e)) { A.status = 'expired'; return false; }
         // PLATFORM 5.3: 保留本地存档；下次 GET 后重新执行原有深度冲突选择。
         if (e && e.status === 422) { A.pulled = false; A.status = 'rejected'; retry(); return false; }
         A.status = e && e.status === 401 ? 'expired' : 'error';

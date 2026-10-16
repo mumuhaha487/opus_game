@@ -21,12 +21,13 @@ export function gzipped(gz) {
 }
 // 摘要进度检查（PLATFORM §5.3）：数字变小照常接受（选择存档时可以留下本机较旧的一份，排行榜本来就保留每个账号最好的成绩）；
 // 比上一份云存档多出的部分逐项按增速检查，所以先传一份较低的、马上再跳回更高的一份仍会被拒绝。
-// check(grown, meta, minutes, before) 返回拒绝原因或 null；grown(key) 是这一项比上一份多出多少，变小记 0。
+// check(grown, meta, minutes, before, previous) 返回拒绝原因或 null；grown(key) 是这一项比上一份多出多少，变小记 0；
+// previous 是服务端锚点 { meta, t, worlds }（首次上传为 null）。
 export function progress(prefix, check) {
   return (previous, next, elapsedMs) => {
     const before = isObject(previous?.meta) ? previous.meta : {}, minutes = Math.max(0, elapsedMs) / 60000;
     const grown = key => Math.max(0, (next.meta[key] || 0) - (before[key] || 0));
-    const reason = check(grown, next.meta, minutes, before);
+    const reason = check(grown, next.meta, minutes, before, previous);
     return reason ? { ok: false, reason: prefix + reason } : { ok: true };
   };
 }

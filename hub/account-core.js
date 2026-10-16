@@ -73,8 +73,11 @@ const GameAccount = (() => {
     async request(path, method = 'GET', data, keepalive = false, onResponse) {
       if (C.file) throw new Error('file');
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
+      // the account this page acts for: the server refuses a save request for an account other than the session's
+      const headers = { 'Content-Type': 'application/json' };
+      if (current) headers['X-Gameinc-Account'] = current.name;
       try {
-        const response = await fetch(path, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal, keepalive });
+        const response = await fetch(path, { method, credentials: 'same-origin', headers, body: data === undefined ? undefined : JSON.stringify(data), signal: controller.signal, keepalive });
         const text = await response.text();
         let value;
         try { value = JSON.parse(text); }
@@ -82,7 +85,14 @@ const GameAccount = (() => {
           const quota = /\b1027\b/.test(text);
           throw { status: quota ? 1027 : response.status, data: quota ? { error: '1027' } : {} };
         }
-        if (!response.ok) throw { status: response.status, data: value };
+        if (!response.ok) {
+          // the browser is signed in to another account: the profile follows the session and every listener
+          // re-activates with that account's own cache (the caller stops: its cache is not this session's)
+          if (response.status === 409 && value?.error === 'wrong_account' && current && validName(value.account) && value.account.toLowerCase() !== current.name.toLowerCase()) {
+            C.setProfile(value.account); try { sessionStorage.removeItem(ME_KEY); } catch { /* unavailable */ } changed();
+          }
+          throw { status: response.status, data: value };
+        }
         onResponse?.(response);
         return value;
       } finally { clearTimeout(timer); }
@@ -136,7 +146,11 @@ const GameAccount = (() => {
           data = { ...data, ups: [...data.ups.filter(x => typeof x === 'string' && /^[A-Za-z0-9]{8,24}$/.test(x)), id].slice(-16) };
         }
         const mark = id ? { base: cache.rev, id, sig: sig(data), data } : { base: cache.rev, sig: sig(data) };
-        cache.sent = [...(Array.isArray(cache.sent) ? cache.sent : []).filter(s => s.base === mark.base && s.sig !== mark.sig).slice(-2), mark];
+        const marks = (Array.isArray(cache.sent) ? cache.sent : []).filter(s => s.base === mark.base);
+        // unconfirmed uploads with ids may still have landed and are never dropped; the cloud keeps 16 ids, so with 16
+        // waiting this one stays on the device until the game has checked them against the cloud copy
+        if (id && marks.length >= 16) continue;
+        cache.sent = id ? [...marks, mark] : [...marks.filter(s => s.sig !== mark.sig).slice(-2), mark];
         write(key, cache);
         try {
           const next = await C.request('/api/save/' + game, 'PUT', { baseRev: cache.rev, data });

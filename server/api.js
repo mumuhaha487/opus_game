@@ -45,12 +45,21 @@ const IMPORT_RANKED_MS = 30 * 86400000;
 // 有排行榜的游戏从“锚点”量增长：存档记录里另存 anchor = { t, meta }（只在服务端，publicSave 不带它），
 // 每次上传都和锚点比、时间按 now - anchor.t；锚点满 60 秒才移到新存档，连续快速上传共用一份额度。
 const ANCHOR_MS = 60000;
-function moveAnchor(anchor, meta, now) {
+function shiftAnchor(anchor, meta, now) {
   if (!anchor || now - anchor.t >= ANCHOR_MS) return { t: now, meta };
   const keys = Object.keys(anchor.meta).filter(key => typeof anchor.meta[key] === 'number');
   if (!keys.some(key => (meta[key] || 0) < anchor.meta[key])) return anchor;
   // 数字变小（留下较旧的一份）：锚点从现在算起；变小的项取新值，其余项保留锚点的值，降低一项换不来其他项的新额度
   return { t: now, meta: { ...meta, ...Object.fromEntries(keys.map(key => [key, Math.min(meta[key] || 0, anchor.meta[key])])) } };
+}
+// 游戏导出 worldAnchors 时（叠叠乐：月亮是各世界自己的）另按世界记月亮基线 worlds[世界] = { t, moon }：
+// 这个世界第一次出现、满 60 秒或月亮变小时记成这份存档的值，其余时候不动。
+function moveAnchor(anchor, meta, now, worlds) {
+  const moved = shiftAnchor(anchor, meta, now);
+  if (!worlds) return moved;
+  const all = { ...anchor?.worlds }, key = meta.world || '', here = all[key], moon = meta.moon || 0;
+  if (!here || now - here.t >= ANCHOR_MS || moon < here.moon) all[key] = { t: now, moon };
+  return { ...moved, worlds: all };
 }
 // 同时在几个滑动窗口各预占一个名额；有一个已满或出错时退回已经占到的，wait 为需要等待的秒数。
 // 退回失败只会多算一次，不影响这次请求的结果。
@@ -191,6 +200,12 @@ export async function handle(request, env, ctx) {
       return reply(result.status, result.body, result.headers);
     }
     const user = session.user;
+    // 存档接口先核对账号：页面带 X-Gameinc-Account（它以为自己登录的账号）且和会话账号不同（不分大小写）时，
+    // 不读写任何存档，回 409 wrong_account 并告诉它会话属于谁；不带这个头的旧页面不检查。
+    const claimed = request.headers.get('X-Gameinc-Account');
+    if ((game || path === '/api/saves') && claimed !== null && claimed.toLowerCase() !== user.name.toLowerCase()) {
+      return reply(409, { error: 'wrong_account', account: user.name });
+    }
     if (path === '/api/me') {
       const headers = session.expires - Date.now() / 1000 < 1296000 ? { 'Set-Cookie': sessionCookie(await signSession(user, env.AUTH_SECRET)) } : {};
       return reply(200, { user: { name: user.name } }, headers);
@@ -218,7 +233,7 @@ export async function handle(request, env, ctx) {
     const now = Date.now(), ranked = !!GAMES[game].board;
     const anchor = ranked && current.rev ? current.anchor || { t: current.updated, meta: current.data?.meta || {} } : null;
     const [previous, elapsed] = !current.rev ? [null, ranked ? IMPORT_RANKED_MS : Infinity]
-      : anchor ? [{ meta: anchor.meta }, Math.max(0, now - anchor.t)] : [current.data, Math.max(0, now - current.updated)];
+      : anchor ? [{ meta: anchor.meta, t: anchor.t, worlds: anchor.worlds }, Math.max(0, now - anchor.t)] : [current.data, Math.max(0, now - current.updated)];
     const verdict = GAMES[game].plausible(previous, clean, elapsed);
     if (!verdict.ok) {
       // 并发写已更新云端时走原冲突流程，不记录对旧版本的误拒绝。
@@ -229,7 +244,7 @@ export async function handle(request, env, ctx) {
       return reply(422, { error: 'implausible_save', message: '云存档校验未通过，已保留云端进度' });
     }
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };
-    if (ranked) next.anchor = moveAnchor(anchor, clean.meta, next.updated);
+    if (ranked) next.anchor = moveAnchor(anchor, clean.meta, next.updated, GAMES[game].worldAnchors);
     const written = await bucket.put(saveKey(user.uid, game), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
     if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
     // 存档里的成绩更新排行榜；排行榜写入失败不影响存档本身

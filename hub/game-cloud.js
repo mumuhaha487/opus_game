@@ -59,6 +59,8 @@ const GameCloud = (() => {
   const same = (a, b) => a === b || (!!a && !!b && canon(a) === canon(b));
   // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
   const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
+  // a save request named another account than the session's (GameAccount has moved the profile to the session's)
+  const wrongAccount = e => !!e && e.status === 409 && e.data?.error === 'wrong_account';
 
   function create(opts) {
     const id = opts.id, theme = opts.theme || {};
@@ -66,7 +68,8 @@ const GameCloud = (() => {
     const interval = Math.max(10000, opts.interval || 120000);
     // foreign: the page switched from one signed-in account to another, so the game still holds the previous account's
     // progress; until this account's own save is loaded into the game, the game's state and saves are never uploaded
-    const A = { name: null, cache: null, status: available ? 'guest' : 'file', last: 0, job: null, timer: null, verified: false, checked: false, foreign: false };
+    // gen counts activations, so a load that finishes after the page moved on to another account is recognised
+    const A = { name: null, cache: null, status: available ? 'guest' : 'file', last: 0, job: null, timer: null, verified: false, checked: false, foreign: false, gen: 0 };
     const listeners = new Set();
     const notify = () => { for (const fn of listeners) { try { fn(api.status()); } catch { /* 各自独立 */ } } };
     const key = name => C.cacheKey(id, name);
@@ -75,10 +78,27 @@ const GameCloud = (() => {
     const when = doc => (doc && opts.time ? opts.time(doc) : 0) || 0;
     // hand a save to the game; its loader may be async or throw without breaking the sync (resolves true once it finished)
     const apply = doc => { try { return Promise.resolve(opts.load(doc, 'cloud')).then(() => true, () => false); } catch { return Promise.resolve(false); } };
-    // once this account's own save is in the game, the game's state is this account's again
-    const loaded = (cache, pending) => pending.then(ok => { if (ok && A.cache === cache && A.foreign) { A.foreign = false; notify(); } });
+    // the game's own save is device-level; it remembers the account that last synced it (lower case)
+    const OWNER = 'gameinc_owner_' + id;
+    const owned = () => { if (A.name && !A.foreign) { try { localStorage.setItem(OWNER, A.name.toLowerCase()); } catch { /* best effort */ } } };
+    const otherOwner = () => { try { const owner = localStorage.getItem(OWNER); return !!owner && owner !== String(A.name).toLowerCase(); } catch { return false; } };
+    // load a save into the game for this activation. Once it finished, the game's state is this account's again. A load
+    // that finishes after the page moved on to another account left that account's save in the game: the current
+    // account's own copy is loaded again, and the game's state stays foreign until that load has finished
+    const load = (cache, doc) => {
+      const gen = A.gen;
+      apply(doc).then(ok => {
+        if (gen !== A.gen) {
+          if (!A.name || !A.cache) return;
+          A.foreign = true; notify();
+          if (A.cache.data) load(A.cache, A.cache.data);
+          return;
+        }
+        if (ok && A.cache === cache && A.foreign) { A.foreign = false; owned(); notify(); }
+      });
+    };
     // after a sync that kept this account's cached copy: a game still holding another account's progress loads it
-    const mine = (cache, ok) => { if (ok && A.foreign && A.cache === cache && cache.data) loaded(cache, apply(cache.data)); return ok; };
+    const mine = (cache, ok) => { if (ok && A.foreign && A.cache === cache && cache.data) load(cache, cache.data); return ok; };
 
     function schedule(delay = interval) {
       if (!A.name || A.status === 'expired' || A.timer) return;
@@ -87,7 +107,7 @@ const GameCloud = (() => {
     // keep the cloud copy on this device
     function take(cache, remote) {
       cache.rev = remote.rev; cache.data = remote.data; cache.dirty = false; delete cache.sent; persistCache();
-      if (remote.data) loaded(cache, apply(remote.data));
+      if (remote.data) load(cache, remote.data);
       return done();
     }
     // an upload whose reply never arrived (page closed, network dropped) may still have landed: the cloud save is then ours
@@ -162,8 +182,9 @@ const GameCloud = (() => {
               // 第一次在这台设备上用这个账号：云端为空就上传本机进度；两边都有就让玩家选
               delete cache.fresh;
               if (!remote.data) push = !!cache.data;
-              // nothing worth keeping on this device (never played, or the game says the save is still at its starting point)
-              else if (!cache.data || (opts.trivial && opts.trivial(cache.data))) return take(cache, remote);
+              // nothing worth keeping on this device (never played, or the game says the save is still at its starting point);
+              // or the device's save last synced with another account: this account's cloud save is loaded, the device copy not offered
+              else if (!cache.data || (opts.trivial && opts.trivial(cache.data)) || otherOwner()) return take(cache, remote);
               else if (same(cache.data, remote.data)) { cache.rev = remote.rev; cache.dirty = false; persistCache(); return mine(cache, done()); }
               else if (await choose(remote, cache.data) === 'cloud') return A.cache === cache && take(cache, remote);
               else push = true;
@@ -186,12 +207,14 @@ const GameCloud = (() => {
             if (A.foreign && !cache.data) { A.status = 'reload'; return false; }
             if (!push || !cache.data) { persistCache(); return mine(cache, done()); }
             try { return mine(cache, await upload(cache, remote.rev, keepalive)); }
-            catch (e) { if (e.status !== 409) throw e; }
+            catch (e) { if (e.status !== 409 || wrongAccount(e)) throw e; }
           }
           A.status = 'error'; schedule(60000); return false;
         } catch (e) {
           // a sync left over from the previous account leaves the new one's status alone
           if (A.cache !== cache) return false;
+          // the session belongs to another account (GameAccount moved the profile to it, which re-activates this helper)
+          if (wrongAccount(e)) { A.status = 'expired'; return false; }
           A.status = e && e.status === 401 ? 'expired' : e && (e.status === 413 || e.status === 422 || e.status === 400) ? 'rejected' : 'error';
           if (A.status === 'error') schedule(60000);
           return false;
@@ -199,10 +222,10 @@ const GameCloud = (() => {
       })();
       return A.job;
     }
-    function done() { A.last = Date.now(); A.status = 'synced'; return true; }
+    function done() { A.last = Date.now(); A.status = 'synced'; owned(); return true; }
     function activate(name) {
       // a sync still running for the previous account stops at its next step; this account starts its own
-      clearTimeout(A.timer); A.timer = null; A.job = null;
+      clearTimeout(A.timer); A.timer = null; A.job = null; A.gen++;
       // switching between two signed-in accounts: the game's state is the previous account's (a guest's progress
       // is still offered to the account on its first sign-in here)
       if (A.name && A.name.toLowerCase() !== name.toLowerCase()) A.foreign = true;
@@ -212,7 +235,7 @@ const GameCloud = (() => {
       A.status = 'pending'; notify();
       return sync();
     }
-    function deactivate() { clearTimeout(A.timer); A.timer = null; A.name = null; A.cache = null; A.status = available ? 'guest' : 'file'; A.verified = false; A.checked = false; A.foreign = false; notify(); }
+    function deactivate() { clearTimeout(A.timer); A.timer = null; A.gen++; A.name = null; A.cache = null; A.status = available ? 'guest' : 'file'; A.verified = false; A.checked = false; A.foreign = false; notify(); }
 
     const api = {
       get available() { return available; },

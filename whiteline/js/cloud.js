@@ -29,6 +29,8 @@
   const cacheKey = (name) => C.cacheKey(GAME, name);
   // /api/me 回答的是不是这个账号（回答里没有用户名时无法判断，不拦）
   const sameUser = (me, name) => !(me && me.user && me.user.name) || me.user.name.toLowerCase() === String(name).toLowerCase();
+  // a save request named another account than the session's (GameAccount has moved the profile to the session's)
+  const wrongAccount = (e) => !!(e && e.status === 409 && e.data && e.data.error === 'wrong_account');
 
   // ---------- 存档文档 ----------
   // deleted { auto, slots[3] }：自动存档与各存档位被删除的时间（毫秒）。合并时与存档的 time 比较，较新的一方为准，
@@ -187,6 +189,8 @@
       } catch (e) {
         // 上一个账号留下的同步不改动新账号的状态
         if (A.cache !== cache) return false;
+        // the session belongs to another account: stop here, the profile change re-activates this module
+        if (wrongAccount(e)) { A.status = 'expired'; return false; }
         A.status = e && e.status === 401 ? 'expired' : e && e.status === 422 ? 'rejected' : 'error';
         if (A.status !== 'expired') retry();
         return false;

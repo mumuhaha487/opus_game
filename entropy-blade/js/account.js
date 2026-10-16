@@ -11,6 +11,8 @@ const Account = (() => {
   const sig = v => { const s = canon(v); let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36) + '.' + s.length; };
   // /api/me answered for this account (an answer without a name cannot tell, so it does not block)
   const sameUser = (me, name) => !me?.user?.name || me.user.name.toLowerCase() === String(name).toLowerCase();
+  // a save request named another account than the session's (GameAccount has moved the profile to the session's)
+  const wrongAccount = e => !!e && e.status === 409 && e.data?.error === 'wrong_account';
   // upload ids (data.ups, the last 16): every PUT adds a fresh id and merges keep the cloud copy's ids, so an upload
   // whose reply was lost is still recognised after other devices saved on top of it
   const UPLOAD_ID = /^[A-Za-z0-9]{8,24}$/;
@@ -125,7 +127,8 @@ const Account = (() => {
     // PLATFORM §5.3：422 保留本地脏缓存，下一次写入先 GET 并沿原冲突合并。
     if (e.status === 422) { A.pulled = false; A.say('同步失败', '#ff5a5a'); }
     clearTimeout(A.timer); A.timer = null;
-    if (e.status === 401) { A.status = 'expired'; A.verified = false; }
+    // a session for another account stops this one like an expired login (the profile change re-activates the page)
+    if (e.status === 401 || wrongAccount(e)) { A.status = 'expired'; A.verified = false; }
     else { A.status = 'error'; A.schedule(RETRY[Math.min(A.retry++, RETRY.length - 1)]); }
   };
   // browsers cap keepalive bodies at 64 KB; a bigger save goes as a normal request
@@ -141,17 +144,22 @@ const Account = (() => {
     if (UI.confirm === A.choice.confirm) UI.confirm = null;
     A.choice.resolve(false);
   };
-  // Every upload is remembered in the cache (cache.sent) before it leaves: its upload id and the progress it carried.
+  // Every upload is remembered in the cache (cache.sent) before it leaves: its upload id and the counters it carried.
   // When the cloud copy holds that id (or is exactly that upload at rev base+1), the upload landed although its reply
   // was lost; the merge then adds only what changed after sending (cloud + local − sent), so nothing counts twice.
+  // A remembered upload may have landed until the cloud copy says otherwise, so none is dropped: the cloud keeps the
+  // last 16 ids, and with 16 waiting the next sync reads the cloud copy and settles them before another PUT.
+  const MARKS = 16;
+  const unconfirmed = cache => (Array.isArray(cache.sent) ? cache.sent : []).filter(m => m.base === cache.rev);
+  // what a merge takes from a sent upload: the counters and crystals it added (everything else merges by max or union)
+  const counted = d => ({ crystals: d.crystals || 0, stats: Object.fromEntries(['runs', 'wins', 'kills', 'crystalsTotal', 'bossKills'].map(k => [k, (d.stats && d.stats[k]) || 0])) });
   A.outgoing = (cache, base) => {
-    const data = pickProgress(Save.data), marks = Array.isArray(cache.sent) ? cache.sent : [];
-    const last = marks.filter(m => m.base === base && m.id && m.data).slice(-1)[0];
+    const data = pickProgress(Save.data), marks = (Array.isArray(cache.sent) ? cache.sent : []).filter(m => m.base === base);
+    const csig = sig(content(data)), last = marks.filter(m => m.id).slice(-1)[0];
     // a retry of unchanged progress repeats the attempt it retries
-    const id = last && canon(content(last.data)) === canon(content(data)) ? last.id : uploadId();
+    const id = last && last.csig === csig ? last.id : uploadId();
     data.ups = [...uploadIds(data.ups).filter(x => x !== id), id].slice(-16);
-    const s = sig(data);
-    cache.sent = [...marks.filter(m => m.base === base && m.id !== id && m.sig !== s).slice(-2), { base, id, sig: s, data }];
+    cache.sent = [...marks.filter(m => m.id !== id), { base, id, sig: sig(data), csig, data: counted(data) }];
     return data;
   };
   A.landed = (cache, remote) => {
@@ -180,9 +188,21 @@ const Account = (() => {
     A.needsImport = false; A.importPending = false; A.pulled = true; A.persist();
     return true;
   };
+  // the cloud copy decides: a remembered upload it holds counts once, anything else merges on the last agreed base
+  A.settle = (remote, sent, flushed) => {
+    const base = sent ? sent.data || remote.data : flushed || A.cache.base;
+    if (A.resetVersion === null) A.apply(mergeProgress(base, Save.data, remote.data));
+    A.cache.base = pickProgress(remote.data || Save.defaults()); A.cache.rev = remote.rev; delete A.cache.sent; A.persist();
+  };
   A.push = async keepalive => {
     const cache = A.cache;
     if (!A.cache.dirty) return true;
+    // 16 uploads wait for confirmation: settle them against the cloud copy before sending another
+    if (unconfirmed(A.cache).length >= MARKS) {
+      const remote = await A.request('/api/save/entropy-blade');
+      if (A.cache !== cache) return false;
+      A.settle(remote, A.landed(A.cache, remote));
+    }
     for (let conflicts = 0; conflicts <= 3; conflicts++) {
       const version = A.version, rev = A.cache.rev, snapshot = A.outgoing(A.cache, rev);
       A.persist();
@@ -197,14 +217,12 @@ const Account = (() => {
       } catch (e) {
         if (A.cache !== cache) return false;
         // other failures keep the mark: the next sync tells whether this upload landed
-        if (e.status !== 409) throw e;
+        if (e.status !== 409 || wrongAccount(e)) throw e;
         // an upload of this device that the cloud copy already holds counts once: only what changed after it is added
         const sent = A.landed(A.cache, e.data), flushed = sent ? null : A.flushJob;
         const result = flushed ? await flushed.promise : null;
         if (A.cache !== cache) return false;
-        const base = sent ? sent.data || e.data.data : result && flushed.cache === A.cache && result.rev <= e.data.rev ? flushed.snapshot : A.cache.base;
-        if (A.resetVersion === null) A.apply(mergeProgress(base, Save.data, e.data.data));
-        A.cache.base = pickProgress(e.data.data || Save.defaults()); A.cache.rev = e.data.rev; delete A.cache.sent; A.persist();
+        A.settle(e.data, sent, result && flushed.cache === A.cache && result.rev <= e.data.rev ? flushed.snapshot : null);
         if (conflicts === 3) throw e;
       }
     }
@@ -317,7 +335,8 @@ const Account = (() => {
   const flush = () => {
     if (!A.cache?.dirty || A.status === 'expired' || A.file) return;
     if (!A.job || !A.verified || !A.pulled) { A.sync(true); return; }
-    if (A.flushJob) return;
+    // 16 unconfirmed uploads: the next sync settles them first, nothing more goes out while the page goes away
+    if (A.flushJob || unconfirmed(A.cache).length >= MARKS) return;
     // A pending normal request may be cancelled during navigation; send its
     // current revision again with keepalive and let R2 serialize the writes.
     const cache = A.cache, name = A.name, version = A.version, rev = cache.rev, snapshot = A.outgoing(cache, rev);
