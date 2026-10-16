@@ -17,6 +17,8 @@ Static game collection with accounts and likes, published at https://game.inc.re
 | `hub/catalog.js` | 游戏目录：每款游戏的分类、封面、介绍、角色、按键说明 |
 | `entropy-blade/` | 《熵刃》像素横版动作肉鸽 |
 | `tbmh/` | 《悬赏怪物猎人》像素挂机放置 RPG（策划文档见 `tbmh/README.md`） |
+| `whiteline/` | 《白线以内》像素规则拼图 |
+| `edge-acres/`, `stack-realm/`, `iron-line-1917/` | 《边角农场》《叠叠乐大陆》《铁血防线》：在各自的项目里用 `npm run build:site` 构建，再用 `node _work/xz/sync-games.mjs` 复制进来（只复制，不在这里改） |
 | `worker.js`, `server/` | Worker 入口与接口：账号、云存档、点赞（`/api/*`，其余请求交给静态资源） |
 | `wrangler.jsonc` | Worker 配置：静态资源目录、R2 绑定、自定义域名 |
 | `tools/` | 像素字体子集工具 |
@@ -87,6 +89,10 @@ and credential files are ignored by Git.
 
 GAME.INC.RE 的账号在所有游戏通用。在汇总页的账号对话框、熵刃标题菜单「账号战绩」、悬赏怪物猎人「设置」或白线以内「存档」里注册、登录和退出。
 白线以内的存档是一份文档：自动存档、三个手动存档位与图鉴，登录后同步；两台设备都改过时按条目合并（图鉴取并集，每个存档位保留较新的一份）。
+边角农场、叠叠乐大陆和铁血防线共用 `hub/game-cloud.js`：游戏每次本地存档后把一份压缩存档文档 `{ v, game, at, meta, gz }` 交给它，
+它在账号缓存里记下并定时上传（按已知版本直接 PUT，冲突时服务器回 409 并附上云端存档）；两台设备都改过时弹窗让玩家选保留哪一份。
+`gz` 是完整存档的 gzip + base64，服务器只检查格式和长度；`meta` 是几项进度数字，账号面板摘要与排行榜都读它，`GET /api/saves` 的列表里也只带 `meta`。
+排行榜 `GET /api/board/<game>` 公开可读（缓存 30 秒），成绩由游戏模块的 `board(save)` 从清洗后的云存档算出，每个账号保留最好的一次，存前 50 名。
 `hub/account-core.js` 提供共享的认证请求、账号指针、缓存键、旧键迁移和退出流程；`hub/account-ui.js` 显示账号与游戏存档。
 未登录时各游戏使用浏览器本地存档，登录后各游戏通过同一账号访问各自的云存档。
 

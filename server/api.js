@@ -6,6 +6,7 @@ import { handleTrade } from './trade/index.js';
 import { regionView } from './trade/fx.js';
 import { auditSave } from './save-audit.js';
 import { manageKeys } from './api-keys.js';
+import { updateBoard, readBoard } from './boards.js';
 import { handleAgent } from './agent-api.js';
 import { ashareList } from './market-ashare.js';
 import { ashareQuotes } from './market-quotes.js';
@@ -79,18 +80,22 @@ export async function handle(request, env) {
     const routes = { '/api/register': 'POST', '/api/login': 'POST', '/api/logout': 'POST', '/api/me': 'GET', '/api/saves': 'GET', '/api/likes': 'GET' };
     const match = /^\/api\/save\/([a-z0-9-]{1,32})$/.exec(path);
     const game = match && Object.hasOwn(GAMES, match[1]) ? match[1] : null;
+    const boardMatch = /^\/api\/board\/([a-z0-9-]{1,32})$/.exec(path);
+    const board = boardMatch && Object.hasOwn(GAMES, boardMatch[1]) && GAMES[boardMatch[1]].board ? boardMatch[1] : null;
     const likeMatch = /^\/api\/like\/([a-z0-9-]{1,32})$/.exec(path);
     const liked = likeMatch && likeable(likeMatch[1]) ? likeMatch[1] : null;
     const trading = path.startsWith('/api/trade/');
     const keyMethods = { '/api/keys': 'GET, POST', '/api/keys/delete': 'POST', '/api/keys/log': 'GET' };
     const managingKeys = Object.hasOwn(keyMethods, path);
     const allow = trading ? method
-      : managingKeys ? keyMethods[path] : game ? 'GET, PUT' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;
+      : managingKeys ? keyMethods[path] : game ? 'GET, PUT' : board ? 'GET' : liked ? 'POST' : Object.hasOwn(routes, path) ? routes[path] : null;
     if (!allow) return fail(404, path.startsWith('/api/save/') || path.startsWith('/api/like/') ? 'unknown_game' : 'not_found');
     if (!allow.split(', ').includes(method)) return fail(405, 'method_not_allowed', { Allow: allow });
     const data = method === 'POST' || method === 'PUT' ? await body(request) : null;
     const bucket = env.ACCOUNTS, ip = request.headers.get('CF-Connecting-IP') || '';
     if (path === '/api/logout') return reply(200, { ok: true }, { 'Set-Cookie': sessionCookie('', true) });
+    // 排行榜公开可读（账号名 + 从存档算出的成绩），短时缓存
+    if (board) return reply(200, { rows: await readBoard(bucket, board) }, { 'Cache-Control': 'public, max-age=30' });
     // likes work signed in or not: a valid session counts against the account, otherwise against the network
     if (path === '/api/likes' || liked) {
       const session = (request.headers.get('Cookie') || '').includes('__Host-gsid=') ? await verifySession(request, env) : null;
@@ -161,6 +166,8 @@ export async function handle(request, env) {
       for (const id of Object.keys(GAMES)) {
         const saved = await readSave(bucket, user.uid, id);
         if (saved.rev > 0) games[id] = publicSave(saved);
+        // 大型存档在列表里只给摘要字段，完整存档由各游戏按需 GET /api/save/<id>
+        if (games[id]?.data && GAMES[id].brief) games[id].data = GAMES[id].brief(games[id].data);
       }
       return reply(200, { games });
     }
@@ -187,6 +194,8 @@ export async function handle(request, env) {
     const next = { v: 1, rev: current.rev + 1, updated: Date.now(), data: clean };
     const written = await bucket.put(saveKey(user.uid, game), JSON.stringify(next), { onlyIf: current.etag ? { etagMatches: current.etag } : absent() });
     if (!written) return reply(409, { error: 'conflict', ...publicSave(await readSave(bucket, user.uid, game)) });
+    // 存档里的成绩更新排行榜；排行榜写入失败不影响存档本身
+    if (GAMES[game].board) { try { await updateBoard(bucket, game, user.name, GAMES[game].board(clean), next.updated); } catch { /* best effort */ } }
     return reply(200, { rev: next.rev, updated: next.updated });
   } catch (e) {
     if (new URL(request.url).pathname.startsWith('/api/keys') && e?.code) {

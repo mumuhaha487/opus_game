@@ -438,3 +438,13 @@
 
   .keys-panel { padding: 24px; }
 }
+
+/* 排行榜（游戏详情） */
+.board { margin: 18px 0 0; }
+.board h3 { margin: 0 0 8px; font-size: 14px; font-weight: normal; color: var(--gold); }
+.board-rows { list-style: none; margin: 0; padding: 0; }
+.board-rows li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed rgba(169, 156, 196, .25); }
+.board-rows li b { color: var(--gold); font-weight: normal; }
+.board-rows .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; }
+.board-rows .what { color: var(--muted); font-size: 12px; text-align: right; }
+.board-note { color: var(--muted); font-size: 12px; display: block !important; border: 0 !important; }

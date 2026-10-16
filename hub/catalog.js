@@ -73,6 +73,78 @@
         ['空格 / F', '暂停 / 快进'], ['T / H / Q', '台本 / 提示 / 切换角色'], ['Esc', '菜单 · 存档 · 读档']],
       hint: '电脑与手机都能玩 · 菜单里随时存档',
     },
+    {
+      id: 'edge-acres', no: 4, name: '边角农场', en: 'EDGE ACRES', href: 'edge-acres/index.html',
+      category: 'idle', tags: ['放置', '自动化', '种田', '像素'], released: '2026-10-16', accent: '#1ebc73',
+      cover: 'hub/edge-acres-cover.webp', coverAlt: '边角农场：农舍、筒仓、温室和蜂箱排成一排，小机器人在田垄间浇水、收割，河水从农场边流过',
+      pitch: '贴在屏幕边上的像素农场：退休机器人锈崽带着一队小机器人播种、浇水、收割。你专心干活，它们专心种地。',
+      desc: '屏幕底边的一条狭长农场。定好种什么、种在哪，锈崽和浇水、收割、搬运、播种、施肥机器人会把活干完：'
+        + '收成送进仓库换成零件，送进转化炉炼成燃料。零件拿去扩建农场、升级机器人，燃料给机器人充电、开拓新的区块、出发去下一张地图。'
+        + '六十种作物，还有巨型作物、蜂箱和牧场；沙洲要打深水井，冻土要热能塔解冻，菌林里只有灯光照到的庄稼长得好。'
+        + '番茄钟走完时全场丰收，关掉网页再回来会结算离线收益。登录 GAME.INC.RE 账号后，所有地图的农场在各设备同步，收获量进入本站收获榜。',
+      facts: [['作物', '60'], ['地图', '5'], ['机器人', '5 种'], ['离线收益', '8 小时']],
+      cast: [
+        { name: '锈崽', sub: '退休农用机器人', color: '#f79617', img: 'hub/edge-acres-rusty.png', pixel: true },
+        { name: '浇水机器人', sub: '背着水箱巡田', color: '#4d65b4', img: 'hub/edge-acres-water.png', pixel: true },
+        { name: '收割机器人', sub: '成熟就收', color: '#b33831', img: 'hub/edge-acres-harvest.png', pixel: true },
+        { name: '谷雨', sub: '种子图鉴馆', color: '#1ebc73', img: 'hub/edge-acres-guyu.png', pixel: true },
+        { name: '铆钉', sub: '机器人车间', color: '#fb6b1d', img: 'hub/edge-acres-rivet.png', pixel: true },
+        { name: '蜜蜡', sub: '蜂箱与浆果丛', color: '#f9c22b', img: 'hub/edge-acres-wax.png', pixel: true },
+      ],
+      platforms: ['mouse', 'touch', 'pip'],
+      keys: [['1–7', '选择 · 开垦 · 播种 · 建造 · 铺路 · 铲除 · 移动'], ['拖动 / 方向键', '移动视野'], ['滚轮 / + -', '缩放'],
+        ['P', '置顶小窗'], ['F', '镜头跟随锈崽'], ['H', '显示机器人工作区'], ['Esc', '放下工具 · 关闭面板']],
+      hint: '电脑上可以贴在屏幕边、开置顶小窗 · 手机横竖屏都能玩',
+      board: { title: '收获榜', note: '按账号所有农场的累计收获排名' },
+    },
+    {
+      id: 'stack-realm', no: 5, name: '叠叠乐大陆', en: 'STACK-REALM', href: 'stack-realm/index.html',
+      category: 'strategy', tags: ['卡牌叠放', '生存', '经营', '像素'], released: '2026-10-16', accent: '#e4a672',
+      cover: 'hub/stack-realm-cover.webp', coverAlt: '叠叠乐大陆：木架上排着一排卡包，草地桌面上摊开长矛兵、小麦、金币、水果沙拉和小棚屋卡牌',
+      pitch: '把卡牌叠在一起就会发生点什么：村民叠在浆果丛上采浆果，叠在树上砍木头。撑过每个月亮的盛宴，让小村庄活下去。',
+      desc: '桌面上摊着一堆卡牌：村民、树、石头、浆果丛。把它们叠在一起就开始干活——村民叠在树上砍出木头，木头、石头再叠上一个村民就盖起房子，两个村民住进房子会有孩子。'
+        + '每个月亮结束时要让所有人吃饱，金币拿去买新的卡包，卡包里有新的想法、新的地点，也有找上门的野兽和盗贼。'
+        + '主大陆之外还有远洋海岛、三个诅咒位面和电气时代的叠叠乐 2000，各有自己的货币、规则和最终首领。'
+        + '登录 GAME.INC.RE 账号后，自动存档和三个存档位在各设备同步，完成的任务进入本站任务榜。',
+      facts: [['卡牌', '280'], ['配方', '247'], ['任务', '75'], ['世界', '6']],
+      cast: [
+        { name: '村民', sub: '什么活都能干', color: '#63c74d', img: 'hub/stack-realm-villager.png', pixel: true },
+        { name: '机器人', sub: '叠叠乐 2000', color: '#c0cbdc', img: 'hub/stack-realm-robot.png', pixel: true },
+        { name: '海盗船长', sub: '远洋海岛', color: '#be4a2f', img: 'hub/stack-realm-pirate_captain.png', pixel: true },
+        { name: '贪婪国王', sub: '贪婪之境', color: '#feae34', img: 'hub/stack-realm-greedy_king.png', pixel: true },
+        { name: '死神', sub: '死亡之境', color: '#8b9bb4', img: 'hub/stack-realm-reaper.png', pixel: true },
+        { name: '大恶魔', sub: '主大陆的首领', color: '#e43b44', img: 'hub/stack-realm-demon.png', pixel: true },
+      ],
+      platforms: ['mouse', 'keyboard', 'touch'],
+      keys: [['拖动卡牌', '叠放 · 开始制作'], ['空格', '暂停'], ['F / Tab', '切换两倍速'], ['M', '世界地图'], ['WASD / 方向键', '移动镜头'],
+        ['滚轮 / 0', '缩放 · 看全桌面'], ['Esc', '菜单 · 存档']],
+      hint: '电脑与手机都能玩 · 菜单里随时存档',
+      board: { title: '任务榜', note: '按完成的任务数排名，任务数相同比月亮数' },
+    },
+    {
+      id: 'iron-line-1917', no: 6, name: '铁血防线', en: 'IRON LINE · 1917', href: 'iron-line-1917/index.html',
+      category: 'strategy', tags: ['回合制战棋', '肉鸽', '一战', '像素'], released: '2026-10-16', accent: '#dc9c24',
+      cover: 'hub/iron-line-1917-cover.webp', coverAlt: '铁血防线：草地上的 8×8 等距战场，柴油坦克、步兵、教堂钟楼与民房，红框标出敌军下一回合要打的目标',
+      pitch: '1917 年的 8×8 战场：敌人下一回合要打哪里都标在地图上。三台柴油战车推、撞、拉，把每一发炮弹引到该去的地方。',
+      desc: '一战西线、中东、东线与鲁尔工业区的 8×8 战场。敌军每回合先亮出攻击目标，你的三台柴油战车在它们开火前移动、射击、推开敌人：'
+        + '把敌人推进深水，推到同伴的炮口前，或者让它们撞在一起。每一步都能先在沙盘上推演，看清回合结束时的结果再下令。'
+        + '战役是一次肉鸽远征：在战区之间选择路线，升级战车，安排驾驶员，购买装备，解放四个战区后进攻梅西讷地下坑道要塞。'
+        + '勋章和荣誉币解锁新的连队与驾驶员。登录 GAME.INC.RE 账号后，战役进度和勋章在各设备同步，战役胜利记入本站战功榜。',
+      facts: [['战车', '15'], ['连队', '5'], ['战区', '4 + 1'], ['勋章', '12']],
+      cast: [
+        { name: '汉斯', sub: '倒戈的装甲兵', color: '#a9b1bf', img: 'hub/iron-line-1917-hans.png', pixel: true },
+        { name: '娜塔莉亚', sub: '女子敢死营狙击手', color: '#95a73e', img: 'hub/iron-line-1917-natalia.png', pixel: true },
+        { name: '艾萨克', sub: '时间物理学家', color: '#f7f1de', img: 'hub/iron-line-1917-isaac.png', pixel: true },
+        { name: '雷诺', sub: '重装工兵', color: '#cfa955', img: 'hub/iron-line-1917-renault.png', pixel: true },
+        { name: '伊芙琳', sub: '英国机械师', color: '#e66a2e', img: 'hub/iron-line-1917-evelyn.png', pixel: true },
+        { name: '卡尔', sub: '极地导航员', color: '#ffe28a', img: 'hub/iron-line-1917-karl.png', pixel: true },
+      ],
+      platforms: ['mouse', 'keyboard', 'touch'],
+      keys: [['1–4 / Tab', '选择战车'], ['M · Q · W', '移动 · 主武器 · 副武器'], ['U / Ctrl+Z', '撤销移动'], ['H', '参谋部建议'],
+        ['Alt', '查看敌军行动顺序'], ['空格 / Enter', '结束回合'], ['Esc', '取消 · 菜单']],
+      hint: '手机请横屏 · 电脑上可用键盘操作',
+      board: { title: '战功榜', note: '按战役胜利、勋章和战斗胜利排名' },
+    },
   ];
   root.HUB_CATALOG = { categories: CATEGORIES, games: GAMES };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

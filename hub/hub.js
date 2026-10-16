@@ -210,6 +210,17 @@
   $('q').addEventListener('input', e => { S.q = e.target.value; renderAll(); });
 
   // ---------- detail dialog ----------
+  // 排行榜：登录玩家的云存档成绩（服务器从存档里算出，每个账号保留最好的一次）
+  function boardSection(g) {
+    const list = el('ol', { cls: 'board-rows' }, [el('li', { cls: 'board-note', text: FILE ? '本地打开时看不到排行榜' : '正在读取…' })]);
+    const box = el('section', { cls: 'board px' }, [el('h3', { text: g.board.title }), list, el('p', { cls: 'board-note', text: g.board.note || '登录 GAME.INC.RE 账号游玩，云存档里的成绩会自动上榜。' })]);
+    if (!FILE) A.request('/api/board/' + g.id).then(r => {
+      const rows = (r && r.rows) || [];
+      list.replaceChildren(...(rows.length ? rows.slice(0, 10).map((row, i) => el('li', {}, [el('b', { text: String(i + 1) }), el('span', { cls: 'who', text: row.name }), el('span', { cls: 'what', text: row.line || String(row.score) })]))
+        : [el('li', { cls: 'board-note', text: '还没有人上榜。' })]));
+    }).catch(() => list.replaceChildren(el('li', { cls: 'board-note', text: '排行榜暂时读不到，稍后再试。' })));
+    return box;
+  }
   function openDetail(g) {
     const box = $('gd-in'), dlg = $('gd');
     const close = el('button', { cls: 'x gd-close', attrs: { type: 'button', 'aria-label': '关闭' } }, [pix(['aa....aa', '.aa..aa.', '..aaaa..', '...aa...', '..aaaa..', '.aa..aa.', 'aa....aa', '........'], { a: '#a99cc4' })]);
@@ -230,6 +241,7 @@
     if (g.platforms) body.append(el('div', { cls: 'plat px' }, g.platforms.map(p => el('span', {}, [pix(PLAT[p][1], { a: '#a99cc4', b: '#1a1424' }), document.createTextNode(PLAT[p][0])]))));
     if (g.keys) body.append(el('div', { cls: 'keylist px' }, g.keys.flatMap(([k, v]) => [el('div', {}, k.split(' ').map(x => el('kbd', { text: x }))), el('span', { text: v })])));
     if (g.hint) body.append(el('p', { cls: 'hint px', text: g.hint }));
+    if (g.board) body.append(boardSection(g));
     box.replaceChildren(close, top, body);
     dlg.showModal();
     close.focus();
@@ -274,7 +286,8 @@
   })();
 
   // ---------- boot ----------
-  $('door-count').textContent = GAMES.length + ' 款游戏 · 横版动作 · 挂机刷宝 · 云存档同步';
+  // 分类按目录里实际有游戏的类别列出，加新游戏时自动更新
+  $('door-count').textContent = [GAMES.length + ' 款游戏', ...CATS.filter(c => GAMES.some(g => g.category === c.id)).map(c => c.name), '云存档同步'].join(' · ');
   chips(); renderAll();
   import('../trade/js/worker-poll.js').then(({ WorkerPoll }) => {
     const poll = new WorkerPoll(refresh, 120);

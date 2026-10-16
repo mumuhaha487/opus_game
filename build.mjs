@@ -12,7 +12,7 @@ import { QUOTE_FIELDS as clientQuoteFields } from './trade/js/ashare/feed.js';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(root, 'dist');
-const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'whiteline', 'trade', 'developer'];
+const siteFiles = ['index.html', '_headers', 'hub', 'entropy-blade', 'tbmh', 'whiteline', 'edge-acres', 'stack-realm', 'iron-line-1917', 'trade', 'developer'];
 
 // ---------- release checks (no dependencies) ----------
 const problems = [];
@@ -52,6 +52,15 @@ for (const g of games) {
   check(/^\d{4}-\d{2}-\d{2}$/.test(g.released || ''), `${where}: released must be YYYY-MM-DD`);
   check(siteFiles.includes((g.href || '').split('/')[0]), `${where}: add "${(g.href || '').split('/')[0]}" to siteFiles`);
   for (const file of [g.href, g.cover, ...(g.cast || []).map(c => c.img)]) check(file && existsSync(path.join(root, file)), `${where}: missing ${file}`);
+}
+// games built elsewhere and copied in (_work/xz/sync-games.mjs): the shared account scripts load first, nothing secret ships
+for (const id of ['edge-acres', 'stack-realm', 'iron-line-1917']) {
+  const dir = path.join(root, id), page = path.join(dir, 'index.html');
+  if (!existsSync(page)) { check(false, id + ': missing index.html — run node _work/xz/sync-games.mjs'); continue; }
+  const html = readFileSync(page, 'utf8'), core = html.indexOf('../hub/account-core.js'), cloud = html.indexOf('../hub/game-cloud.js');
+  check(core >= 0 && cloud > core, id + ': index.html must load ../hub/account-core.js, then ../hub/game-cloud.js');
+  const stray = filesIn(dir).map(f => path.relative(dir, f)).filter(f => /(^|[\/])(_headers|config(\..*)?\.json|\.dev\.vars.*|\.env.*|.*\.map)$/i.test(f));
+  check(!stray.length, id + ': files that must not ship: ' + stray.join(', '));
 }
 // cloud saves only for games that are on the hub
 const { GAMES: saveGames } = await import(pathToFileURL(path.join(root, 'server/games/index.js')));

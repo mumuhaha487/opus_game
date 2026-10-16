@@ -20,6 +20,22 @@ const HUB_GAMES = [{
     return act + ' · 存档 ' + (data.slots || []).filter(Boolean).length + ' 个 · 图鉴 ' + Object.keys(data.meta?.dex || {}).length + ' 条' + (data.meta?.cleared ? ' · 已通关' : '');
   },
   guestHasProgress: data => !!data?.act,
+}, {
+  // 以下三款的云存档是压缩包：账号面板的列表只带摘要字段 meta
+  id: 'edge-acres', name: '边角农场', href: '/edge-acres/index.html', guestKey: 'edge-acres:save',
+  summary: ({ meta = {} }) => ({ plains: '翠绿平原', desert: '炙热沙洲', tundra: '极寒冻土', blossom: '樱花水乡', shroom: '萤火菌林' }[meta.map] || '农场')
+    + ` · 收获 ${meta.harvested || 0} · 图鉴 ${meta.codex || 0} · 机器人 ${meta.bots || 0}`,
+  guestHasProgress: data => !!data?.data,
+}, {
+  id: 'stack-realm', name: '叠叠乐大陆', href: '/stack-realm/index.html', guestKey: 'stackrealm.meta.auto',
+  summary: ({ meta = {} }) => ({ main: '主大陆', island: '远洋海岛', sadness: '悲伤之境', greed: '贪婪之境', death: '死亡之境', era: '叠叠乐 2000' }[meta.world] || '主大陆')
+    + ` · 月亮 ${meta.moon || 1} · 任务 ${meta.quests || 0}` + (meta.ending ? ' · 已通关' : ''),
+  guestHasProgress: data => !!data,
+}, {
+  id: 'iron-line-1917', name: '铁血防线', href: '/iron-line-1917/index.html', guestKey: 'ironline.profile3',
+  summary: ({ meta = {} }) => `战役胜利 ${meta.wins || 0} · 战斗胜利 ${meta.battles || 0} · 勋章 ${meta.medals || 0} · `
+    + ({ recruit: '新兵', veteran: '老兵', ace: '王牌' }[meta.difficulty] || '新兵'),
+  guestHasProgress: data => (data?.totals?.battles || 0) > 0 || (data?.totals?.runs || 0) > 0,
 }];
 (() => {
   const C = GameAccount, opener = document.getElementById('acct-open'), dialog = document.getElementById('acct');
@@ -67,7 +83,10 @@ const HUB_GAMES = [{
         const d = new Date(saved.updated), pad = n => String(n).padStart(2, '0');
         status.textContent = `云端 · ${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
       }
-      if (cache?.dirty) { status.textContent = '本机有未同步进度'; status.classList.add('warn'); }
+      // a game uploads once more as its page closes and never sees the reply: when the cloud copy is at least as new as
+      // this device's (packed saves carry the save time `at`), the progress did reach the cloud
+      const reached = saved?.data?.at > 0 && cache?.data?.at > 0 && saved.data.at >= cache.data.at;
+      if (cache?.dirty && !reached) { status.textContent = '本机有未同步进度'; status.classList.add('warn'); }
       summary.textContent = state === 'loading' ? '正在读取…' : state === 'error' ? '无法连接服务器，请稍后再试' : saved?.data ? game.summary(saved.data) : game.guestHasProgress(read(game.guestKey)) ? '本机有游客存档，进入游戏后可以选择带入这个账号。' : '还没有进度，开始一局吧。';
       link.append(name, status, summary); row.appendChild(link); saves.appendChild(row);
     }
