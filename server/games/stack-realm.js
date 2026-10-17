@@ -6,17 +6,18 @@ export const MAX = 190000;
 const META = { world: id(/^(main|island|sadness|greed|death|era)$/), moon: int(1e6), quests: int(1000), ideas: int(1000), villagers: int(10000), ending: bool };
 export const clean = value => cleanPacked(value, 'stack-realm', META, 185000);
 // 上限取自游戏源码 D:/project/xianzhen/stack-realm（摘要的算法见 client/src/cloud.ts:124-135）：
-// 任务共 75 个（shared/engine/data/packs.ts:78-159），配方共 247 个（data/recipes.ts:31 RECIPES，含 :108-110、:329 起循环生成的）。
-const QUESTS = 75, RECIPES = 247;
+// 任务共 75 个（shared/engine/data/packs.ts:78-159），配方共 248 个（data/recipes.ts:31 RECIPES，含 :108-110、:330 起循环生成的）。
+const QUESTS = 75, RECIPES = 248;
 // 任务增速：引擎自带的机器人（shared/engine/bot.ts）从每个世界开局、月亮 40–120 秒、×2 速（×1 更慢），
-// 真实时间任意 60 秒最多完成 9 个任务；按 3 倍放宽、另加 3 个余量。
+// 真实时间任意 60 秒最多完成 12 个任务（2026-10-17 卡牌上限改版后复测：六个世界 × 4 种月亮时长 × 10 个种子，
+// 另加主大陆自由开局 40 局；改版前为 11）。上限取 27，是实测的两倍多，另加 3 个余量。
+const QUESTS_PER_MIN = 27;
 // 想法不设增速：篇章自由开局一下子送 35–70 个想法（worlds.ts:58-65、95-97），只限总数。
-const QUESTS_PER_MIN = 9 * 3;
-// 月亮最短 40 秒（设置项 client/src/ui/menus.ts:520），挑战难度再乘 0.85（shared/engine/difficulty.ts），最快 ×2 速
+// 月亮最短 40 秒（设置项 client/src/ui/menus.ts:532），挑战难度再乘 0.85（shared/engine/difficulty.ts），最快 ×2 速
 // （client/src/game.ts:75、324），只在页面运行时推进、每帧最多 0.1 秒（game.ts:190-198），所以真实时间每 17 秒最多一个月亮。
 const MOON_MIN_S = 40 * 0.85 / 2;
-// 通关（sim.ts:437-438）只能靠发射飞船（recipes.ts:308）；飞船要外星核心（:307），核心只掉自外星母舰（data/cards-worlds.ts:111），
-// 母舰只能用星际信标召唤（recipes.ts:304-305）：通关前一定完成了「建造星际信标」「击落外星母舰」两个任务（moon.ts:182-183）。
+// 通关（sim.ts:446-448）只能靠发射飞船（recipes.ts:309）；飞船要外星核心（:308），核心只掉自外星母舰（data/cards-worlds.ts:111），
+// 母舰只能用星际信标召唤（recipes.ts:305-306）：通关前一定完成了「建造星际信标」「击落外星母舰」两个任务（moon.ts:182-183）。
 const ENDING_QUESTS = 2;
 // 月亮是各世界版图自己的（cloud.ts:125-129）：锚点按世界另记月亮基线 anchor.worlds[世界] = { t, moon }（api.js 维护，
 // 某个世界第一次出现时按那份存档的月亮记下），换过去、换回来都跳不过月亮增速检查；任务、想法用共同的锚点。
